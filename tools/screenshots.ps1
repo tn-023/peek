@@ -149,7 +149,7 @@ function Record-Tour([string]$folder, [string]$name) {
     $w = ($r.Right - $r.Left) - (($r.Right - $r.Left) % 2); $h = ($r.Bottom - $r.Top) - (($r.Bottom - $r.Top) % 2)
     $raw = Join-Path $env:TEMP "$name-roh.mp4"
     $ff = Start-Process -FilePath ffmpeg -NoNewWindow -PassThru -ArgumentList @('-loglevel', 'error', '-y', '-f', 'gdigrab', '-framerate', '30',
-        '-draw_mouse', '0', '-offset_x', "$($r.Left)", '-offset_y', "$($r.Top)", '-video_size', "${w}x${h}", '-t', '19', '-i', 'desktop',
+        '-draw_mouse', '0', '-offset_x', "$($r.Left)", '-offset_y', "$($r.Top)", '-video_size', "${w}x${h}", '-t', '20', '-i', 'desktop',
         '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '16', '-pix_fmt', 'yuv420p', "`"$raw`"")
     Start-Sleep -Milliseconds 1500          # Aufnahme laeuft sicher
     New-Item -ItemType File -Force -Path "$mark.go" | Out-Null

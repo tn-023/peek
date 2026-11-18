@@ -325,6 +325,7 @@ private:
     std::wstring cloudTourMark_;
     float cloudTourWait_ = 0, cloudTourT_ = -1;
     float cloudTourPose_[3] = {0, 0, 0};
+    double cloudTourStart_ = -1;   // Startzeit (Uhr), damit die Fahrt auch bei wenigen Bildern pro Sekunde im Takt bleibt
     bool CloudTourStep(float dt);
     int CloudTourPick(float zFrom, float zTo) const;
     // SVG im Betrachter: scharfer Ausschnitt in der aktuellen Zoomstufe (gerendert im Hintergrund)

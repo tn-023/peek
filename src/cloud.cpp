@@ -300,8 +300,9 @@ bool App::CloudTourStep(float dt) {
         cloudTourWait_ += dt;
         if (cloudTourWait_ < 64000) return true;   // spaetestens nach einer Minute ohne Startzeichen weiter
     }
+    if (cloudTourStart_ < 0) cloudTourStart_ = NowMs();
     const float t0 = cloudTourT_;
-    cloudTourT_ += dt;
+    cloudTourT_ = static_cast<float>(NowMs() - cloudTourStart_);
     const float t = cloudTourT_;
     auto at = [&](float ms) { return t0 < ms && t >= ms; };
     auto ease = [](float u) { u = std::clamp(u, 0.0f, 1.0f); return u * u * (3 - 2 * u); };

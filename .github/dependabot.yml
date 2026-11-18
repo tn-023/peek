@@ -1,0 +1,7 @@
+# Haelt die per Commit gepinnten GitHub Actions aktuell (monatlich ein Pull Request).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

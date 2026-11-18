@@ -1,0 +1,4 @@
+# Bewusst ignorierte Sicherheitsmeldungen fuer tools/security-check.py
+# Format: ID (CVE-..., RUSTSEC-..., GHSA-...) und danach die Begruendung, warum peek nicht betroffen ist.
+CVE-2022-31631 betrifft PHPs PDO-SQLite-Treiber (PDO::quote), nicht die SQLite-Bibliothek
+CVE-2026-119586 betrifft die SQLite-Kommandozeile (.recover in shell.c); peek linkt nur die Bibliothek

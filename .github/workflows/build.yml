@@ -1,0 +1,168 @@
+name: build
+
+on:
+  # Reine Text- und Doku-Aenderungen (README, Konzept, Release-Notes, andere Workflows) loesen keinen
+  # Windows-Build aus: Windows-Minuten zaehlen bei GitHub doppelt.
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE-*'
+      - '.github/dependabot.yml'
+      - '.github/workflows/screenshots.yml'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/sicherheit.yml'
+      - '.github/workflows/pdftest.yml'
+      - '.github/workflows/atlastest.yml'
+      - 'tools/screenshots.ps1'
+      - 'tools/make-demo.ps1'
+      - 'tools/security-check.py'
+      - 'tools/security-ignore.txt'
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE-*'
+      - '.github/dependabot.yml'
+      - '.github/workflows/screenshots.yml'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/sicherheit.yml'
+      - '.github/workflows/pdftest.yml'
+      - '.github/workflows/atlastest.yml'
+      - 'tools/screenshots.ps1'
+      - 'tools/make-demo.ps1'
+      - 'tools/security-check.py'
+      - 'tools/security-ignore.txt'
+  workflow_dispatch:
+
+# Ein neuer Push bricht einen noch laufenden Build desselben Zweigs ab
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-cache
+      VCPKG_FEATURE_FLAGS: manifests,binarycaching
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: vcpkg vorbereiten
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DEFAULT_BINARY_CACHE" | Out-Null
+          # vcpkg des Runners auf den festen Stand aus vcpkg.json (builtin-baseline) setzen
+          $b = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+          git -C "$env:VCPKG_INSTALLATION_ROOT" fetch -q origin $b
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg-Stand $b nicht abrufbar" }
+          git -C "$env:VCPKG_INSTALLATION_ROOT" -c advice.detachedHead=false checkout -q -f $b
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg-Stand $b nicht auscheckbar" }
+          & "$env:VCPKG_INSTALLATION_ROOT\bootstrap-vcpkg.bat" -disableMetrics | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg-Bootstrap fehlgeschlagen" }
+
+      - name: vcpkg-Cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ github.workspace }}\vcpkg-cache
+          key: vcpkg-x64-windows-static-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-x64-windows-static-
+
+      - name: MSVC-Umgebung
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
+        with:
+          arch: x64
+
+      - name: resvg-Cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ github.workspace }}\deps\resvg
+          key: resvg-0.49.0-x64-crtstatic-${{ hashFiles('tools/build-resvg.ps1') }}
+
+      - name: resvg bauen (SVG)
+        shell: pwsh
+        run: ./tools/build-resvg.ps1 -Out deps/resvg
+
+      - name: Konfigurieren
+        shell: pwsh
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DVCPKG_TARGET_TRIPLET=x64-windows-static
+
+      - name: Bauen
+        shell: pwsh
+        run: cmake --build build --config Release
+
+      - name: Tests
+        shell: pwsh
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Sandbox-Pruefung (Dekoder abgeschottet)
+        shell: powershell
+        run: |
+          ./tools/make-sandbox-testdata.ps1 -Root "$env:USERPROFILE\Pictures\peek-Sandbox" -Exe "$pwd\build\peek.exe"
+          $p = Start-Process -FilePath build\peek.exe -ArgumentList @('--sandbox-test', "`"$env:USERPROFILE\Pictures\peek-Sandbox`"", "`"$pwd\sandbox-bericht.txt`"") -Wait -PassThru
+          Get-Content -Encoding UTF8 sandbox-bericht.txt
+          if ($p.ExitCode -ne 0) { throw "Sandbox-Pruefung fehlgeschlagen ($($p.ExitCode))" }
+          if (Test-Path "$env:LOCALAPPDATA\Packages\peek.dekoder") { throw "AppContainer-Profil wurde nicht entfernt" }
+          Write-Host "AppContainer-Profil entfernt"
+          # Rueckfallebenen: Low Integrity und im eigenen Prozess
+          foreach ($m in @('low', 'off')) {
+            $env:PEEK_SANDBOX = $m
+            $p = Start-Process -FilePath build\peek.exe -ArgumentList @('--sandbox-test', "`"$env:USERPROFILE\Pictures\peek-Sandbox`"", "`"$pwd\sandbox-$m.txt`"") -Wait -PassThru
+            Get-Content -Encoding UTF8 "sandbox-$m.txt" | Select-Object -First 2
+            Get-Content -Encoding UTF8 "sandbox-$m.txt" | Select-Object -Last 1
+            if ($p.ExitCode -ne 0) { Get-Content -Encoding UTF8 "sandbox-$m.txt"; throw "Rueckfallebene $m fehlgeschlagen ($($p.ExitCode))" }
+          }
+          Remove-Item Env:PEEK_SANDBOX
+
+      - name: Index-Pruefung (verschluesselt)
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath build\peek.exe -ArgumentList @('--index-test', "`"$env:RUNNER_TEMP\peek-index-test`"", "`"$pwd\index-bericht.txt`"") -Wait -PassThru
+          Get-Content -Encoding UTF8 index-bericht.txt
+          if ($p.ExitCode -ne 0) { throw "Index-Pruefung fehlgeschlagen ($($p.ExitCode))" }
+
+      - name: Keine Build-Pfade in der EXE
+        shell: pwsh
+        run: |
+          $t = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes("build/peek.exe"))
+          foreach ($s in @('runneradmin', $env:USERNAME, $env:GITHUB_WORKSPACE, 'tn-023')) {
+            if ($s -and $t.Contains($s)) { throw "peek.exe enthaelt '$s'" }
+          }
+          Write-Host "Keine Benutzer- oder Build-Pfade gefunden"
+
+      - name: Offline-Pruefung (keine Netzwerkbibliotheken)
+        shell: pwsh
+        run: ./tools/check-imports.ps1 -Exe build/peek.exe
+
+      - name: Lizenzhinweise (THIRD-PARTY.txt)
+        shell: pwsh
+        run: ./tools/third-party.ps1 -Out build/THIRD-PARTY.txt
+
+      - name: Artefakt hochladen
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: peek-x64
+          retention-days: 7   # Speicher sparen; Releases liegen dauerhaft bei den Releases
+          path: |
+            build/peek.exe
+            README.md
+            LICENSE-MIT
+            LICENSE-APACHE
+            build/THIRD-PARTY.txt
+
+      - name: Release anlegen (nur bei Tag v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
+        with:
+          files: build/peek.exe
+          generate_release_notes: true

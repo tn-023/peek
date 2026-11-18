@@ -1,0 +1,18 @@
+{
+  "name": "peek",
+  "version-string": "1.0.0",
+  "description": "Schneller, portabler Medienbetrachter fuer Windows 11",
+  "builtin-baseline": "528cfa41f4b1578b16ac6b2f6d2e6f98e5308d2d",
+  "dependencies": [
+    "sqlite3",
+    "libwebp",
+    "stb",
+    {
+      "name": "libavif",
+      "default-features": false,
+      "features": [
+        "dav1d"
+      ]
+    }
+  ]
+}

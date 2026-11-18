@@ -1,0 +1,38 @@
+#include <winres.h>
+
+// Anwendungsmanifest (asInvoker, PerMonitorV2, lange Pfade)
+1 24 "peek.manifest"
+
+// App-Symbol (Explorer, Taskleiste, Fenster)
+101 ICON "peek.ico"
+
+// Logo mit Schriftzug fuer "Ueber peek" (dunkles bzw. helles Farbschema)
+201 RCDATA "peek-about-dark.svg"
+202 RCDATA "peek-about-light.svg"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,5,1,0
+ PRODUCTVERSION 1,5,1,0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040704b0"
+        BEGIN
+            VALUE "FileDescription", "peek - schneller Medienbetrachter"
+            VALUE "FileVersion", "1.5.1"
+            VALUE "InternalName", "peek"
+            VALUE "OriginalFilename", "peek.exe"
+            VALUE "ProductName", "peek"
+            VALUE "ProductVersion", "1.5.1"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x407, 1200
+    END
+END

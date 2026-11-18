@@ -1,0 +1,93 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version, z. B. v0.3.0 (Tag und Name des Releases)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-cache
+      VCPKG_FEATURE_FLAGS: manifests,binarycaching
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: vcpkg vorbereiten
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DEFAULT_BINARY_CACHE" | Out-Null
+          # vcpkg des Runners auf den festen Stand aus vcpkg.json (builtin-baseline) setzen
+          $b = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+          git -C "$env:VCPKG_INSTALLATION_ROOT" fetch -q origin $b
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg-Stand $b nicht abrufbar" }
+          git -C "$env:VCPKG_INSTALLATION_ROOT" -c advice.detachedHead=false checkout -q -f $b
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg-Stand $b nicht auscheckbar" }
+          & "$env:VCPKG_INSTALLATION_ROOT\bootstrap-vcpkg.bat" -disableMetrics | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg-Bootstrap fehlgeschlagen" }
+
+      - name: vcpkg-Cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ github.workspace }}\vcpkg-cache
+          key: vcpkg-x64-windows-static-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-x64-windows-static-
+
+      - name: MSVC-Umgebung
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
+        with:
+          arch: x64
+
+      - name: resvg-Cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ github.workspace }}\deps\resvg
+          key: resvg-0.49.0-x64-crtstatic-${{ hashFiles('tools/build-resvg.ps1') }}
+
+      - name: resvg bauen (SVG)
+        shell: pwsh
+        run: ./tools/build-resvg.ps1 -Out deps/resvg
+
+      - name: Bauen
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static
+          cmake --build build --config Release
+
+      - name: Tests
+        shell: pwsh
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Offline-Pruefung (keine Netzwerkbibliotheken)
+        shell: pwsh
+        run: ./tools/check-imports.ps1 -Exe build/peek.exe
+
+      - name: Paket zusammenstellen
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item build/peek.exe dist/peek.exe
+          ./tools/third-party.ps1 -Out dist/THIRD-PARTY.txt
+          Compress-Archive -Path build/peek.exe, README.md, LICENSE-MIT, LICENSE-APACHE, dist/THIRD-PARTY.txt -DestinationPath "dist/peek-${{ inputs.version }}-x64.zip"
+          (Get-FileHash dist/peek.exe -Algorithm SHA256).Hash | Out-File -Encoding ascii dist/peek.exe.sha256
+
+      - name: Release anlegen
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
+        with:
+          tag_name: ${{ inputs.version }}
+          name: peek ${{ inputs.version }}
+          target_commitish: ${{ github.sha }}
+          body_path: docs/release-notes/${{ inputs.version }}.md
+          files: |
+            dist/peek.exe
+            dist/peek-${{ inputs.version }}-x64.zip
+            dist/peek.exe.sha256
+            dist/THIRD-PARTY.txt

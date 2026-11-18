@@ -94,6 +94,8 @@ The German parameter names (`Breite:`, `Datum:` …) work as well, whatever the 
 
 The folder as a cloud in space. The sort order decides what is on top. The mouse wheel moves into and through the cloud. Click brings an image closer, a second click opens it. Filters rearrange the cloud.
 
+<p align="center"><img src="docs/screenshots/en/wolke-fahrt.webp" alt="Moving through the image cloud: pan with parallax, move in, select a front image and one further back" width="800"></p>
+
 <table>
   <tr>
     <td width="50%" valign="top" align="center">

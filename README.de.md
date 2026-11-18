@@ -92,6 +92,8 @@ Einfach lostippen. Parameter grenzen ein. Ein Klick ins Suchfeld zeigt Vorschlä
 
 Der Ordner als Wolke im Raum. Die Sortierung bestimmt, was oben liegt. Mausrad fährt hinein und hindurch. Klick holt ein Bild heran, zweiter Klick öffnet. Filter ordnen die Wolke neu.
 
+<p align="center"><img src="docs/screenshots/wolke-fahrt.webp" alt="Fahrt durch die Bilderwolke: Querfahrt mit Parallaxe, hineinfahren, ein vorderes und ein weiter hinten liegendes Bild auswählen" width="800"></p>
+
 <table>
   <tr>
     <td width="50%" valign="top" align="center">

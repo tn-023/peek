@@ -73,6 +73,7 @@ jobs:
             screenshots/en/*.png
             screenshots/**/*.gif
             screenshots/**/*.mp4
+            screenshots/**/*.webp
 
       - name: Bildschirmfotos im Zweig "screenshots" ablegen
         shell: pwsh

@@ -99,7 +99,7 @@ Shot 'vergleich-ueber.png' @("`"--compare=$cmpA;$cmpB`"", '--compare-mode=1', $d
 # Kalender (Datumsfilter "Individuell") in Nahaufnahme
 Shot 'kalender.png' @("`"$Root`"", $dark, '--view=grid', '--tile=144', '--date-range=2024-08-14..2024-08-20', '--open-datepicker', $size) -wait 9
 # mittelgrosse Wolke, etwas hereingezoomt
-$mid = Join-Path $env:TEMP 'peek-Wolke'
+$mid = Join-Path (Split-Path -Parent $Root) (N 'Reise' 'Travel')
 New-Item -ItemType Directory -Force -Path $mid | Out-Null
 $rm = New-Object System.Random(11)
 for ($i = 0; $i -lt 260; $i++) {
@@ -124,45 +124,44 @@ for ($i = 0; $i -lt 260; $i++) {
         $g.FillPolygon((New-Object System.Drawing.SolidBrush($col)), $pts.ToArray())
     }
     $g.Dispose()
-    $b.Save((Join-Path $mid ('Reise_{0:D3}.jpg' -f $i)), [System.Drawing.Imaging.ImageFormat]::Jpeg)
+    $b.Save((Join-Path $mid (((N 'Reise' 'Travel') + '_{0:D3}.jpg') -f $i)), [System.Drawing.Imaging.ImageFormat]::Jpeg)
     $b.Dispose()
 }
 Shot 'wolke-nah.png' @("`"$mid`"", $dark, '--view=cloud', '--cloud-zoom=0.55', $size) -wait 14
 
-# Kamerafahrt durch die Wolke als Video und GIF (README): peek startet die Fahrt selbst (--cloud-tour)
-# und legt beim Start eine Markerdatei an; dann nimmt ffmpeg genau das Fenster auf.
+# Kamerafahrt durch die Wolke als Video und animiertes Bild (README): peek startet die Fahrt selbst
+# (--cloud-tour), legt eine Markerdatei an, sobald alles geladen ist, und faehrt los, wenn "<Marker>.go" existiert.
 function Record-Tour([string]$folder, [string]$name) {
     if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { Write-Warning 'ffmpeg fehlt: keine Aufnahme'; return }
     Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:LOCALAPPDATA 'peek\einstellungen.dat')
     $mark = Join-Path $env:TEMP 'peek-tour.start'
-    Remove-Item -Force -ErrorAction SilentlyContinue $mark
+    Remove-Item -Force -ErrorAction SilentlyContinue $mark, "$mark.go"
     [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(($screen.Bounds.Right - 1), ($screen.Bounds.Bottom - 1))
     $p = Start-Process -FilePath $Exe -ArgumentList @("`"$folder`"", $dark, '--view=cloud', '--size=1280x760', "`"--cloud-tour=$mark`"", "--lang=$Lang") -PassThru
     $deadline = (Get-Date).AddSeconds(20)
     while ($p.MainWindowHandle -eq [IntPtr]::Zero -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200; $p.Refresh() }
     [Win]::SetForegroundWindow($p.MainWindowHandle) | Out-Null
-    Start-Sleep -Milliseconds 500
+    $deadline = (Get-Date).AddSeconds(40)
+    while (-not (Test-Path $mark) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 50 }
+    if (-not (Test-Path $mark)) { Write-Warning "$name : Fahrt nicht bereit"; Stop-Process $p -Force; return }
     $r = New-Object Win+RECT
     if ([Win]::DwmGetWindowAttribute($p.MainWindowHandle, 9, [ref]$r, 16) -ne 0) { [Win]::GetWindowRect($p.MainWindowHandle, [ref]$r) | Out-Null }
     $w = ($r.Right - $r.Left) - (($r.Right - $r.Left) % 2); $h = ($r.Bottom - $r.Top) - (($r.Bottom - $r.Top) % 2)
-    $deadline = (Get-Date).AddSeconds(40)
-    while (-not (Test-Path $mark) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 40 }
-    if (-not (Test-Path $mark)) { Write-Warning "$name : Fahrt nicht gestartet"; Stop-Process $p -Force; return }
     $raw = Join-Path $env:TEMP "$name-roh.mp4"
-    & ffmpeg -loglevel error -y -f gdigrab -framerate 30 -draw_mouse 0 -offset_x $r.Left -offset_y $r.Top -video_size "${w}x${h}" -t 16.5 -i desktop `
-        -c:v libx264 -preset veryfast -crf 16 -pix_fmt yuv420p $raw
+    $ff = Start-Process -FilePath ffmpeg -NoNewWindow -PassThru -ArgumentList @('-loglevel', 'error', '-y', '-f', 'gdigrab', '-framerate', '30',
+        '-draw_mouse', '0', '-offset_x', "$($r.Left)", '-offset_y', "$($r.Top)", '-video_size', "${w}x${h}", '-t', '19', '-i', 'desktop',
+        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '16', '-pix_fmt', 'yuv420p', "`"$raw`"")
+    Start-Sleep -Milliseconds 1500          # Aufnahme laeuft sicher
+    New-Item -ItemType File -Force -Path "$mark.go" | Out-Null
+    $ff.WaitForExit()
     Stop-Process $p -Force
     Start-Sleep -Seconds 1
-    # Video fuer die Website (H.264) und GIF fuer das README; GIF moeglichst unter 5 MB
-    & ffmpeg -loglevel error -y -i $raw -vf 'scale=1280:-2' -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p -movflags +faststart (Join-Path $Out "$name.mp4")
-    $gif = Join-Path $Out "$name.gif"
-    foreach ($cfg in @(@(800, 15), @(720, 15), @(720, 12), @(640, 12))) {
-        $vf = "fps=$($cfg[1]),scale=$($cfg[0]):-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=192:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle"
-        & ffmpeg -loglevel error -y -i $raw -vf $vf -loop 0 $gif
-        $mb = (Get-Item $gif).Length / 1MB
-        Write-Host ("{0}: {1} px, {2} fps -> {3:N1} MB" -f $name, $cfg[0], $cfg[1], $mb)
-        if ($mb -lt 5) { break }
-    }
+    # Anfang kuerzen (bleibt ein kurzer Stand), dann Video, animiertes WebP und GIF
+    $ss = '1.1'
+    & ffmpeg -loglevel error -y -ss $ss -i $raw -t 17.2 -vf 'scale=1280:-2' -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p -movflags +faststart (Join-Path $Out "$name.mp4")
+    & ffmpeg -loglevel error -y -ss $ss -i $raw -t 17.2 -vf 'fps=15,scale=800:-1:flags=lanczos' -c:v libwebp -lossless 0 -q:v 62 -compression_level 6 -loop 0 (Join-Path $Out "$name.webp")
+    & ffmpeg -loglevel error -y -ss $ss -i $raw -t 17.2 -vf 'fps=10,scale=640:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle' -loop 0 (Join-Path $Out "$name.gif")
+    foreach ($e in 'mp4', 'webp', 'gif') { $f = Join-Path $Out "$name.$e"; if (Test-Path $f) { Write-Host ("{0}: {1:N1} MB" -f $f, ((Get-Item $f).Length / 1MB)) } }
 }
 if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue) -and (Get-Command choco -ErrorAction SilentlyContinue)) {
     choco install ffmpeg -y --no-progress | Out-Null

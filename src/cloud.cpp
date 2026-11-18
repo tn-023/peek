@@ -289,11 +289,16 @@ bool App::CloudTourStep(float dt) {
         c.camUser = true;
         c.sel = -1;
         c.haveBefore = false;
-        if (!cloudTourMark_.empty()) {   // Startzeichen fuer die Aufnahme
+        if (!cloudTourMark_.empty()) {   // bereit: Markerdatei anlegen, dann auf "<Marker>.go" warten (Aufnahme laeuft)
             HANDLE h = CreateFileW(cloudTourMark_.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
             if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
         }
         return true;
+    }
+    if (cloudTourT_ == 0 && !cloudTourMark_.empty() &&
+        GetFileAttributesW((cloudTourMark_ + L".go").c_str()) == INVALID_FILE_ATTRIBUTES) {
+        cloudTourWait_ += dt;
+        if (cloudTourWait_ < 64000) return true;   // spaetestens nach einer Minute ohne Startzeichen weiter
     }
     const float t0 = cloudTourT_;
     cloudTourT_ += dt;
@@ -304,7 +309,7 @@ bool App::CloudTourStep(float dt) {
     const float x1 = 0.42f * c.R, z1 = -0.36f * c.fit, x2 = 0.32f * c.R;
     if (t < 4600) {
         // Querfahrt: Kamera folgt einer weichen Bahn, nahe Karten ziehen schneller vorbei als ferne
-        float u = ease((t - 1000) / 3600.0f);
+        float u = ease((t - 600) / 4000.0f);
         c.tcx = x0 + (x1 - x0) * u;
         c.tcy = y0;
         c.tcz = z0;

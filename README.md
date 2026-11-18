@@ -5,163 +5,167 @@
   </picture>
 </p>
 
-<p align="center"><b>Ein schneller Bild- und Medienbetrachter für Windows 11.</b><br>
-Keine Installation, keine Admin-Rechte, keine Internetverbindung.</p>
+<p align="center"><b>A fast image and media viewer for Windows 11.</b><br>
+No installation, no admin rights, no internet connection.</p>
 
-<p align="center"><a href="https://github.com/tn-023/peek/releases/latest">Download</a> · <a href="docs/KONZEPT.md">Technisches Konzept</a></p>
+<p align="center"><a href="https://github.com/tn-023/peek/releases/latest">Download</a> · <a href="docs/CONCEPT.md">Technical concept</a></p>
 
-![Übersicht mit Info-Bereich](docs/screenshots/uebersicht.png)
+<p align="center"><b>English</b> | <a href="README.de.md">Deutsch</a></p>
 
-Ordner sofort sehen, Dateien schnell finden. peek erkennt Begriffe und Muster in Dateinamen und bietet sie als Filter an. Eine EXE, kein Konto, keine Cloud.
+> **Note:** The app's user interface is currently available in German only. Labels and search parameters below are given as they appear in the app.
 
-## Warum peek
+![Overview with info panel](docs/screenshots/uebersicht.png)
 
-- **Ruhige Oberfläche:** Keine Menüleiste, keine Werkzeugkästen.
-- **Schnell:** C++20, GPU-beschleunigt. Vorschaubilder entstehen im Hintergrund.
-- **Portabel und privat:** läuft vom USB-Stick, nur lokale Laufwerke, keine Netzwerkfunktionen.
-- **Abgeschottet:** Bilder, Videos und Dokumente werden in einer Sandbox dekodiert. Ohne Netzwerk, ohne Zugriff auf andere Dateien.
-- **Kein Hintergrunddienst:** indexiert nur, solange peek läuft. Kein Dienst, kein Autostart.
-- **Finden:** Begriffe als Pillen, Filter für Typ, Datum, Größe, Auflösung, Ausrichtung. Suche mit `Breite:>3000 Datum:2024-08`.
-- **Mehr als Bilder:** Vorschau auch für SVG, TGA, Videos, PDF, Photoshop, Illustrator.
-- **Werkzeuge:** Bilder vergleichen, Zuschneiden, Kontaktabzug als PDF, Kacheltextur aus PNG-Sequenzen.
-- **Windows 11:** Mica, Hell/Dunkel, Textskalierung, volle Tastaturbedienung.
+See a folder instantly, find files quickly. peek recognizes terms and patterns in file names and offers them as filters. One EXE, no account, no cloud.
 
-## Finden statt suchen
+## Why peek
 
-### Erkannte Begriffe
+- **Calm interface:** no menu bar, no toolboxes.
+- **Fast:** C++20, GPU-accelerated. Thumbnails are created in the background.
+- **Portable and private:** runs from a USB stick, local drives only, no network features.
+- **Isolated:** images, videos and documents are decoded in a sandbox, with no network and no access to other files.
+- **No background service:** indexes only while peek is running. No service, no autostart.
+- **Find:** terms as pills, filters for type, date, size, resolution, orientation. Search with `Breite:>3000 Datum:2024-08` (width, date).
+- **More than images:** previews for SVG, TGA, videos, PDF, Photoshop, Illustrator.
+- **Tools:** compare images, crop, contact sheet as PDF, tile texture from PNG sequences.
+- **Windows 11:** Mica, light/dark, text scaling, full keyboard control.
 
-peek erkennt Muster in Dateinamen und schlägt diese Begriffe als Filter vor, mit Trefferzahl.
+## Find instead of search
 
-| Dateiname | erkannte Begriffe |
+### Recognized terms
+
+peek recognizes patterns in file names and suggests these terms as filters, with the number of matches.
+
+| File name | recognized terms |
 | --- | --- |
-| `Urlaub Rom 2024 (3).jpg` | `urlaub`, `rom` |
-| `SommerUrlaub_Rom-2024.jpg` | `sommer`, `urlaub`, `rom` |
+| `Vacation Rome 2024 (3).jpg` | `vacation`, `rome` |
+| `SummerVacation_Rome-2024.jpg` | `summer`, `vacation`, `rome` |
 | `München_Straße.jpg` | `muenchen`, `strasse` |
 
 
-![Begriff „rom“ als aktive Pille](docs/screenshots/begriffe.png)
+![Term "rom" as an active pill](docs/screenshots/begriffe.png)
 
-### Quelle und Muster
+### Source and pattern
 
-**Quelle** erkennt die Herkunft: Kamera, Drohne, Bildschirmfoto, Messenger. **Muster** gruppiert gleich aufgebaute Namen.
+**Quelle** (source) recognizes where a file came from: camera, drone, screenshot, messenger. **Muster** (pattern) groups names with the same structure.
 
-| Dateiname | Quelle | Muster |
+| File name | Source | Pattern |
 | --- | --- | --- |
-| `IMG_20240817_1430.jpg` | Kamera (IMG) | `IMG_{Datum}_####` |
-| `Screenshot 2024-08-17 101500.png` | Bildschirmfoto | `Screenshot {Datum} ######` |
-| `Urlaub Rom 2024 (3).jpg` | – | `Urlaub Rom #### (#)` |
+| `IMG_20240817_1430.jpg` | Camera (IMG) | `IMG_{Datum}_####` |
+| `Screenshot 2024-08-17 101500.png` | Screenshot | `Screenshot {Datum} ######` |
+| `Vacation Rome 2024 (3).jpg` | – | `Vacation Rome #### (#)` |
 
 
 <table>
   <tr>
     <td width="50%" valign="top" align="center">
-      <img src="docs/screenshots/quelle.png" alt="Filter Quelle"><br>
-      <sub>Quelle</sub>
+      <img src="docs/screenshots/quelle.png" alt="Source filter"><br>
+      <sub>Source</sub>
     </td>
     <td width="50%" valign="top" align="center">
-      <img src="docs/screenshots/muster.png" alt="Filter Muster"><br>
-      <sub>Muster</sub>
+      <img src="docs/screenshots/muster.png" alt="Pattern filter"><br>
+      <sub>Pattern</sub>
     </td>
   </tr>
 </table>
 
-### Zeitraum
+### Time range
 
-Ein Kalender für Jahre, Monate, Tage bei Datum und Aufgenommen. Die Anzahl wird schon vorher angezeigt. Klick wählt, Ziehen wählt einen Zeitraum.
+A calendar for years, months and days, for both file date and capture date. The number of matches is shown in advance. Click selects, dragging selects a range.
 
-<p align="center"><img src="docs/screenshots/kalender.png" alt="Kalender im Datumsfilter" width="560"></p>
+<p align="center"><img src="docs/screenshots/kalender.png" alt="Calendar in the date filter" width="560"></p>
 
-### Suche
+### Search
 
-Einfach lostippen. Parameter grenzen ein. Ein Klick ins Suchfeld zeigt Vorschläge.
+Just start typing. Parameters narrow the results. Clicking the search field shows suggestions.
 
-| Eingabe | Bedeutung |
+| Input | Meaning |
 | --- | --- |
-| `rom urlaub` · `"hochzeit anna"` · `-screenshot` · `urlaub*` | Begriffe, Phrase, ausschließen, Platzhalter |
-| `Breite:>3000` · `Höhe:>2000` · `Megapixel:>=20` | Abmessungen |
-| `Größe:>10mb` · `Dauer:>60s` | Dateigröße, Videodauer |
-| `Datum:2024-08..2024-09` · `Aufgenommen:2024` | Zeitraum |
-| `Endung:jpg,png` · `Typ:Video` · `Kamera:x-t5` | Endung, Typ, Kamera |
+| `rom urlaub` · `"hochzeit anna"` · `-screenshot` · `urlaub*` | terms, phrase, exclude, wildcard |
+| `Breite:>3000` · `Höhe:>2000` · `Megapixel:>=20` | width, height, megapixels |
+| `Größe:>10mb` · `Dauer:>60s` | file size, video duration |
+| `Datum:2024-08..2024-09` · `Aufgenommen:2024` | file date, capture date |
+| `Endung:jpg,png` · `Typ:Video` · `Kamera:x-t5` | extension, type, camera |
 
-![Suche mit Parametern](docs/screenshots/suche.png)
+![Search with parameters](docs/screenshots/suche.png)
 
-## Bilderwolke
+## Image cloud
 
-Der Ordner als Wolke im Raum. Die Sortierung bestimmt, was oben liegt. Mausrad fährt hinein und hindurch. Klick holt ein Bild heran, zweiter Klick öffnet. Filter ordnen die Wolke neu.
-
-<table>
-  <tr>
-    <td width="50%" valign="top" align="center">
-      <img src="docs/screenshots/wolke.png" alt="Bilderwolke mit 1.500 Bildern"><br>
-      <sub>1.500 Bilder, GPU-beschleunigt</sub>
-    </td>
-    <td width="50%" valign="top" align="center">
-      <img src="docs/screenshots/wolke-nah.png" alt="Bilderwolke aus der Nähe"><br>
-      <sub>260 Bilder, aus der Nähe</sub>
-    </td>
-  </tr>
-</table>
-
-## Weitere Funktionen
+The folder as a cloud in space. The sort order decides what is on top. The mouse wheel moves into and through the cloud. Click brings an image closer, a second click opens it. Filters rearrange the cloud.
 
 <table>
   <tr>
     <td width="50%" valign="top" align="center">
-      <img src="docs/screenshots/betrachter.png" alt="Bildbetrachter"><br>
-      <sub>Bildbetrachter</sub><br><br>
-      <img src="docs/screenshots/gruppiert.png" alt="Gruppierte Ansicht"><br>
-      <sub>Gruppiert nach Datum, Größe …</sub><br><br>
-      <img src="docs/screenshots/kontaktabzug.png" alt="Kontaktabzug"><br>
-      <sub>Kontaktabzug als PDF</sub><br><br>
-      <img src="docs/screenshots/vergleich.png" alt="Bilder nebeneinander vergleichen"><br>
-      <sub>Vergleichen: nebeneinander</sub>
+      <img src="docs/screenshots/wolke.png" alt="Image cloud with 1,500 images"><br>
+      <sub>1,500 images, GPU-accelerated</sub>
     </td>
     <td width="50%" valign="top" align="center">
-      <img src="docs/screenshots/zuschneiden.png" alt="Zuschneiden"><br>
-      <sub>Zuschneiden</sub><br><br>
-      <img src="docs/screenshots/liste.png" alt="Listenansicht"><br>
-      <sub>Listenansicht</sub><br><br>
-      <img src="docs/screenshots/kacheltextur.png" alt="Kacheltextur"><br>
-      <sub>Kacheltextur, pixelgenau</sub><br><br>
-      <img src="docs/screenshots/vergleich-ueber.png" alt="Bilder übereinander vergleichen"><br>
-      <sub>Vergleichen: übereinander mit Trennlinie</sub>
+      <img src="docs/screenshots/wolke-nah.png" alt="Image cloud up close"><br>
+      <sub>260 images, up close</sub>
     </td>
   </tr>
 </table>
 
-## Herunterladen
+## More features
 
-1. Unter **[Releases](../../releases)** die neueste `peek.exe` herunterladen.
-2. In einen Ordner legen (auch USB-Stick), starten. Nicht signiert: SmartScreen → **Weitere Informationen → Trotzdem ausführen**.
+<table>
+  <tr>
+    <td width="50%" valign="top" align="center">
+      <img src="docs/screenshots/betrachter.png" alt="Image viewer"><br>
+      <sub>Image viewer</sub><br><br>
+      <img src="docs/screenshots/gruppiert.png" alt="Grouped view"><br>
+      <sub>Grouped by date, size …</sub><br><br>
+      <img src="docs/screenshots/kontaktabzug.png" alt="Contact sheet"><br>
+      <sub>Contact sheet as PDF</sub><br><br>
+      <img src="docs/screenshots/vergleich.png" alt="Compare images side by side"><br>
+      <sub>Compare: side by side</sub>
+    </td>
+    <td width="50%" valign="top" align="center">
+      <img src="docs/screenshots/zuschneiden.png" alt="Crop"><br>
+      <sub>Crop</sub><br><br>
+      <img src="docs/screenshots/liste.png" alt="List view"><br>
+      <sub>List view</sub><br><br>
+      <img src="docs/screenshots/kacheltextur.png" alt="Tile texture"><br>
+      <sub>Tile texture, pixel-exact</sub><br><br>
+      <img src="docs/screenshots/vergleich-ueber.png" alt="Compare images overlaid"><br>
+      <sub>Compare: overlaid with a divider</sub>
+    </td>
+  </tr>
+</table>
 
-Lizenzhinweise der eingebundenen Bibliotheken: `THIRD-PARTY.txt` im Release.
+## Download
 
-Daten liegen in `%LOCALAPPDATA%\peek`. Mit einer leeren Datei `peek.portable` neben der EXE: in `peek-data\` daneben.
+1. Download the latest `peek.exe` from **[Releases](../../releases)**.
+2. Put it in a folder (a USB stick works too) and start it. It is not signed: SmartScreen → **More info → Run anyway**.
 
-## Funktionen
+License notices for the bundled libraries: `THIRD-PARTY.txt` in the release.
 
-- **Ansichten:** Kacheln, Liste, Bilderwolke. Vorschau für Bilder, SVG, Videos, PDF, PSD, AI.
-- **Bildbetrachter:** JPEG, PNG, GIF, BMP, WebP, AVIF, TIFF, ICO, SVG, TGA. Zoom, Drehen, Zuschneiden. SVG bleibt in jeder Zoomstufe scharf.
-- **Filter und Suche:** Begriffe, Quelle, Muster, Kalender, Suchparameter, Suchverlauf.
-- **Merkliste und Sammlungen:** vormerken mit Stern, Ordner indexieren, solange peek läuft.
-- **Vergleichen:** zwei Bilder nebeneinander, Zoom synchron. Oder übereinander mit Trennlinie am Mauszeiger.
-- **Kontaktabzug:** A4 hoch/quer, Raster frei wählbar, Bilder per Ziehen sortieren. PDF mit eingebetteter Schrift.
-- **Kacheltextur:** PNG-Sequenz zu einer PNG, pixelgenau. 8 und 16 Bit, Transparenz bleibt.
-- **Dateien:** Umbenennen, Eigenschaften, Öffnen mit, Kopieren, Einfügen, Ziehen auf Ordner, Papierkorb.
-- **Nur lokal:** keine Netzlaufwerke, keine Cloud-Platzhalter.
-- **Sandbox:** Dekoder laufen in AppContainer-Prozessen. Eine präparierte Datei kann weder ins Netz noch an andere Dateien.
-- **Index verschlüsselt:** Pfade und Vorschaubilder nur verschlüsselt gespeichert, an das Windows-Konto gebunden. Gelöschtes verschwindet auch aus dem Index.
+Data is stored in `%LOCALAPPDATA%\peek`. With an empty file `peek.portable` next to the EXE, it is stored in `peek-data\` next to it instead.
 
-### Tastatur
+## Features
 
-Tippen sucht. `Enter` öffnet. `Leertaste` zeigt das Bild. `Alt+←/→/↑` navigiert. `F2` benennt um. `Alt+Enter` zeigt die Eigenschaften. `Entf` löscht in den Papierkorb. `Strg+1/2/3` wechselt die Ansicht. Alle Kürzel: **Einstellungen → Tastenkombinationen**.
+- **Views:** tiles, list, image cloud. Previews for images, SVG, videos, PDF, PSD, AI.
+- **Image viewer:** JPEG, PNG, GIF, BMP, WebP, AVIF, TIFF, ICO, SVG, TGA. Zoom, rotate, crop. SVG stays sharp at every zoom level.
+- **Filters and search:** terms, source, pattern, calendar, search parameters, search history.
+- **Bookmarks and collections:** mark with a star, index folders while peek is running.
+- **Compare:** two images side by side with synchronized zoom, or overlaid with a divider at the mouse pointer.
+- **Contact sheet:** A4 portrait/landscape, freely chosen grid, reorder images by dragging. PDF with embedded font.
+- **Tile texture:** PNG sequence to a single PNG, pixel-exact. 8 and 16 bit, transparency preserved.
+- **Files:** rename, properties, open with, copy, paste, drag onto folders, recycle bin.
+- **Local only:** no network drives, no cloud placeholders.
+- **Sandbox:** decoders run in AppContainer processes. A crafted file can reach neither the network nor other files.
+- **Encrypted index:** paths and thumbnails are stored only in encrypted form, bound to the Windows account. Deleted files also disappear from the index.
 
-## Bauen
+### Keyboard
 
-Voraussetzungen: Visual Studio 2022 (C++-Workload), CMake ≥ 3.24, vcpkg, Rust (für den SVG-Renderer resvg).
+Typing searches. `Enter` opens. `Space` shows the image. `Alt+←/→/↑` navigates. `F2` renames. `Alt+Enter` shows properties. `Del` moves to the recycle bin. `Ctrl+1/2/3` switches the view. All shortcuts: **Einstellungen → Tastenkombinationen** (Settings → Keyboard shortcuts).
+
+## Building
+
+Requirements: Visual Studio 2022 (C++ workload), CMake ≥ 3.24, vcpkg, Rust (for the SVG renderer resvg).
 
 ```powershell
-./tools/build-resvg.ps1          # einmalig: resvg nach deps/resvg
+./tools/build-resvg.ps1          # once: resvg into deps/resvg
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release `
   -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
   -DVCPKG_TARGET_TRIPLET=x64-windows-static
@@ -170,34 +174,34 @@ ctest --test-dir build
 ./tools/check-imports.ps1 -Exe build/peek.exe
 ```
 
-Jeder Push auf `main` baut, testet und prüft: Die EXE darf keine Netzwerkbibliotheken importieren, und die Sandbox-Prüfung muss bestehen. Releases über den Workflow **release**.
+Every push to `main` builds, tests and checks: the EXE must not import any network libraries, and the sandbox check must pass. Releases are made with the **release** workflow.
 
-## Aufbau
+## Structure
 
-Details im [technischen Konzept](docs/KONZEPT.md).
+Details in the [technical concept](docs/CONCEPT.md). Source code comments are in German.
 
-| Datei | Inhalt |
+| File | Contents |
 | --- | --- |
-| `src/core/` | plattformunabhängig: Tokenizer, Namensmuster, Abfragesprache, Seitenberechnung des Kontaktabzugs, Aufteilung der Kacheltextur (mit Tests) |
-| `src/renderer.*` · `src/popup.*` | Direct3D 11, Direct2D, DirectComposition, Mica · Menüs mit Untermenüs |
-| `src/imaging.*` · `src/docimaging.*` · `src/svgimaging.*` | WIC, libwebp, libavif, Media Foundation · Vorschaubilder für PDF, AI und PSD · SVG mit resvg |
-| `src/sandbox.*` · `src/fileinput.*` | Dekoder-Prozesse im AppContainer: Pool, Pipe, gemeinsamer Speicher · Lesen nur über übergebene Handles |
-| `src/thumbs.*` · `src/meta.*` · `src/indexer.*` · `src/db.*` | Vorschaubilder, Metadaten, Hintergrund-Index, SQLite |
-| `src/pdfsheet.*` · `src/contactsheet.cpp` | PDF-Schreiber · Kontaktabzug |
-| `src/cloud.cpp` | Bilderwolke: Anordnung, Kamera, Ausweichen, Atlas und Sprite-Batches |
-| `src/atlaswriter.*` · `src/atlas.cpp` | pixelgenaues Zusammensetzen der PNG-Sequenz · Kacheltextur |
-| `src/app*.cpp` · `src/crop.cpp` · `src/datepicker.cpp` | Fenster, Ansicht, Eingabe, Bildbetrachter, Zuschneiden, Datums-Picker |
-| `assets/` · `docs/` | Symbol und Logos · Release-Notes und Bildschirmfotos |
+| `src/core/` | platform-independent: tokenizer, name patterns, query language, contact sheet page layout, tile texture splitting (with tests) |
+| `src/renderer.*` · `src/popup.*` | Direct3D 11, Direct2D, DirectComposition, Mica · menus with submenus |
+| `src/imaging.*` · `src/docimaging.*` · `src/svgimaging.*` | WIC, libwebp, libavif, Media Foundation · thumbnails for PDF, AI and PSD · SVG with resvg |
+| `src/sandbox.*` · `src/fileinput.*` | decoder processes in an AppContainer: pool, pipe, shared memory · reading only via handed-over handles |
+| `src/thumbs.*` · `src/meta.*` · `src/indexer.*` · `src/db.*` | thumbnails, metadata, background index, SQLite |
+| `src/pdfsheet.*` · `src/contactsheet.cpp` | PDF writer · contact sheet |
+| `src/cloud.cpp` | image cloud: layout, camera, avoidance, atlas and sprite batches |
+| `src/atlaswriter.*` · `src/atlas.cpp` | pixel-exact assembly of the PNG sequence · tile texture |
+| `src/app*.cpp` · `src/crop.cpp` · `src/datepicker.cpp` | window, view, input, image viewer, crop, date picker |
+| `assets/` · `docs/` | icon and logos · release notes and screenshots |
 
-## Privates Projekt
+## Private project
 
-peek ist ein privates Projekt, entstanden für den eigenen Gebrauch. Der Quelltext ist öffentlich, damit andere ihn ansehen und unter den unten genannten Lizenzen weiterverwenden können. Es gibt keine Unterstützung, keine Fehlerannahme und keine Aufnahme von Beiträgen (Issues und Pull Requests). Wer etwas ändern möchte, kann das Projekt gern forken.
+peek is a private project, made for personal use. The source code is public so that others can read it and reuse it under the licenses below. There is no support, no bug tracking and no acceptance of contributions (issues and pull requests). If you want to change something, feel free to fork the project.
 
-## Lizenz
+## License
 
-peek steht unter einer Doppellizenz. Wahlweise gilt:
+peek is dual-licensed. You may choose either:
 
-- [MIT-Lizenz](LICENSE-MIT)
-- [Apache-Lizenz 2.0](LICENSE-APACHE)
+- [MIT License](LICENSE-MIT)
+- [Apache License 2.0](LICENSE-APACHE)
 
-Die Lizenzen der eingebundenen Bibliotheken stehen in `THIRD-PARTY.txt`.
+The licenses of the bundled libraries are listed in `THIRD-PARTY.txt`.

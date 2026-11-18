@@ -76,7 +76,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item build/peek.exe dist/peek.exe
           ./tools/third-party.ps1 -Out dist/THIRD-PARTY.txt
-          Compress-Archive -Path build/peek.exe, README.md, LICENSE-MIT, LICENSE-APACHE, dist/THIRD-PARTY.txt -DestinationPath "dist/peek-${{ inputs.version }}-x64.zip"
+          Compress-Archive -Path build/peek.exe, README.md, README.de.md, LICENSE-MIT, LICENSE-APACHE, dist/THIRD-PARTY.txt -DestinationPath "dist/peek-${{ inputs.version }}-x64.zip"
           (Get-FileHash dist/peek.exe -Algorithm SHA256).Hash | Out-File -Encoding ascii dist/peek.exe.sha256
 
       - name: Release anlegen

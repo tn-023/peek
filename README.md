@@ -12,9 +12,7 @@ No installation, no admin rights, no internet connection.</p>
 
 <p align="center"><b>English</b> | <a href="README.de.md">Deutsch</a></p>
 
-> **Note:** The app's user interface is currently available in German only. Labels and search parameters below are given as they appear in the app.
-
-![Overview with info panel](docs/screenshots/uebersicht.png)
+![Overview with info panel](docs/screenshots/en/uebersicht.png)
 
 See a folder instantly, find files quickly. peek recognizes terms and patterns in file names and offers them as filters. One EXE, no account, no cloud.
 
@@ -25,9 +23,10 @@ See a folder instantly, find files quickly. peek recognizes terms and patterns i
 - **Portable and private:** runs from a USB stick, local drives only, no network features.
 - **Isolated:** images, videos and documents are decoded in a sandbox, with no network and no access to other files.
 - **No background service:** indexes only while peek is running. No service, no autostart.
-- **Find:** terms as pills, filters for type, date, size, resolution, orientation. Search with `Breite:>3000 Datum:2024-08` (width, date).
+- **Find:** terms as pills, filters for type, date, size, resolution, orientation. Search with `width:>3000 date:2024-08`.
 - **More than images:** previews for SVG, TGA, videos, PDF, Photoshop, Illustrator.
 - **Tools:** compare images, crop, contact sheet as PDF, tile texture from PNG sequences.
+- **English and German:** follows the Windows language, switchable in the settings.
 - **Windows 11:** Mica, light/dark, text scaling, full keyboard control.
 
 ## Find instead of search
@@ -43,27 +42,27 @@ peek recognizes patterns in file names and suggests these terms as filters, with
 | `München_Straße.jpg` | `muenchen`, `strasse` |
 
 
-![Term "rom" as an active pill](docs/screenshots/begriffe.png)
+![Term "rome" as an active pill](docs/screenshots/en/pillen.png)
 
 ### Source and pattern
 
-**Quelle** (source) recognizes where a file came from: camera, drone, screenshot, messenger. **Muster** (pattern) groups names with the same structure.
+**Source** recognizes where a file came from: camera, drone, screenshot, messenger. **Pattern** groups names with the same structure.
 
 | File name | Source | Pattern |
 | --- | --- | --- |
-| `IMG_20240817_1430.jpg` | Camera (IMG) | `IMG_{Datum}_####` |
-| `Screenshot 2024-08-17 101500.png` | Screenshot | `Screenshot {Datum} ######` |
+| `IMG_20240817_1430.jpg` | Camera (IMG) | `IMG_{date}_####` |
+| `Screenshot 2024-08-17 101500.png` | Screenshot | `Screenshot {date} ######` |
 | `Vacation Rome 2024 (3).jpg` | – | `Vacation Rome #### (#)` |
 
 
 <table>
   <tr>
     <td width="50%" valign="top" align="center">
-      <img src="docs/screenshots/quelle.png" alt="Source filter"><br>
+      <img src="docs/screenshots/en/quelle.png" alt="Source filter"><br>
       <sub>Source</sub>
     </td>
     <td width="50%" valign="top" align="center">
-      <img src="docs/screenshots/muster.png" alt="Pattern filter"><br>
+      <img src="docs/screenshots/en/muster.png" alt="Pattern filter"><br>
       <sub>Pattern</sub>
     </td>
   </tr>
@@ -73,7 +72,7 @@ peek recognizes patterns in file names and suggests these terms as filters, with
 
 A calendar for years, months and days, for both file date and capture date. The number of matches is shown in advance. Click selects, dragging selects a range.
 
-<p align="center"><img src="docs/screenshots/kalender.png" alt="Calendar in the date filter" width="560"></p>
+<p align="center"><img src="docs/screenshots/en/kalender.png" alt="Calendar in the date filter" width="560"></p>
 
 ### Search
 
@@ -81,13 +80,15 @@ Just start typing. Parameters narrow the results. Clicking the search field show
 
 | Input | Meaning |
 | --- | --- |
-| `rom urlaub` · `"hochzeit anna"` · `-screenshot` · `urlaub*` | terms, phrase, exclude, wildcard |
-| `Breite:>3000` · `Höhe:>2000` · `Megapixel:>=20` | width, height, megapixels |
-| `Größe:>10mb` · `Dauer:>60s` | file size, video duration |
-| `Datum:2024-08..2024-09` · `Aufgenommen:2024` | file date, capture date |
-| `Endung:jpg,png` · `Typ:Video` · `Kamera:x-t5` | extension, type, camera |
+| `rome vacation` · `"wedding anna"` · `-screenshot` · `vacation*` | terms, phrase, exclude, wildcard |
+| `width:>3000` · `height:>2000` · `megapixels:>=20` | dimensions |
+| `size:>10mb` · `duration:>60s` | file size, video duration |
+| `date:2024-08..2024-09` · `captured:2024` | file date, capture date |
+| `extension:jpg,png` · `type:video` · `camera:x-t5` | extension, type, camera |
 
-![Search with parameters](docs/screenshots/suche.png)
+The German parameter names (`Breite:`, `Datum:` …) work as well, whatever the interface language.
+
+![Search with parameters](docs/screenshots/en/suche.png)
 
 ## Image cloud
 
@@ -96,11 +97,11 @@ The folder as a cloud in space. The sort order decides what is on top. The mouse
 <table>
   <tr>
     <td width="50%" valign="top" align="center">
-      <img src="docs/screenshots/wolke.png" alt="Image cloud with 1,500 images"><br>
+      <img src="docs/screenshots/en/wolke.png" alt="Image cloud with 1,500 images"><br>
       <sub>1,500 images, GPU-accelerated</sub>
     </td>
     <td width="50%" valign="top" align="center">
-      <img src="docs/screenshots/wolke-nah.png" alt="Image cloud up close"><br>
+      <img src="docs/screenshots/en/wolke-nah.png" alt="Image cloud up close"><br>
       <sub>260 images, up close</sub>
     </td>
   </tr>
@@ -111,23 +112,23 @@ The folder as a cloud in space. The sort order decides what is on top. The mouse
 <table>
   <tr>
     <td width="50%" valign="top" align="center">
-      <img src="docs/screenshots/betrachter.png" alt="Image viewer"><br>
+      <img src="docs/screenshots/en/betrachter.png" alt="Image viewer"><br>
       <sub>Image viewer</sub><br><br>
-      <img src="docs/screenshots/gruppiert.png" alt="Grouped view"><br>
+      <img src="docs/screenshots/en/gruppiert.png" alt="Grouped view"><br>
       <sub>Grouped by date, size …</sub><br><br>
-      <img src="docs/screenshots/kontaktabzug.png" alt="Contact sheet"><br>
+      <img src="docs/screenshots/en/kontaktabzug.png" alt="Contact sheet"><br>
       <sub>Contact sheet as PDF</sub><br><br>
-      <img src="docs/screenshots/vergleich.png" alt="Compare images side by side"><br>
+      <img src="docs/screenshots/en/vergleich.png" alt="Compare images side by side"><br>
       <sub>Compare: side by side</sub>
     </td>
     <td width="50%" valign="top" align="center">
-      <img src="docs/screenshots/zuschneiden.png" alt="Crop"><br>
+      <img src="docs/screenshots/en/zuschneiden.png" alt="Crop"><br>
       <sub>Crop</sub><br><br>
-      <img src="docs/screenshots/liste.png" alt="List view"><br>
+      <img src="docs/screenshots/en/liste.png" alt="List view"><br>
       <sub>List view</sub><br><br>
-      <img src="docs/screenshots/kacheltextur.png" alt="Tile texture"><br>
+      <img src="docs/screenshots/en/kacheltextur.png" alt="Tile texture"><br>
       <sub>Tile texture, pixel-exact</sub><br><br>
-      <img src="docs/screenshots/vergleich-ueber.png" alt="Compare images overlaid"><br>
+      <img src="docs/screenshots/en/vergleich-ueber.png" alt="Compare images overlaid"><br>
       <sub>Compare: overlaid with a divider</sub>
     </td>
   </tr>
@@ -158,7 +159,7 @@ Data is stored in `%LOCALAPPDATA%\peek`. With an empty file `peek.portable` next
 
 ### Keyboard
 
-Typing searches. `Enter` opens. `Space` shows the image. `Alt+←/→/↑` navigates. `F2` renames. `Alt+Enter` shows properties. `Del` moves to the recycle bin. `Ctrl+1/2/3` switches the view. All shortcuts: **Einstellungen → Tastenkombinationen** (Settings → Keyboard shortcuts).
+Typing searches. `Enter` opens. `Space` shows the image. `Alt+←/→/↑` navigates. `F2` renames. `Alt+Enter` shows properties. `Del` moves to the recycle bin. `Ctrl+1/2/3` switches the view. All shortcuts: **Settings → Keyboard shortcuts**.
 
 ## Building
 

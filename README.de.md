@@ -26,6 +26,7 @@ Ordner sofort sehen, Dateien schnell finden. peek erkennt Begriffe und Muster in
 - **Finden:** Begriffe als Pillen, Filter für Typ, Datum, Größe, Auflösung, Ausrichtung. Suche mit `Breite:>3000 Datum:2024-08`.
 - **Mehr als Bilder:** Vorschau auch für SVG, TGA, Videos, PDF, Photoshop, Illustrator.
 - **Werkzeuge:** Bilder vergleichen, Zuschneiden, Kontaktabzug als PDF, Kacheltextur aus PNG-Sequenzen.
+- **Deutsch und Englisch:** folgt der Windows-Sprache, umschaltbar in den Einstellungen.
 - **Windows 11:** Mica, Hell/Dunkel, Textskalierung, volle Tastaturbedienung.
 
 ## Finden statt suchen

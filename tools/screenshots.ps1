@@ -1,9 +1,13 @@
 # Startet peek in verschiedenen Zustaenden und speichert Bildschirmfotos (fuer die Dokumentation).
+# -Lang de|en: Sprache der Oberflaeche; der Beispielordner muss mit make-demo.ps1 -Lang <gleich> erzeugt sein.
 param(
     [Parameter(Mandatory = $true)][string]$Exe,
     [Parameter(Mandatory = $true)][string]$Root,
-    [Parameter(Mandatory = $true)][string]$Out
+    [Parameter(Mandatory = $true)][string]$Out,
+    [ValidateSet('de', 'en')][string]$Lang = 'de'
 )
+$en = $Lang -eq 'en'
+function N([string]$de, [string]$english) { if ($en) { $english } else { $de } }
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -29,7 +33,7 @@ $size = "--size=$($wa.Width)x$($wa.Height)"
 
 function Shot([string]$name, [string[]]$arguments, [int]$wait = 8, [switch]$FullScreen) {
     Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:LOCALAPPDATA 'peek\einstellungen.dat')
-    $p = Start-Process -FilePath $Exe -ArgumentList $arguments -PassThru
+    $p = Start-Process -FilePath $Exe -ArgumentList ($arguments + "--lang=$Lang") -PassThru
     $deadline = (Get-Date).AddSeconds(20)
     while ($p.MainWindowHandle -eq [IntPtr]::Zero -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300; $p.Refresh() }
     if ($p.MainWindowHandle -eq [IntPtr]::Zero) { Write-Warning "$name : kein Fenster"; Stop-Process $p -Force; return }
@@ -55,7 +59,9 @@ function Shot([string]$name, [string[]]$arguments, [int]$wait = 8, [switch]$Full
     Start-Sleep -Seconds 1
 }
 
-$sel = Join-Path $Root 'Urlaub Rom 2024 (2).jpg'
+$sel = Join-Path $Root (N 'Urlaub Rom 2024 (2).jpg' 'Vacation Rome 2024 (2).jpg')
+$svg = Join-Path $Root (N 'Plakat Vektor.svg' 'Poster Vector.svg')
+$term = N 'rom' 'rome'
 $dark = '--theme=dark'
 Shot 'uebersicht.png' @("`"$sel`"", $dark, '--view=grid', '--tile=176', '--info', $size)
 Shot 'gruppiert.png' @("`"$Root`"", $dark, '--view=grid', '--tile=144', '--group', $size)
@@ -79,15 +85,15 @@ for ($i = 0; $i -lt 1500; $i++) {
     $b.Dispose()
 }
 Shot 'wolke-viele.png' @("`"$many`"", $dark, '--view=cloud', $size) -wait 25
-Shot 'pillen.png' @("`"$Root`"", $dark, '--view=grid', '--tile=144', '--term=rom', $size)
+Shot 'pillen.png' @("`"$Root`"", $dark, '--view=grid', '--tile=144', "--term=$term", $size)
 Shot 'muster.png' @("`"$Root`"", $dark, '--view=grid', '--tile=144', '--open-chip=pattern', $size) -wait 9
 Shot 'quelle.png' @("`"$Root`"", $dark, '--view=grid', '--tile=144', '--open-chip=source', $size) -wait 9
-Shot 'suche.png' @("`"$Root`"", $dark, '--view=grid', '--tile=144', "`"--search=Breite:>1500 rom`"", '--search-open', $size)
-Shot 'svg.png' @("`"--viewer=$Root\Plakat Vektor.svg`"", $dark, $size) -FullScreen -wait 9
-Shot 'svg-zoom.png' @("`"--viewer=$Root\Plakat Vektor.svg`"", $dark, '--viewer-zoom=6', $size) -FullScreen -wait 12
+Shot 'suche.png' @("`"$Root`"", $dark, '--view=grid', '--tile=144', "`"--search=$(N 'Breite' 'Width'):>1500 $term`"", '--search-open', $size)
+Shot 'svg.png' @("`"--viewer=$svg`"", $dark, $size) -FullScreen -wait 9
+Shot 'svg-zoom.png' @("`"--viewer=$svg`"", $dark, '--viewer-zoom=6', $size) -FullScreen -wait 12
 Shot 'umbenennen.png' @("`"$sel`"", $dark, '--view=grid', '--tile=144', '--rename', $size) -wait 9
 Shot 'umbenennen-liste.png' @("`"$sel`"", $dark, '--view=list', '--rename', $size) -wait 9
-$cmpA = Join-Path $Root 'Urlaub Rom 2024 (1).jpg'; $cmpB = Join-Path $Root 'Urlaub Rom 2024 (2).jpg'
+$cmpA = Join-Path $Root (N 'Urlaub Rom 2024 (1).jpg' 'Vacation Rome 2024 (1).jpg'); $cmpB = $sel
 Shot 'vergleich.png' @("`"--compare=$cmpA;$cmpB`"", $dark, $size) -FullScreen -wait 9
 Shot 'vergleich-ueber.png' @("`"--compare=$cmpA;$cmpB`"", '--compare-mode=1', $dark, $size) -FullScreen -wait 9
 # Kalender (Datumsfilter "Individuell") in Nahaufnahme

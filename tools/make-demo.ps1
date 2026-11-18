@@ -1,7 +1,11 @@
 # Erzeugt einen Beispielordner mit Bildern, Unterordnern und sonstigen Dateien (fuer Screenshots und Tests).
+# -Lang en: englische Datei- und Ordnernamen (fuer die englischen Bildschirmfotos)
 param(
-    [Parameter(Mandatory = $true)][string]$Root
+    [Parameter(Mandatory = $true)][string]$Root,
+    [ValidateSet('de', 'en')][string]$Lang = 'de'
 )
+$en = $Lang -eq 'en'
+function N([string]$de, [string]$english) { if ($en) { $english } else { $de } }
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -58,22 +62,24 @@ function Add([string]$dir, [string]$name, [int]$w, [int]$h, [string]$label, [int
 
 # Hauptordner
 foreach ($n in 30..37) { Add $Root ("IMG_20240817_14{0}.jpg" -f $n) 1600 1200 ("IMG $n") (90 + $n) }
-foreach ($n in 1..5) { Add $Root ("Urlaub Rom 2024 ({0}).jpg" -f $n) 1920 1080 ("Rom $n") (200 + $n) }
+foreach ($n in 1..5) { Add $Root ((N 'Urlaub Rom 2024 ({0}).jpg' 'Vacation Rome 2024 ({0}).jpg') -f $n) 1920 1080 ((N 'Rom' 'Rome') + " $n") (200 + $n) }
 foreach ($n in 12..14) { Add $Root ("Screenshot 2024-08-17 1015{0}.png" -f $n) 1280 800 ("Screenshot") 5 }
 foreach ($n in 4101..4104) { Add $Root ("DSC0{0}.jpg" -f $n) 1080 1440 ("DSC $n") (400 + $n % 10) }
-Add $Root 'Familienfeier_Sommer_im_Garten_mit_einem_sehr_langen_Dateinamen_zum_Testen_des_Umbruchs.jpg' 1600 1067 'Familienfeier' 2
-Add $Root 'Panorama Dolomiten.jpg' 3200 1000 'Panorama' 30
-Add $Root 'Hochformat Portrait.jpg' 1000 1500 'Portrait' 1
+Add $Root (N 'Familienfeier_Sommer_im_Garten_mit_einem_sehr_langen_Dateinamen_zum_Testen_des_Umbruchs.jpg' 'Family_party_summer_in_the_garden_with_a_very_long_file_name_to_test_wrapping.jpg') 1600 1067 (N 'Familienfeier' 'Family party') 2
+Add $Root (N 'Panorama Dolomiten.jpg' 'Panorama Dolomites.jpg') 3200 1000 'Panorama' 30
+Add $Root (N 'Hochformat Portrait.jpg' 'Upright Portrait.jpg') 1000 1500 'Portrait' 1
 
 # Unterordner (Ordner-Vorschaubilder)
-foreach ($folder in @('Rom', 'Paris', 'Berge 2023')) {
+foreach ($folder in @((N 'Rom' 'Rome'), 'Paris', (N 'Berge 2023' 'Mountains 2023'))) {
     $d = Join-Path $Root $folder
     New-Item -ItemType Directory -Force -Path $d | Out-Null
     foreach ($n in 1..6) { Add $d ("{0}_{1:00}.jpg" -f ($folder -replace ' ', '_'), $n) 1600 1067 "$folder $n" (60 + $n) }
 }
 
 # SVG-Grafiken (Text, Filter, Maske, CSS)
-Set-Content -Path (Join-Path $Root 'Plakat Vektor.svg') -Encoding UTF8 -Value @'
+$svgTitle = N 'Vektorgrafik' 'Vector graphic'
+$svgSub = N 'Text, Verlauf, Weichzeichner und Maske' 'Text, gradient, blur and mask'
+Set-Content -Path (Join-Path $Root (N 'Plakat Vektor.svg' 'Poster Vector.svg')) -Encoding UTF8 -Value @"
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
@@ -92,11 +98,11 @@ Set-Content -Path (Join-Path $Root 'Plakat Vektor.svg') -Encoding UTF8 -Value @'
   <circle cx="860" cy="260" r="150" fill="#ffb347" filter="url(#soft)" opacity="0.8"/>
   <circle cx="860" cy="260" r="110" fill="url(#sun)"/>
   <path d="M0 620 L260 380 L420 520 L640 300 L900 560 L1200 420 L1200 800 L0 800 Z" fill="#0b1d3a" mask="url(#fade)"/>
-  <text x="80" y="160" font-family="Segoe UI" font-size="96" font-weight="600" fill="white">Vektorgrafik</text>
-  <text x="84" y="220" font-family="Segoe UI" font-size="36" fill="#cfe0ff">Text, Verlauf, Weichzeichner und Maske</text>
+  <text x="80" y="160" font-family="Segoe UI" font-size="96" font-weight="600" fill="white">$svgTitle</text>
+  <text x="84" y="220" font-family="Segoe UI" font-size="36" fill="#cfe0ff">$svgSub</text>
 </svg>
-'@
-Set-Content -Path (Join-Path $Root 'Symbol Haken.svg') -Encoding UTF8 -Value @'
+"@
+Set-Content -Path (Join-Path $Root (N 'Symbol Haken.svg' 'Icon Check.svg')) -Encoding UTF8 -Value @'
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
   <style>.a{fill:none;stroke:#e8a33d;stroke-width:1.6;stroke-linecap:round}</style>
   <circle class="a" cx="12" cy="12" r="9"/><path class="a" d="M8 13l3 3 5-7"/>
@@ -104,8 +110,8 @@ Set-Content -Path (Join-Path $Root 'Symbol Haken.svg') -Encoding UTF8 -Value @'
 '@
 
 # Sonstige Dateien
-Set-Content -Path (Join-Path $Root 'Notizen.txt') -Value 'Beispieltext fuer peek' -Encoding UTF8
-[System.IO.File]::WriteAllBytes((Join-Path $Root 'Rechnung_2024.pdf'), [byte[]](37, 80, 68, 70, 45, 49, 46, 52, 10))
-[System.IO.File]::WriteAllBytes((Join-Path $Root 'Archiv.zip'), [byte[]](80, 75, 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+Set-Content -Path (Join-Path $Root (N 'Notizen.txt' 'Notes.txt')) -Value (N 'Beispieltext fuer peek' 'Sample text for peek') -Encoding UTF8
+[System.IO.File]::WriteAllBytes((Join-Path $Root (N 'Rechnung_2024.pdf' 'Invoice_2024.pdf')), [byte[]](37, 80, 68, 70, 45, 49, 46, 52, 10))
+[System.IO.File]::WriteAllBytes((Join-Path $Root (N 'Archiv.zip' 'Archive.zip')), [byte[]](80, 75, 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
 
 Write-Host "Beispielordner erzeugt: $Root"

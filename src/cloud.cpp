@@ -51,9 +51,7 @@ std::wstring DateText(int64_t unix) {
     SYSTEMTIME st;
     FileTimeToLocalFileTime(&ft, &lft);
     FileTimeToSystemTime(&lft, &st);
-    wchar_t buf[64];
-    swprintf_s(buf, L"%02u.%02u.%04u, %02u:%02u", st.wDay, st.wMonth, st.wYear, st.wHour, st.wMinute);
-    return buf;
+    return FormatDayTime(st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute);
 }
 
 float Approach(float& v, float target, float k, float eps) {

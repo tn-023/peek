@@ -17,6 +17,7 @@ struct Settings {
     // Bildbetrachter: Leiste oben und Infobereich an der Seite
     bool viewerBar = true, viewerInfo = false;
     int theme = 0;
+    int language = 0;            // 0 = wie Windows, 1 = Deutsch, 2 = Englisch
     // Kontaktabzug
     bool sheetLandscape = false, sheetNames = true, sheetExts = true;
     int sheetCols = 4, sheetRows = 5, sheetQuality = 1;          // 0 wie Windows (Standard), 1 hell, 2 dunkel

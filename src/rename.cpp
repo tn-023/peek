@@ -206,13 +206,13 @@ void App::FinishRename(bool commit) {
     std::wstring oldName = FileNameOf(oldPath);
     if (text == oldName) return;
     if (!ValidName(text)) {
-        SetStatus(L"Ungültiger Name. Nicht erlaubt sind \\ / : * ? \" < > | und reservierte Namen wie CON oder NUL.");
+        SetStatus(T(L"Ungültiger Name. Nicht erlaubt sind \\ / : * ? \" < > | und reservierte Namen wie CON oder NUL."));
         return;
     }
     std::wstring newPath = JoinPath(ParentPath(oldPath), text);
     bool caseOnly = _wcsicmp(text.c_str(), oldName.c_str()) == 0;
     if (!caseOnly && GetFileAttributesW(LongPath(newPath).c_str()) != INVALID_FILE_ATTRIBUTES) {
-        SetStatus(L"„" + text + L"“ gibt es in diesem Ordner bereits.");
+        SetStatus(TF(L"„{0}“ gibt es in diesem Ordner bereits.", {text}));
         return;
     }
     if (!MoveFileExW(LongPath(oldPath).c_str(), LongPath(newPath).c_str(), 0)) {
@@ -223,7 +223,7 @@ void App::FinishRename(bool commit) {
         std::wstring m = msg ? msg : L"";
         if (msg) LocalFree(msg);
         while (!m.empty() && (m.back() == L'\n' || m.back() == L'\r' || m.back() == L' ')) m.pop_back();
-        SetStatus(L"Umbenennen nicht möglich: " + m);
+        SetStatus(T(L"Umbenennen nicht möglich: ") + m);
         return;
     }
     db_.Forget({oldPath});   // alter Name: Index-Eintraege und Vorschaubilder (auch eines Ordners) entfernen
@@ -261,7 +261,7 @@ void App::FinishRename(bool commit) {
             cloud_.index[newPath] = card;
         }
     }
-    SetStatus(L"Umbenannt in „" + text + L"“.");
+    SetStatus(TF(L"Umbenannt in „{0}“", {text}) + L".");
     QuietReload();
     InvalidateRect(hwnd_, nullptr, FALSE);
 }

@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.24)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 set(VCPKG_TARGET_TRIPLET "x64-windows-static" CACHE STRING "")
 
-project(peek VERSION 1.5.1 LANGUAGES CXX)
+project(peek VERSION 1.6.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -22,6 +22,8 @@ find_path(STB_INCLUDE_DIRS "stb_image.h")   # PSD-Gesamtbild
 # Plattformunabhaengiger Kern (Muster, Abfragen) - auch fuer Tests
 # ---------------------------------------------------------------------------
 add_library(peek_core STATIC
+  src/core/lang.cpp
+  src/core/lang_en.cpp
   src/core/patterns.cpp
   src/core/query.cpp
   src/core/textutil.cpp

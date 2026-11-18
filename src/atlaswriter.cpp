@@ -2,6 +2,7 @@
 // Ablauf: Einzelbilder im eigenen Pixelformat dekodieren, Zeilen per Speicherkopie an ihre Stelle legen und die
 // Textur streifenweise schreiben. Pro Kachelzeile sind nur deren Einzelbilder geoeffnet.
 #include "atlaswriter.h"
+#include "core/lang.h"
 #include "fs.h"
 #include "imaging.h"
 
@@ -25,13 +26,13 @@ GUID TargetFormat(const GUID& f) {
 }
 
 std::wstring FormatLabel(const GUID& f, uint32_t bpp) {
-    if (f == GUID_WICPixelFormat24bppBGR || f == GUID_WICPixelFormat24bppRGB) return L"RGB 8 Bit";
-    if (f == GUID_WICPixelFormat32bppBGRA || f == GUID_WICPixelFormat32bppRGBA) return L"RGBA 8 Bit";
-    if (f == GUID_WICPixelFormat48bppRGB || f == GUID_WICPixelFormat48bppBGR) return L"RGB 16 Bit";
-    if (f == GUID_WICPixelFormat64bppRGBA || f == GUID_WICPixelFormat64bppBGRA) return L"RGBA 16 Bit";
-    if (f == GUID_WICPixelFormat8bppGray) return L"Graustufen 8 Bit";
-    if (f == GUID_WICPixelFormat16bppGray) return L"Graustufen 16 Bit";
-    return std::to_wstring(bpp) + L" Bit pro Pixel";
+    if (f == GUID_WICPixelFormat24bppBGR || f == GUID_WICPixelFormat24bppRGB) return T(L"RGB 8 Bit");
+    if (f == GUID_WICPixelFormat32bppBGRA || f == GUID_WICPixelFormat32bppRGBA) return T(L"RGBA 8 Bit");
+    if (f == GUID_WICPixelFormat48bppRGB || f == GUID_WICPixelFormat48bppBGR) return T(L"RGB 16 Bit");
+    if (f == GUID_WICPixelFormat64bppRGBA || f == GUID_WICPixelFormat64bppBGRA) return T(L"RGBA 16 Bit");
+    if (f == GUID_WICPixelFormat8bppGray) return T(L"Graustufen 8 Bit");
+    if (f == GUID_WICPixelFormat16bppGray) return T(L"Graustufen 16 Bit");
+    return std::to_wstring(bpp) + T(L" Bit pro Pixel");
 }
 
 bool OpenFrame(IWICImagingFactory* wic, const std::wstring& path, ComPtr<IWICBitmapFrameDecode>& frame) {
@@ -49,7 +50,7 @@ bool OpenSource(IWICImagingFactory* wic, const std::wstring& path, const GUID& t
                 ComPtr<IWICBitmapSource>& src, std::wstring& err) {
     ComPtr<IWICBitmapFrameDecode> frame;
     if (!OpenFrame(wic, path, frame)) {
-        err = L"Bild kann nicht gelesen werden: " + FileNameOf(path);
+        err = T(L"Bild kann nicht gelesen werden: ") + FileNameOf(path);
         return false;
     }
     UINT fw = 0, fh = 0;
@@ -57,7 +58,7 @@ bool OpenSource(IWICImagingFactory* wic, const std::wstring& path, const GUID& t
     frame->GetSize(&fw, &fh);
     frame->GetPixelFormat(&f);
     if (fw != w || fh != h || TargetFormat(f) != target) {
-        err = L"Bild wurde seit dem Öffnen verändert: " + FileNameOf(path);
+        err = T(L"Bild wurde seit dem Öffnen verändert: ") + FileNameOf(path);
         return false;
     }
     if (f == target) {
@@ -67,7 +68,7 @@ bool OpenSource(IWICImagingFactory* wic, const std::wstring& path, const GUID& t
     ComPtr<IWICFormatConverter> conv;
     if (FAILED(wic->CreateFormatConverter(&conv)) ||
         FAILED(conv->Initialize(frame.Get(), target, WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeCustom))) {
-        err = L"Pixelformat kann nicht übernommen werden: " + FileNameOf(path);
+        err = T(L"Pixelformat kann nicht übernommen werden: ") + FileNameOf(path);
         return false;
     }
     src = conv;
@@ -79,19 +80,19 @@ bool OpenSource(IWICImagingFactory* wic, const std::wstring& path, const GUID& t
 bool InspectAtlas(const std::vector<std::wstring>& files, AtlasInfo& info, std::wstring& err) {
     info = {};
     if (files.empty()) {
-        err = L"Der Ordner enthält keine PNG-Dateien.";
+        err = T(L"Der Ordner enthält keine PNG-Dateien.");
         return false;
     }
     IWICImagingFactory* wic = Wic();
     if (!wic) {
-        err = L"WIC nicht verfügbar.";
+        err = T(L"WIC nicht verfügbar.");
         return false;
     }
     GUID nativeFirst{};
     for (size_t i = 0; i < files.size(); ++i) {
         ComPtr<IWICBitmapFrameDecode> frame;
         if (!OpenFrame(wic, files[i], frame)) {
-            err = L"Keine gültige PNG-Datei: " + FileNameOf(files[i]);
+            err = T(L"Keine gültige PNG-Datei: ") + FileNameOf(files[i]);
             return false;
         }
         UINT w = 0, h = 0;
@@ -107,13 +108,13 @@ bool InspectAtlas(const std::vector<std::wstring>& files, AtlasInfo& info, std::
             continue;
         }
         if (w != info.w || h != info.h) {
-            err = L"Abweichende Größe: " + FileNameOf(files[i]) + L" hat " + std::to_wstring(w) + L" × " +
-                  std::to_wstring(h) + L" px, " + FileNameOf(files[0]) + L" hat " + std::to_wstring(info.w) + L" × " +
-                  std::to_wstring(info.h) + L" px.";
+            err = TF(L"Abweichende Größe: {0} hat {1}, {2} hat {3}",
+                     {FileNameOf(files[i]), std::to_wstring(w) + L" × " + std::to_wstring(h) + L" px", FileNameOf(files[0]),
+                      std::to_wstring(info.w) + L" × " + std::to_wstring(info.h) + L" px"}) + L".";
             return false;
         }
         if (t != info.format) {
-            err = L"Abweichendes Pixelformat: " + FileNameOf(files[i]) + L" passt nicht zu " + FileNameOf(files[0]) + L".";
+            err = TF(L"Abweichendes Pixelformat: {0} passt nicht zu {1}", {FileNameOf(files[i]), FileNameOf(files[0])}) + L".";
             return false;
         }
     }
@@ -127,12 +128,12 @@ bool InspectAtlas(const std::vector<std::wstring>& files, AtlasInfo& info, std::
         info.alpha = tr != FALSE;
     }
     if (bpp == 0 || bpp % 8 != 0) {
-        err = L"Dieses Pixelformat wird nicht unterstützt.";
+        err = T(L"Dieses Pixelformat wird nicht unterstützt.");
         return false;
     }
     info.bpp = bpp;
     info.label = FormatLabel(info.format, bpp);
-    if (IsIndexed(nativeFirst)) info.label += L" (aus Palette)";
+    if (IsIndexed(nativeFirst)) info.label += T(L" (aus Palette)");
     return true;
 }
 
@@ -140,14 +141,14 @@ bool WriteAtlas(const std::vector<std::wstring>& files, const AtlasInfo& info, i
                 const std::wstring& output, const std::function<bool(float)>& progress, std::wstring& err) {
     IWICImagingFactory* wic = Wic();
     if (!wic || files.empty() || cols < 1 || rows < 1 || info.bpp == 0) {
-        err = L"Kacheltextur konnte nicht erstellt werden.";
+        err = T(L"Kacheltextur konnte nicht erstellt werden.");
         return false;
     }
     const uint64_t W = static_cast<uint64_t>(cols) * info.w, H = static_cast<uint64_t>(rows) * info.h;
     const uint64_t Bpp = info.bpp / 8;
     const uint64_t stride64 = W * Bpp;
     if (W > 0x7FFFFFFF || H > 0x7FFFFFFF || stride64 > 0x7FFFFFFF) {
-        err = L"Die Textur ist zu groß für eine PNG-Datei.";
+        err = T(L"Die Textur ist zu groß für eine PNG-Datei.");
         return false;
     }
     const UINT stride = static_cast<UINT>(stride64);
@@ -158,7 +159,7 @@ bool WriteAtlas(const std::vector<std::wstring>& files, const AtlasInfo& info, i
     try {
         buf.resize(static_cast<size_t>(band) * stride);
     } catch (...) {
-        err = L"Nicht genug Arbeitsspeicher.";
+        err = T(L"Nicht genug Arbeitsspeicher.");
         return false;
     }
 
@@ -173,11 +174,11 @@ bool WriteAtlas(const std::vector<std::wstring>& files, const AtlasInfo& info, i
             FAILED(wic->CreateEncoder(GUID_ContainerFormatPng, nullptr, &enc)) ||
             FAILED(enc->Initialize(stream.Get(), WICBitmapEncoderNoCache)) || FAILED(enc->CreateNewFrame(&fe, &props)) ||
             FAILED(fe->Initialize(props.Get())) || FAILED(fe->SetSize(static_cast<UINT>(W), static_cast<UINT>(H)))) {
-            err = L"Datei kann nicht geschrieben werden: " + FileNameOf(output);
+            err = T(L"Datei kann nicht geschrieben werden: ") + FileNameOf(output);
         } else {
             GUID pf = info.format;
             if (FAILED(fe->SetPixelFormat(&pf)) || pf != info.format) {
-                err = L"Dieses Pixelformat kann nicht als PNG gespeichert werden.";
+                err = T(L"Dieses Pixelformat kann nicht als PNG gespeichert werden.");
             } else {
                 // Aufloesung und Farbprofil des ersten Bildes uebernehmen (Pixelwerte bleiben unveraendert)
                 ComPtr<IWICBitmapFrameDecode> first;
@@ -226,14 +227,14 @@ bool WriteAtlas(const std::vector<std::wstring>& files, const AtlasInfo& info, i
                             size_t off = c * tileBytes;
                             UINT size = static_cast<UINT>(static_cast<size_t>(bh - 1) * stride + tileBytes);
                             if (FAILED(src[c]->CopyPixels(&rc, stride, size, buf.data() + off))) {
-                                err = L"Bild kann nicht gelesen werden: " + FileNameOf(files[r * cols + c]);
+                                err = T(L"Bild kann nicht gelesen werden: ") + FileNameOf(files[r * cols + c]);
                                 ok = false;
                                 break;
                             }
                         }
                         if (!ok) break;
                         if (FAILED(fe->WritePixels(bh, stride, bh * stride, buf.data()))) {
-                            err = L"Datei kann nicht geschrieben werden (Datenträger voll?).";
+                            err = T(L"Datei kann nicht geschrieben werden (Datenträger voll?).");
                             ok = false;
                             break;
                         }
@@ -245,14 +246,14 @@ bool WriteAtlas(const std::vector<std::wstring>& files, const AtlasInfo& info, i
                     }
                 }
                 if (ok && (FAILED(fe->Commit()) || FAILED(enc->Commit()))) {
-                    err = L"Datei kann nicht geschrieben werden (Datenträger voll?).";
+                    err = T(L"Datei kann nicht geschrieben werden (Datenträger voll?).");
                     ok = false;
                 }
             }
         }
     }   // Stream schliessen
     if (ok && !MoveFileExW(LongPath(tmp).c_str(), LongPath(output).c_str(), MOVEFILE_REPLACE_EXISTING)) {
-        err = L"Datei kann nicht gespeichert werden: " + FileNameOf(output);
+        err = T(L"Datei kann nicht gespeichert werden: ") + FileNameOf(output);
         ok = false;
     }
     if (!ok) DeleteFileW(LongPath(tmp).c_str());

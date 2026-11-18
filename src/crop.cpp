@@ -165,24 +165,24 @@ void App::PaintCrop(ID2D1DeviceContext* dc) {
     ID2D1SolidColorBrush* white = r_.Brush(D2D1::ColorF(1, 1, 1, 1));
     dc->DrawRectangle(r, white, 1.5f);
     // Eckgriffe als kraeftige Winkel, Kantengriffe als kurze Balken
-    const float L = std::min(18.0f, std::min(r.right - r.left, r.bottom - r.top) / 2), T = 4;
+    const float L = std::min(18.0f, std::min(r.right - r.left, r.bottom - r.top) / 2), kT = 4;
     auto bar = [&](float x0, float y0, float x1, float y1) { dc->FillRectangle(D2D1::RectF(x0, y0, x1, y1), white); };
-    bar(r.left - T / 2, r.top - T / 2, r.left + L, r.top + T / 2);
-    bar(r.left - T / 2, r.top - T / 2, r.left + T / 2, r.top + L);
-    bar(r.right - L, r.top - T / 2, r.right + T / 2, r.top + T / 2);
-    bar(r.right - T / 2, r.top - T / 2, r.right + T / 2, r.top + L);
-    bar(r.right - L, r.bottom - T / 2, r.right + T / 2, r.bottom + T / 2);
-    bar(r.right - T / 2, r.bottom - L, r.right + T / 2, r.bottom + T / 2);
-    bar(r.left - T / 2, r.bottom - T / 2, r.left + L, r.bottom + T / 2);
-    bar(r.left - T / 2, r.bottom - L, r.left + T / 2, r.bottom + T / 2);
+    bar(r.left - kT / 2, r.top - kT / 2, r.left + L, r.top + kT / 2);
+    bar(r.left - kT / 2, r.top - kT / 2, r.left + kT / 2, r.top + L);
+    bar(r.right - L, r.top - kT / 2, r.right + kT / 2, r.top + kT / 2);
+    bar(r.right - kT / 2, r.top - kT / 2, r.right + kT / 2, r.top + L);
+    bar(r.right - L, r.bottom - kT / 2, r.right + kT / 2, r.bottom + kT / 2);
+    bar(r.right - kT / 2, r.bottom - L, r.right + kT / 2, r.bottom + kT / 2);
+    bar(r.left - kT / 2, r.bottom - kT / 2, r.left + L, r.bottom + kT / 2);
+    bar(r.left - kT / 2, r.bottom - L, r.left + kT / 2, r.bottom + kT / 2);
     float mx = (r.left + r.right) / 2, my = (r.top + r.bottom) / 2;
     if (r.right - r.left > 3 * L) {
-        bar(mx - L / 2, r.top - T / 2, mx + L / 2, r.top + T / 2);
-        bar(mx - L / 2, r.bottom - T / 2, mx + L / 2, r.bottom + T / 2);
+        bar(mx - L / 2, r.top - kT / 2, mx + L / 2, r.top + kT / 2);
+        bar(mx - L / 2, r.bottom - kT / 2, mx + L / 2, r.bottom + kT / 2);
     }
     if (r.bottom - r.top > 3 * L) {
-        bar(r.left - T / 2, my - L / 2, r.left + T / 2, my + L / 2);
-        bar(r.right - T / 2, my - L / 2, r.right + T / 2, my + L / 2);
+        bar(r.left - kT / 2, my - L / 2, r.left + kT / 2, my + L / 2);
+        bar(r.right - kT / 2, my - L / 2, r.right + kT / 2, my + L / 2);
     }
     // Groesse in Pixeln
     const FileEntry& e = entries_[visible_[viewer_.pos]];
@@ -226,7 +226,7 @@ void App::SaveCrop() {
         // WebP, AVIF, GIF, ICO: als PNG-Kopie daneben
         container = GUID_ContainerFormatPng;
         for (int i = 1; i < 1000; ++i) {
-            target = dir + L"\\" + base + (i == 1 ? L" (zugeschnitten)" : L" (zugeschnitten " + std::to_wstring(i) + L")") + L".png";
+            target = dir + L"\\" + base + (i == 1 ? T(L" (zugeschnitten)") : T(L" (zugeschnitten ") + std::to_wstring(i) + L")") + L".png";
             if (GetFileAttributesW(LongPath(target).c_str()) == INVALID_FILE_ATTRIBUTES) break;
         }
     }
@@ -239,7 +239,7 @@ void App::SaveCrop() {
     if (!ok) {
         DeleteFileW(LongPath(target).c_str());
         SetCursor(LoadCursorW(nullptr, IDC_ARROW));
-        viewer_.toast = L"Zuschnitt konnte nicht gespeichert werden";
+        viewer_.toast = T(L"Zuschnitt konnte nicht gespeichert werden");
         viewer_.toastUntil = GetTickCount() + 2500;
         SetTimer(hwnd_, kTimerToast, 2600, nullptr);
         InvalidateRect(hwnd_, nullptr, FALSE);
@@ -251,7 +251,7 @@ void App::SaveCrop() {
             !MoveFileExW(LongPath(target).c_str(), LongPath(e.path).c_str(), MOVEFILE_REPLACE_EXISTING)) {
             DeleteFileW(LongPath(target).c_str());
             SetCursor(LoadCursorW(nullptr, IDC_ARROW));
-            viewer_.toast = L"Zuschnitt nicht gespeichert – Original unverändert";
+            viewer_.toast = T(L"Zuschnitt nicht gespeichert – Original unverändert");
             viewer_.toastUntil = GetTickCount() + 2500;
             SetTimer(hwnd_, kTimerToast, 2600, nullptr);
             InvalidateRect(hwnd_, nullptr, FALSE);
@@ -261,11 +261,10 @@ void App::SaveCrop() {
         fullBmps_.erase(e.path);
         bmps_.erase(e.path);
         viewer_.rotation = 0;
-        viewer_.toast = L"Zugeschnitten auf " + std::to_wstring(ow) + L" × " + std::to_wstring(oh) +
-                        L" px – Original im Papierkorb";
+        viewer_.toast = TF(L"Zugeschnitten auf {0} × {1} px – Original im Papierkorb", {std::to_wstring(ow), std::to_wstring(oh)});
         viewerSwitchTo_ = e.path;
     } else {
-        viewer_.toast = L"Als Kopie gespeichert: " + target.substr(dir.size() + 1);
+        viewer_.toast = T(L"Als Kopie gespeichert: ") + target.substr(dir.size() + 1);
         viewerSwitchTo_ = target;   // zur Kopie wechseln, sobald sie eingelesen ist
     }
     // sofort neu einlesen (die Aenderungsmeldungen des Ordners folgen ohnehin)

@@ -1,5 +1,6 @@
 #include "core/patterns.h"
 #include "core/textutil.h"
+#include "core/lang.h"
 
 #include <algorithm>
 #include <array>
@@ -66,10 +67,10 @@ std::vector<std::wstring> TokenizeName(std::wstring_view s) {
 std::wstring DetectSource(std::wstring_view stem) {
     struct P { std::wstring_view prefix; std::wstring_view name; };
     static const std::array<P, 14> kSources = {{
-        {L"img_", L"Kamera (IMG)"}, {L"img-", L"Kamera (IMG)"}, {L"dsc", L"Kamera (DSC)"},
-        {L"pxl_", L"Google Pixel"}, {L"dji_", L"DJI-Drohne"}, {L"gopr", L"GoPro"},
-        {L"gh01", L"GoPro"}, {L"mvimg", L"Bewegtfoto"}, {L"vid_", L"Video (VID)"},
-        {L"screenshot", L"Bildschirmfoto"}, {L"bildschirmfoto", L"Bildschirmfoto"},
+        {L"img_", N_(L"Kamera (IMG)")}, {L"img-", N_(L"Kamera (IMG)")}, {L"dsc", N_(L"Kamera (DSC)")},
+        {L"pxl_", L"Google Pixel"}, {L"dji_", N_(L"DJI-Drohne")}, {L"gopr", L"GoPro"},
+        {L"gh01", L"GoPro"}, {L"mvimg", N_(L"Bewegtfoto")}, {L"vid_", L"Video (VID)"},
+        {L"screenshot", N_(L"Bildschirmfoto")}, {L"bildschirmfoto", N_(L"Bildschirmfoto")},
         {L"whatsapp", L"WhatsApp"}, {L"signal-", L"Signal"}, {L"telegram", L"Telegram"}}};
     std::wstring low = ToLower(stem.substr(0, std::min<size_t>(stem.size(), 16)));
     for (auto& p : kSources)

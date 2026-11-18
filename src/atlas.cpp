@@ -14,7 +14,7 @@ std::wstring SafeName(std::wstring s) {
     for (auto& c : s)
         if (c < 32 || wcschr(L"\\/:*?\"<>|", c)) c = L'-';
     while (!s.empty() && (s.back() == L' ' || s.back() == L'.')) s.pop_back();
-    return s.empty() ? std::wstring(L"Kacheltextur") : s;
+    return s.empty() ? std::wstring(T(L"Kacheltextur")) : s;
 }
 }  // namespace
 
@@ -38,7 +38,7 @@ void App::OpenAtlas(const std::wstring& folder) {
     InspectAtlas(files, info, problem);
     SetCursor(old);
     if (found.empty()) {
-        SetStatus(L"Der Ordner enthält keine PNG-Dateien.");
+        SetStatus(T(L"Der Ordner enthält keine PNG-Dateien."));
         return;
     }
 
@@ -121,17 +121,17 @@ void App::AtlasCreate() {
     std::wstring folder = a.folder;
     while (folder.size() > 3 && folder.back() == L'\\') folder.pop_back();
     std::wstring name = FileNameOf(folder);
-    if (name.empty() || name.back() == L':') name = L"Kacheltextur";
+    if (name.empty() || name.back() == L':') name = T(L"Kacheltextur");
     std::wstring dir = ParentPath(folder);
     if (dir.empty()) dir = folder;
     std::wstring out;
     ComPtr<IFileSaveDialog> dlg;
     if (SUCCEEDED(CoCreateInstance(CLSID_FileSaveDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) {
-        COMDLG_FILTERSPEC spec[] = {{L"PNG-Bild", L"*.png"}};
+        COMDLG_FILTERSPEC spec[] = {{T(L"PNG-Bild"), L"*.png"}};
         dlg->SetFileTypes(1, spec);
         dlg->SetDefaultExtension(L"png");
         dlg->SetFileName((SafeName(name) + L".png").c_str());
-        dlg->SetTitle(L"Kacheltextur speichern");
+        dlg->SetTitle(T(L"Kacheltextur speichern"));
         DWORD opt = 0;
         dlg->GetOptions(&opt);
         dlg->SetOptions(opt | FOS_OVERWRITEPROMPT | FOS_FORCEFILESYSTEM);
@@ -148,12 +148,12 @@ void App::AtlasCreate() {
     }
     if (out.empty()) return;
     if (!IsLocalDrivePath(out)) {
-        SetStatus(L"Nur lokale Laufwerke werden unterstützt – Netzlaufwerke sind ausgeschlossen.");
+        SetStatus(T(L"Nur lokale Laufwerke werden unterstützt – Netzlaufwerke sind ausgeschlossen."));
         return;
     }
     for (auto& e : a.items)
         if (_wcsicmp(e.path.c_str(), out.c_str()) == 0) {
-            SetStatus(L"Die Textur darf kein Bild der Sequenz überschreiben.");
+            SetStatus(T(L"Die Textur darf kein Bild der Sequenz überschreiben."));
             return;
         }
 
@@ -197,9 +197,9 @@ void App::AtlasDone() {
     if (a.ok) {
         a.open = false;
         a.items.clear();
-        SetStatus(L"Kacheltextur gespeichert: " + FileNameOf(a.savedPath));
+        SetStatus(T(L"Kacheltextur gespeichert: ") + FileNameOf(a.savedPath));
     } else if (!a.cancel) {
-        SetStatus(a.error.empty() ? std::wstring(L"Kacheltextur konnte nicht erstellt werden.") : a.error);
+        SetStatus(a.error.empty() ? std::wstring(T(L"Kacheltextur konnte nicht erstellt werden.")) : a.error);
     }
     InvalidateRect(hwnd_, nullptr, FALSE);
 }

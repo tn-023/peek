@@ -1,4 +1,5 @@
 #include "pdfsheet.h"
+#include "core/lang.h"
 #include "fs.h"
 #include "imaging.h"
 #include "sandbox.h"
@@ -12,7 +13,7 @@
 namespace peek {
 
 std::wstring SheetPageLabel(int page, int pages) {
-    return L"Seite " + std::to_wstring(page) + L" von " + std::to_wstring(pages);
+    return TF(L"Seite {0} von {1}", {std::to_wstring(page), std::to_wstring(pages)});
 }
 
 namespace {
@@ -275,7 +276,7 @@ struct PdfFont {
 bool WriteContactSheet(const SheetJob& job, const std::function<bool(float)>& progress, std::wstring& error) {
     SheetFont regular, bold;
     if (!regular.Load(false) || !bold.Load(true)) {
-        error = L"Schrift Segoe UI nicht gefunden.";
+        error = T(L"Schrift Segoe UI nicht gefunden.");
         return false;
     }
     SheetOptions o = job.options;
@@ -289,7 +290,7 @@ bool WriteContactSheet(const SheetJob& job, const std::function<bool(float)>& pr
     std::wstring tmp = job.output + L".peek-tmp";
     Pdf pdf;
     if (!pdf.Open(tmp)) {
-        error = L"Datei kann nicht geschrieben werden.";
+        error = T(L"Datei kann nicht geschrieben werden.");
         return false;
     }
     int catalog = pdf.Reserve(), pagesObj = pdf.Reserve();
@@ -368,7 +369,7 @@ bool WriteContactSheet(const SheetJob& job, const std::function<bool(float)>& pr
     if (cancelled) {
         pdf.Finish(catalog);
         DeleteFileW(tmp.c_str());
-        error = L"Abgebrochen.";
+        error = T(L"Abgebrochen.");
         return false;
     }
     f1.Write(pdf, "PEEKRG");
@@ -384,7 +385,7 @@ bool WriteContactSheet(const SheetJob& job, const std::function<bool(float)>& pr
     pdf.End();
     if (!pdf.Finish(catalog) || !MoveFileExW(tmp.c_str(), job.output.c_str(), MOVEFILE_REPLACE_EXISTING)) {
         DeleteFileW(tmp.c_str());
-        error = L"PDF konnte nicht gespeichert werden.";
+        error = T(L"PDF konnte nicht gespeichert werden.");
         return false;
     }
     if (progress) progress(1.0f);

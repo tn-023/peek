@@ -2,6 +2,7 @@
 #include "core/atlaslayout.h"
 // Einfache Tests fuer den plattformunabhaengigen Kern (ohne Test-Framework).
 #include "core/patterns.h"
+#include "core/lang.h"
 #include "core/query.h"
 #include "core/textutil.h"
 #include "core/svgcheck.h"
@@ -87,6 +88,32 @@ static MatchInput Input(const wchar_t* name, uint32_t w, uint32_t h, uint64_t si
     return in;
 }
 
+static void TestLang() {
+    CHECK(CurrentLang() == Lang::De);
+    CHECK(std::wstring(T(L"Ordner")) == L"Ordner");
+    CHECK(FormatThousands(1234567) == L"1.234.567");
+    CHECK(FormatDay(2024, 8, 17) == L"17.08.2024");
+    CHECK(FormatSize(1536 * 1024) == L"1,5 MB");
+    CHECK(std::wstring(QueryParams().front().label) == L"Breite");
+    CHECK(TPattern(L"IMG_{Datum}_####") == L"IMG_{Datum}_####");
+    SetCurrentLang(Lang::En);
+    CHECK(std::wstring(T(L"Ordner")) == L"Folder");
+    CHECK(T(std::wstring(L"Ordner")) == L"Folder");
+    CHECK(std::wstring(T(L"gibt es nicht")) == L"gibt es nicht");   // unbekannt: bleibt deutsch
+    CHECK(std::wstring(TC(L"sidebar:Bilder", L"Bilder")) == L"Pictures");
+    CHECK(TF(L"Seite {0} von {1}", {L"2", L"5"}) == L"Page 2 of 5");
+    CHECK(FormatThousands(1234567) == L"1,234,567");
+    CHECK(FormatDay(2024, 8, 17) == L"17 Aug 2024");
+    CHECK(FormatSize(1536 * 1024) == L"1.5 MB");
+    CHECK(FormatDayTime(2024, 8, 17, 9, 5) == L"17 Aug 2024, 09:05");
+    CHECK(std::wstring(MonthName(3)) == L"March");
+    CHECK(std::wstring(QueryParams().front().label) == L"Width");
+    CHECK(TPattern(L"IMG_{Datum}_####") == L"IMG_{date}_####");
+    CHECK(EnglishEntryCount() > 100);
+    SetCurrentLang(Lang::De);
+    CHECK(std::wstring(MonthName(3)) == L"März");
+}
+
 static void TestQuery() {
     double b = 0;
     CHECK(ParseSize(L"10mb", b) && b == 10.0 * 1024 * 1024);
@@ -125,6 +152,20 @@ static void TestQuery() {
         CHECK(g.megapixel.active());
         CHECK(g.exts.size() == 1 && g.exts[0] == L"jpg");
         CHECK(g.terms.empty());
+    }
+    {
+        // englische Schreibweisen gelten immer, unabhaengig von der Sprache der Oberflaeche
+        auto g = ParseQuery(L"Width:>3000 Height:<100 Size:>1mb Captured:2024 Extension:jpg Megapixels:>=20 Duration:>1m "
+                            L"Camera:x-t5 type:images");
+        CHECK(g.width.op == NumCond::Gt && g.width.a == 3000);
+        CHECK(g.height.op == NumCond::Lt);
+        CHECK(g.size.active() && g.taken.active() && g.megapixel.active() && g.durationSec.active());
+        CHECK(g.exts.size() == 1 && g.exts[0] == L"jpg");
+        CHECK(g.cams.size() == 1);
+        CHECK(g.type == static_cast<int>(Kind::Image));
+        CHECK(g.terms.empty());
+        auto t2 = ParseQuery(L"taken:2024 date:2024");
+        CHECK(t2.taken.active() && t2.date.active());
     }
     {
         SheetOptions so;
@@ -246,6 +287,7 @@ int main() {
     TestTemplates();
     TestFacets();
     TestQuery();
+    TestLang();
     TestSvgCheck();
     TestTga();
     if (g_failed) {

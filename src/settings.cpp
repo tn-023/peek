@@ -138,6 +138,7 @@ void Settings::Load() {
     viewMode = std::clamp(ReadInt(L"View", L"ViewMode", 0), 0, 2);
     viewerSmooth = ReadInt(L"View", L"ViewerSmooth", 0) != 0;
     theme = std::clamp(ReadInt(L"View", L"Theme", 0), 0, 2);
+    language = std::clamp(ReadInt(L"View", L"Language", 0), 0, 2);
     sheetLandscape = ReadInt(L"Sheet", L"Landscape", 0) != 0;
     sheetNames = ReadInt(L"Sheet", L"Names", 1) != 0;
     sheetExts = ReadInt(L"Sheet", L"Extensions", 1) != 0;
@@ -207,6 +208,7 @@ void Settings::Save() const {
     WriteInt(L"View", L"ViewMode", viewMode);
     WriteInt(L"View", L"ViewerSmooth", viewerSmooth ? 1 : 0);
     WriteInt(L"View", L"Theme", theme);
+    WriteInt(L"View", L"Language", language);
     WriteInt(L"Sheet", L"Landscape", sheetLandscape ? 1 : 0);
     WriteInt(L"Sheet", L"Names", sheetNames ? 1 : 0);
     WriteInt(L"Sheet", L"Extensions", sheetExts ? 1 : 0);

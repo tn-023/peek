@@ -38,7 +38,7 @@ bool ReadAll(const std::wstring& path, std::vector<uint8_t>& out) {
 }
 
 bool WriteAll(const std::wstring& path, const uint8_t* p, size_t n) {
-    std::wstring tmp = path + L".neu";
+    std::wstring tmp = path + L".neu";   // lang:ok
     HANDLE h = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (h == INVALID_HANDLE_VALUE) return false;
     DWORD wr = 0;

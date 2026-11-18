@@ -1,4 +1,5 @@
 #include "core/textutil.h"
+#include "core/lang.h"
 
 #include <cstdio>
 #include <cwchar>
@@ -131,7 +132,8 @@ std::wstring FormatSize(uint64_t b) {
     else if (b < 1024ull * 1024 * 1024) std::swprintf(buf, 64, L"%.1f MB", b / (1024.0 * 1024));
     else std::swprintf(buf, 64, L"%.2f GB", b / (1024.0 * 1024 * 1024));
     std::wstring s = buf;
-    for (auto& c : s) if (c == L'.') c = L',';
+    if (CurrentLang() == Lang::De)
+        for (auto& c : s) if (c == L'.') c = L',';   // deutsches Dezimalkomma
     return s;
 }
 

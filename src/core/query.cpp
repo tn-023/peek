@@ -1,4 +1,5 @@
 #include "core/query.h"
+#include "core/lang.h"
 #include "core/textutil.h"
 
 #include <cstdlib>
@@ -171,20 +172,20 @@ Query ParseQuery(std::wstring_view text) {
             std::wstring key = w.substr(0, colon);
             std::wstring_view val = std::wstring_view(w).substr(colon + 1);
             bool ok = true;
-            if (key == L"w" || key == L"breite") ok = ParseCond(val, q.width, num);
-            else if (key == L"h" || key == L"hoehe" || key == L"h\u00f6he") ok = ParseCond(val, q.height, num);
-            else if (key == L"mp" || key == L"megapixel") ok = ParseCond(val, q.megapixel, num);
+            if (key == L"w" || key == L"width" || key == L"breite") ok = ParseCond(val, q.width, num);
+            else if (key == L"h" || key == L"height" || key == L"hoehe" || key == L"h\u00f6he") ok = ParseCond(val, q.height, num);
+            else if (key == L"mp" || key == L"megapixel" || key == L"megapixels") ok = ParseCond(val, q.megapixel, num);
             else if (key == L"size" || key == L"groesse" || key == L"gr\u00f6\u00dfe" || key == L"gr\u00f6sse")
                 ok = ParseCond(val, q.size, ParseSize);
-            else if (key == L"dur" || key == L"dauer") ok = ParseCond(val, q.durationSec, ParseDuration);
+            else if (key == L"dur" || key == L"duration" || key == L"dauer") ok = ParseCond(val, q.durationSec, ParseDuration);
             else if (key == L"date" || key == L"datum") ok = ParseDateCond(val, q.date);
-            else if (key == L"taken" || key == L"aufgenommen" || key == L"aufnahme") ok = ParseDateCond(val, q.taken);
-            else if (key == L"ext" || key == L"endung") SplitList(val, q.exts);
-            else if (key == L"cam" || key == L"kamera") SplitList(val, q.cams);
+            else if (key == L"taken" || key == L"captured" || key == L"aufgenommen" || key == L"aufnahme") ok = ParseDateCond(val, q.taken);
+            else if (key == L"ext" || key == L"extension" || key == L"endung") SplitList(val, q.exts);
+            else if (key == L"cam" || key == L"camera" || key == L"kamera") SplitList(val, q.cams);
             else if (key == L"type" || key == L"typ") {
-                if (val == L"image" || val == L"bild" || val == L"bilder") q.type = static_cast<int>(Kind::Image);
+                if (val == L"image" || val == L"images" || val == L"bild" || val == L"bilder") q.type = static_cast<int>(Kind::Image);
                 else if (val == L"video" || val == L"videos") q.type = static_cast<int>(Kind::Video);
-                else if (val == L"folder" || val == L"ordner") q.type = static_cast<int>(Kind::Folder);
+                else if (val == L"folder" || val == L"folders" || val == L"ordner") q.type = static_cast<int>(Kind::Folder);
                 else if (val == L"other" || val == L"sonstige") q.type = static_cast<int>(Kind::Other);
                 else ok = false;
             } else ok = false;
@@ -234,7 +235,19 @@ bool Matches(const Query& q, const MatchInput& in) {
     return true;
 }
 
+// Vorschlaege unter dem Suchfeld, in der Sprache der Oberflaeche (beide Schreibweisen gelten immer)
 const std::vector<QueryParam>& QueryParams() {
+    static const std::vector<QueryParam> en = {
+        {L"Width", L"Width:>", L"Width:>3000"},
+        {L"Height", L"Height:>", L"Height:>2000"},
+        {L"Size", L"Size:>", L"Size:>10mb"},
+        {L"Date", L"Date:", L"Date:2024-08..2024-09"},
+        {L"Captured", L"Captured:", L"Captured:2024"},
+        {L"Duration", L"Duration:>", L"Duration:>5min"},
+        {L"Extension", L"Extension:", L"Extension:jpg,png"},
+        {L"Camera", L"Camera:", L"Camera:x-t5"},
+    };
+    if (CurrentLang() == Lang::En) return en;
     static const std::vector<QueryParam> p = {
         {L"Breite", L"Breite:>", L"Breite:>3000"},
         {L"H\u00f6he", L"H\u00f6he:>", L"H\u00f6he:>2000"},

@@ -41,7 +41,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
         job.options.landscape = wcscmp(argv[3], L"1") == 0;
         job.options.cols = _wtoi(argv[4]);
         job.options.rows = _wtoi(argv[5]);
-        job.headline = L"Kontaktabzug Test \u00c4\u00d6\u00dc \u00df 16.11.2026";
+        job.headline = L"Kontaktabzug Test \u00c4\u00d6\u00dc \u00df 16.11.2026";   // lang:ok
         for (int i = 6; i < argc; ++i) {
             std::wstring pth = argv[i];
             job.images.push_back({pth, pth.substr(pth.find_last_of(L'\\') + 1)});
@@ -90,7 +90,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
             code = peek::WriteAtlas(files, info, cols, peek::AtlasRows(n, cols), argv[3], nullptr, err) ? 0 : 2;
         }
         if (!err.empty()) {
-            if (HANDLE h = CreateFileW((std::wstring(argv[3]) + L".fehler.txt").c_str(), GENERIC_WRITE, 0, nullptr,
+            if (HANDLE h = CreateFileW((std::wstring(argv[3]) + L".fehler.txt").c_str(), GENERIC_WRITE, 0, nullptr,   // lang:ok
                                        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr); h != INVALID_HANDLE_VALUE) {
                 int len = WideCharToMultiByte(CP_UTF8, 0, err.c_str(), -1, nullptr, 0, nullptr, nullptr);
                 std::string u(len > 0 ? len - 1 : 0, '\0');

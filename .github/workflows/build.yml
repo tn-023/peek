@@ -54,6 +54,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Uebersetzungen pruefen (Deutsch/Englisch)
+        shell: pwsh
+        run: python tools/check-lang.py
+
       - name: vcpkg vorbereiten
         shell: pwsh
         run: ./tools/prepare-vcpkg.ps1   # fester vcpkg-Stand, Korrektur fuer dav1d, Bootstrap

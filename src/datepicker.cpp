@@ -12,11 +12,8 @@
 namespace peek {
 
 namespace {
-const wchar_t* kMonthLong[12] = {L"Januar", L"Februar", L"März", L"April", L"Mai", L"Juni",
-                                 L"Juli", L"August", L"September", L"Oktober", L"November", L"Dezember"};
-const wchar_t* kMonthShort[12] = {L"Jan", L"Feb", L"Mär", L"Apr", L"Mai", L"Jun",
-                                  L"Jul", L"Aug", L"Sep", L"Okt", L"Nov", L"Dez"};
-const wchar_t* kWeekday[7] = {L"Mo", L"Di", L"Mi", L"Do", L"Fr", L"Sa", L"So"};
+const wchar_t* MonthLong(unsigned m) { return MonthName(m, false); }
+const wchar_t* MonthShort(unsigned m) { return MonthName(m, true); }
 
 unsigned DaysInMonth(int y, unsigned m) {
     int64_t a = DaysFromCivil(y, m, 1);
@@ -24,13 +21,8 @@ unsigned DaysInMonth(int y, unsigned m) {
     return static_cast<unsigned>(b - a);
 }
 
-std::wstring Thousands(uint64_t n) {
-    std::wstring s = std::to_wstring(n);
-    for (int i = static_cast<int>(s.size()) - 3; i > 0; i -= 3) s.insert(static_cast<size_t>(i), 1, L'.');
-    return s;
-}
+std::wstring Thousands(uint64_t n) { return FormatThousands(n); }
 
-std::wstring Two(unsigned v) { return (v < 10 ? L"0" : L"") + std::to_wstring(v); }
 
 constexpr float kPad = 8, kHeadH = 44, kRowH = 32;
 
@@ -44,7 +36,7 @@ int64_t App::EntryTimeFor(ChipId chip, const FileEntry& e) const {
 
 // Zeitraum als Text in Ortszeit: "2024", "August 2024", "17.08.2024" oder "von – bis"
 std::wstring App::SpanLabel(int64_t from, int64_t to) const {
-    if (to <= from) return L"Individuell";
+    if (to <= from) return T(L"Individuell");
     int64_t d0 = (from + tzOffset_) / 86400, d1 = (to + tzOffset_) / 86400;   // [d0, d1)
     int y0, y1; unsigned m0, m1, a0, a1;
     CivilFromDays(d0, y0, m0, a0);
@@ -53,14 +45,14 @@ std::wstring App::SpanLabel(int64_t from, int64_t to) const {
     bool fullMonths = a0 == 1 && a1 == DaysInMonth(y1, m1);
     if (fullYears) return y0 == y1 ? std::to_wstring(y0) : std::to_wstring(y0) + L"–" + std::to_wstring(y1);
     if (fullMonths) {
-        if (y0 == y1 && m0 == m1) return std::wstring(kMonthLong[m0 - 1]) + L" " + std::to_wstring(y0);
-        if (y0 == y1) return std::wstring(kMonthShort[m0 - 1]) + L"–" + kMonthShort[m1 - 1] + L" " + std::to_wstring(y0);
-        return std::wstring(kMonthShort[m0 - 1]) + L" " + std::to_wstring(y0) + L" – " + kMonthShort[m1 - 1] + L" " +
+        if (y0 == y1 && m0 == m1) return std::wstring(MonthLong(m0)) + L" " + std::to_wstring(y0);
+        if (y0 == y1) return std::wstring(MonthShort(m0)) + L"–" + MonthShort(m1) + L" " + std::to_wstring(y0);
+        return std::wstring(MonthShort(m0)) + L" " + std::to_wstring(y0) + L" – " + MonthShort(m1) + L" " +
                std::to_wstring(y1);
     }
-    std::wstring s0 = Two(a0) + L"." + Two(m0) + L"." + std::to_wstring(y0);
+    std::wstring s0 = FormatDay(y0, m0, a0);
     if (d1 - d0 == 1) return s0;
-    return s0 + L" – " + Two(a1) + L"." + Two(m1) + L"." + std::to_wstring(y1);
+    return s0 + L" – " + FormatDay(y1, m1, a1);
 }
 
 void App::ApplyDateSpan(ChipId chip, int64_t from, int64_t to) {
@@ -122,9 +114,9 @@ public:
         }
         wchar_t gb[2] = {0xE72B, 0};
         draw(gb, back, r.Icon(12), level_ > 0 ? text : off);
-        std::wstring title = level_ == 0 ? (chip_ == ChipId::Taken ? L"Aufgenommen" : L"Datum")
+        std::wstring title = level_ == 0 ? std::wstring(chip_ == ChipId::Taken ? T(L"Aufgenommen") : T(L"Datum"))
                              : level_ == 1 ? std::to_wstring(year_)
-                                           : std::wstring(kMonthLong[month_ - 1]) + L" " + std::to_wstring(year_);
+                                           : std::wstring(MonthLong(month_)) + L" " + std::to_wstring(year_);
         draw(title, D2D1::RectF(kPad + 40, 0, width_ - 84, kHeadH), r.Text(13, DWRITE_FONT_WEIGHT_SEMI_BOLD), text);
         if (level_ > 0) {
             D2D1_RECT_F prev = D2D1::RectF(width_ - kPad - 68, 6, width_ - kPad - 36, kHeadH - 6);
@@ -152,7 +144,7 @@ public:
         float gy = gridTop_;
         if (level_ == 2) {
             for (int i = 0; i < 7; ++i)
-                draw(kWeekday[i], D2D1::RectF(kPad + i * cw_, gy - 24, kPad + (i + 1) * cw_, gy),
+                draw(WeekdayShort(static_cast<unsigned>(i)), D2D1::RectF(kPad + i * cw_, gy - 24, kPad + (i + 1) * cw_, gy),
                      r.Text(11, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER), dim);
         }
         IDWriteTextFormat* fl = r.Text(13, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
@@ -184,7 +176,7 @@ public:
         // Fuss: Hinweis bzw. Zuruecksetzen wie ein Menueeintrag
         float fy = height_ - kPad - kRowH * (cur != 0 ? 2 : 1);
         Line(dc, r, fy - 4);
-        draw(L"Klicken oder ziehen f\u00fcr einen Zeitraum", D2D1::RectF(kPad + 12, fy, width_ - kPad - 12, fy + kRowH),
+        draw(T(L"Klicken oder ziehen f\u00fcr einen Zeitraum"), D2D1::RectF(kPad + 12, fy, width_ - kPad - 12, fy + kRowH),
              r.Text(12), dim);
         if (cur != 0) {
             D2D1_RECT_F rr = D2D1::RectF(kPad, fy + kRowH, width_ - kPad, fy + 2 * kRowH);
@@ -192,7 +184,7 @@ public:
             if (hover_ == 4) hoverFill(rr);
             wchar_t gx[2] = {0xE894, 0};
             draw(gx, D2D1::RectF(rr.left + 8, rr.top, rr.left + 30, rr.bottom), r.Icon(13), text);
-            draw(L"Zur\u00fccksetzen", D2D1::RectF(rr.left + 32, rr.top, rr.right - 12, rr.bottom), r.Text(13), text);
+            draw(T(L"Zur\u00fccksetzen"), D2D1::RectF(rr.left + 32, rr.top, rr.right - 12, rr.bottom), r.Text(13), text);
         }
     }
 
@@ -328,7 +320,7 @@ private:
                 DateCellInfo c;
                 c.from = dayStart(year_, m, 1);
                 c.to = m == 12 ? dayStart(year_ + 1, 1, 1) : dayStart(year_, m + 1, 1);
-                c.label = kMonthShort[m - 1];
+                c.label = MonthShort(m);
                 c.y = year_;
                 c.m = m;
                 cells_.push_back(c);

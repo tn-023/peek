@@ -329,10 +329,11 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         case HitType::SettingsOpenData: OpenWithDefaultApp(hwnd_, DataDir()); break;
         case HitType::SettingsRescan:
             indexer_.Rescan();
-            SetStatus(L"Indexierung gestartet.");
+            SetStatus(T(L"Indexierung gestartet."));
             break;
         case HitType::SettingsDeleteIndex: DeleteIndex(); break;
         case HitType::SettingsTheme: ShowThemeMenu(h->rc); break;
+        case HitType::SettingsLanguage: ShowLanguageMenu(h->rc); break;
         case HitType::SettingsViewerSmall: ShowViewerSmallMenu(h->rc); break;
         case HitType::SettingsShortcuts:
             settingsPage_ = 1;
@@ -450,7 +451,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
             settings_.Save();
             BuildSidebar();
             Reload(false);
-            SetStatus(L"Merkliste geleert.");
+            SetStatus(T(L"Merkliste geleert."));
             break;
         case HitType::SearchClear:
             EditSearch(L"", 0);
@@ -724,21 +725,21 @@ void App::OnRButtonUp(float x, float y) {
         bool mv = false;
         MenuItem m;
         m.id = 1;
-        m.text = L"Einf\u00fcgen";
-        m.right = L"Strg+V";
+        m.text = T(L"Einf\u00fcgen");
+        m.right = T(L"Strg+V");
         m.glyph = 0xE77F;
         m.disabled = !FilesFromClipboard(hwnd_, clip, mv);
         MenuItem r;
         r.id = 2;
-        r.text = L"Aktualisieren";
+        r.text = T(L"Aktualisieren");
         r.right = L"F5";
         MenuItem ks;
         ks.id = 3;
-        ks.text = L"Kontaktabzug aus diesem Ordner \u2026";
+        ks.text = T(L"Kontaktabzug aus diesem Ordner \u2026");
         ks.glyph = 0xECA5;
         MenuItem kt;
         kt.id = 4;
-        kt.text = L"Kacheltextur aus diesem Ordner \u2026";
+        kt.text = T(L"Kacheltextur aus diesem Ordner \u2026");
         kt.glyph = 0xE8A9;
         UINT cmd = ShowPopupMenu(hwnd_, {m, MenuItem::Sep(), r, MenuItem::Sep(), ks, kt}, screen, accent_);
         if (cmd == 1) PasteFiles(path_);
@@ -880,7 +881,7 @@ bool App::OnKeyDown(WPARAM vk) {
             if (ctrl && e) {
                 if (shift) CopyTextToClipboard(hwnd_, e->path);
                 else CopyFilesToClipboard({e->path});
-                SetStatus(L"In die Zwischenablage kopiert.");
+                SetStatus(T(L"In die Zwischenablage kopiert."));
             }
             break;
         case 'E': if (ctrl && e) ShowInExplorer(e->path); break;
@@ -1033,9 +1034,9 @@ bool App::OnKeyDown(WPARAM vk) {
                 std::wstring s;
                 for (auto& p : paths) { if (!s.empty()) s += L"\r\n"; s += p; }
                 CopyTextToClipboard(hwnd_, s);
-                SetStatus(L"Pfad kopiert.");
+                SetStatus(T(L"Pfad kopiert."));
             } else if (CopyFilesToClipboard(paths)) {
-                SetStatus(std::to_wstring(paths.size()) + L" Datei(en) in die Zwischenablage kopiert.");
+                SetStatus(std::to_wstring(paths.size()) + T(L" Datei(en) in die Zwischenablage kopiert."));
             }
             break;
         }
@@ -1118,55 +1119,55 @@ void App::ShowChipMenu(ChipId id, const D2D1_RECT_F& rc) {
     };
     switch (id) {
     case ChipId::Type: {
-        const wchar_t* n[] = {L"Alle", L"Ordner", L"Bilder", L"SVG-Grafiken", L"Videos", L"PDF", L"Photoshop (PSD)",
-                              L"Illustrator (AI)", L"Sonstige Dateien"};
+        const wchar_t* n[] = {T(L"Alle"), T(L"Ordner"), T(L"Bilder"), T(L"SVG-Grafiken"), L"Videos", L"PDF", L"Photoshop (PSD)",
+                              L"Illustrator (AI)", T(L"Sonstige Dateien")};
         const int v[] = {-1, 0, 1, 13, 2, 10, 11, 12, 3};
         for (int i = 0; i < 9; ++i) add(100 + i, n[i], filters_.type == v[i], countOption(v[i]));
         break;
     }
     case ChipId::Date:
     case ChipId::Taken: {
-        const wchar_t* n[] = {L"Alle", L"Heute", L"Letzte 7 Tage", L"Letzte 30 Tage", L"Dieses Jahr", L"Letztes Jahr",
-                              L"Älter"};
+        const wchar_t* n[] = {T(L"Alle"), T(L"Heute"), T(L"Letzte 7 Tage"), T(L"Letzte 30 Tage"), T(L"Dieses Jahr"), T(L"Letztes Jahr"),
+                              T(L"Älter")};
         int cur = id == ChipId::Taken ? filters_.taken : filters_.date;
         for (int i = 0; i < 7; ++i) add(100 + i, n[i], cur == i, countOption(i));
         items.push_back(MenuItem::Sep());
         MenuItem m;
         m.id = 107;
-        m.text = cur == 7 ? L"Individuell: " + SpanLabel(id == ChipId::Taken ? filters_.takenFrom : filters_.dateFrom,
+        m.text = cur == 7 ? T(L"Individuell: ") + SpanLabel(id == ChipId::Taken ? filters_.takenFrom : filters_.dateFrom,
                                                          id == ChipId::Taken ? filters_.takenTo : filters_.dateTo)
-                          : L"Individuell \u2026";
+                          : T(L"Individuell \u2026");
         m.checked = cur == 7;
         m.glyph = 0xE787;
         items.push_back(m);
         break;
     }
     case ChipId::Size: {
-        const wchar_t* n[] = {L"Alle", L"Kleiner als 1 MB", L"1 bis 10 MB", L"10 bis 100 MB", L"Größer als 100 MB"};
+        const wchar_t* n[] = {T(L"Alle"), T(L"Kleiner als 1 MB"), T(L"1 bis 10 MB"), T(L"10 bis 100 MB"), T(L"Größer als 100 MB")};
         for (int i = 0; i < 5; ++i) add(100 + i, n[i], filters_.size == i, countOption(i));
         break;
     }
     case ChipId::Resolution: {
-        const wchar_t* n[] = {L"Alle", L"Unter HD (< 1280 px)", L"Ab HD (≥ 1280 px)", L"Ab Full HD (≥ 1920 px)",
-                              L"Ab 4K (≥ 3840 px)", L"Über 20 Megapixel"};
+        const wchar_t* n[] = {T(L"Alle"), T(L"Unter HD (< 1280 px)"), T(L"Ab HD (≥ 1280 px)"), T(L"Ab Full HD (≥ 1920 px)"),
+                              T(L"Ab 4K (≥ 3840 px)"), T(L"Über 20 Megapixel")};
         for (int i = 0; i < 6; ++i) add(100 + i, n[i], filters_.res == i, countOption(i));
         break;
     }
     case ChipId::Orientation: {
-        const wchar_t* n[] = {L"Alle", L"Querformat", L"Hochformat", L"Quadratisch", L"Panorama (ab 2:1)"};
+        const wchar_t* n[] = {T(L"Alle"), T(L"Querformat"), T(L"Hochformat"), T(L"Quadratisch"), T(L"Panorama (ab 2:1)")};
         for (int i = 0; i < 5; ++i) add(100 + i, n[i], filters_.orient == i, countOption(i));
         break;
     }
     case ChipId::Source:
-        add(100, L"Alle", filters_.source.empty(), -1);
+        add(100, T(L"Alle"), filters_.source.empty(), -1);
         for (size_t i = 0; i < sourceFacets_.size() && i < 30; ++i)
-            add(101 + static_cast<UINT>(i), sourceFacets_[i].first, filters_.source == sourceFacets_[i].first,
+            add(101 + static_cast<UINT>(i), T(sourceFacets_[i].first), filters_.source == sourceFacets_[i].first,
                 sourceFacets_[i].second);
         break;
     case ChipId::Pattern:
-        add(100, L"Alle", filters_.templ == UINT32_MAX, -1);
+        add(100, T(L"Alle"), filters_.templ == UINT32_MAX, -1);
         for (size_t i = 0; i < templFacets_.size(); ++i)
-            add(101 + static_cast<UINT>(i), templDict_.Word(templFacets_[i].id), filters_.templ == templFacets_[i].id,
+            add(101 + static_cast<UINT>(i), TPattern(templDict_.Word(templFacets_[i].id)), filters_.templ == templFacets_[i].id,
                 templFacets_[i].count);
         break;
     default:
@@ -1205,7 +1206,7 @@ void App::ShowChipMenu(ChipId id, const D2D1_RECT_F& rc) {
 }
 
 void App::ShowSortMenu(const D2D1_RECT_F& rc) {
-    const wchar_t* n[] = {L"Name", L"Datum", L"Größe", L"Auflösung", L"Typ", L"Aufgenommen"};
+    const wchar_t* n[] = {L"Name", T(L"Datum"), T(L"Größe"), T(L"Auflösung"), T(L"Typ"), T(L"Aufgenommen")};
     std::vector<MenuItem> items;
     for (int i = 0; i < 6; ++i) {
         MenuItem m;
@@ -1216,14 +1217,14 @@ void App::ShowSortMenu(const D2D1_RECT_F& rc) {
     }
     items.push_back(MenuItem::Sep());
     MenuItem asc, desc;
-    asc.id = 200; asc.text = L"Aufsteigend"; asc.checked = !settings_.sortDesc;
-    desc.id = 201; desc.text = L"Absteigend"; desc.checked = settings_.sortDesc;
+    asc.id = 200; asc.text = T(L"Aufsteigend"); asc.checked = !settings_.sortDesc;
+    desc.id = 201; desc.text = T(L"Absteigend"); desc.checked = settings_.sortDesc;
     items.push_back(asc);
     items.push_back(desc);
     items.push_back(MenuItem::Sep());
     MenuItem grp;
     grp.id = 300;
-    grp.text = L"Gruppieren";
+    grp.text = T(L"Gruppieren");
     grp.checked = settings_.group;
     grp.glyph = 0xF168;
     items.push_back(grp);
@@ -1286,7 +1287,7 @@ void App::ShowCrumbMenu(int index, const D2D1_RECT_F& rc) {
     }
     if (items.empty()) {
         MenuItem m;
-        m.text = L"Keine Unterordner";
+        m.text = T(L"Keine Unterordner");
         m.disabled = true;
         items.push_back(m);
     }
@@ -1313,8 +1314,8 @@ void App::ShowContextMenu(int pos, POINT screen) {
         return m;
     };
     std::vector<MenuItem> items;
-    items.push_back(item(1, e.kind == Kind::Image ? L"Im Betrachter öffnen" : L"Öffnen", L"Enter"));
-    if (e.kind == Kind::Image) items.push_back(item(2, L"Mit Standard-App öffnen"));
+    items.push_back(item(1, e.kind == Kind::Image ? T(L"Im Betrachter öffnen") : T(L"Öffnen"), L"Enter"));
+    if (e.kind == Kind::Image) items.push_back(item(2, T(L"Mit Standard-App öffnen")));
     auto openWith = std::make_shared<std::vector<OpenWithApp>>();
     if (e.kind != Kind::Folder) items.push_back(OpenWithMenuItem(e, openWith));
     std::vector<std::wstring> cmpPaths = SelectedPaths();
@@ -1324,36 +1325,36 @@ void App::ShowContextMenu(int pos, POINT screen) {
         if (it == byPath_.end() || entries_[it->second].kind != Kind::Image || entries_[it->second].offline) canCompare = false;
     }
     if (canCompare) {
-        MenuItem cm = item(32, L"Bilder vergleichen \u2026");
+        MenuItem cm = item(32, T(L"Bilder vergleichen \u2026"));
         cm.glyph = 0xE81E;
         items.push_back(cm);
     }
-    items.push_back(item(3, L"Im Explorer zeigen", L"Strg+E"));
+    items.push_back(item(3, T(L"Im Explorer zeigen"), T(L"Strg+E")));
     items.push_back(MenuItem::Sep());
-    items.push_back(item(4, L"Kopieren", L"Strg+C"));
+    items.push_back(item(4, T(L"Kopieren"), T(L"Strg+C")));
     {
         std::vector<std::wstring> clip;
         bool mv = false;
         bool canPaste = FilesFromClipboard(hwnd_, clip, mv) && (e.kind == Kind::Folder || (!collectionsView_ && !bookmarksView_));
-        MenuItem pm = item(9, e.kind == Kind::Folder ? L"In diesen Ordner einf\u00fcgen" : L"Einf\u00fcgen",
-                           e.kind == Kind::Folder ? L"" : L"Strg+V");
+        MenuItem pm = item(9, e.kind == Kind::Folder ? T(L"In diesen Ordner einf\u00fcgen") : T(L"Einf\u00fcgen"),
+                           e.kind == Kind::Folder ? L"" : T(L"Strg+V"));
         pm.disabled = !canPaste;
         items.push_back(pm);
     }
-    items.push_back(item(5, L"Pfad kopieren", L"Strg+Umschalt+C"));
+    items.push_back(item(5, T(L"Pfad kopieren"), T(L"Strg+Umschalt+C")));
     items.push_back(MenuItem::Sep());
     if (SelectedPaths().size() <= 1 && !e.offline) {
-        MenuItem rn = item(30, L"Umbenennen", L"F2");
+        MenuItem rn = item(30, T(L"Umbenennen"), L"F2");
         rn.glyph = 0xE8AC;
         items.push_back(rn);
     }
-    items.push_back(item(6, L"In den Papierkorb", L"Entf"));
+    items.push_back(item(6, T(L"In den Papierkorb"), T(L"Entf")));
     items.push_back(MenuItem::Sep());
     bool marked = IsBookmarked(e.path);
-    MenuItem bm = item(8, marked ? L"Von Merkliste entfernen" : L"Zur Merkliste hinzufügen");
+    MenuItem bm = item(8, marked ? T(L"Von Merkliste entfernen") : T(L"Zur Merkliste hinzufügen"));
     bm.glyph = marked ? 0xE735 : 0xE734;
     items.push_back(bm);
-    if (e.kind == Kind::Folder) items.push_back(item(7, L"Als Sammlung hinzufügen"));
+    if (e.kind == Kind::Folder) items.push_back(item(7, T(L"Als Sammlung hinzufügen")));
     {
         // Kontaktabzug: nur, wenn Bilder oder Ordner ausgewaehlt sind
         bool any = false;
@@ -1366,19 +1367,19 @@ void App::ShowContextMenu(int pos, POINT screen) {
         }
         if (any) {
             items.push_back(MenuItem::Sep());
-            MenuItem ks = item(20, L"Kontaktabzug erstellen \u2026");
+            MenuItem ks = item(20, T(L"Kontaktabzug erstellen \u2026"));
             ks.glyph = 0xECA5;
             items.push_back(ks);
         }
         // Kacheltextur: nur fuer genau einen Ordner
         if (e.kind == Kind::Folder && SelectedPaths().size() <= 1) {
-            MenuItem kt = item(21, L"Kacheltextur erstellen \u2026");
+            MenuItem kt = item(21, T(L"Kacheltextur erstellen \u2026"));
             kt.glyph = 0xE8A9;
             items.push_back(kt);
         }
     }
     items.push_back(MenuItem::Sep());
-    items.push_back(item(31, L"Eigenschaften", L"Alt+Enter"));
+    items.push_back(item(31, T(L"Eigenschaften"), L"Alt+Enter"));
     UINT cmd = ShowPopupMenu(hwnd_, items, screen, accent_);
     switch (cmd) {
     case 30: BeginRename(pos); break;
@@ -1393,12 +1394,12 @@ void App::ShowContextMenu(int pos, POINT screen) {
     case 2: OpenWithDefaultApp(hwnd_, e.path); break;
     case 999: RunOpenWith(e, *openWith, cmd); break;
     case 3: ShowInExplorer(e.path); break;
-    case 4: if (CopyFilesToClipboard(SelectedPaths())) SetStatus(L"In die Zwischenablage kopiert."); break;
+    case 4: if (CopyFilesToClipboard(SelectedPaths())) SetStatus(T(L"In die Zwischenablage kopiert.")); break;
     case 5: {
         std::wstring s;
         for (auto& p : SelectedPaths()) { if (!s.empty()) s += L"\r\n"; s += p; }
         CopyTextToClipboard(hwnd_, s);
-        SetStatus(L"Pfad kopiert.");
+        SetStatus(T(L"Pfad kopiert."));
         break;
     }
     case 6: DeleteSelection(); break;
@@ -1427,7 +1428,7 @@ void App::ShowContextMenu(int pos, POINT screen) {
 MenuItem App::OpenWithMenuItem(const FileEntry& e, std::shared_ptr<std::vector<OpenWithApp>> apps) {
     MenuItem m;
     m.id = 10;
-    m.text = L"Öffnen mit";
+    m.text = T(L"Öffnen mit");
     std::wstring path = e.path;
     m.submenu = [apps, path]() {
         if (apps->empty()) *apps = GetOpenWithApps(path);
@@ -1445,7 +1446,7 @@ MenuItem App::OpenWithMenuItem(const FileEntry& e, std::shared_ptr<std::vector<O
         if (!items.empty()) items.push_back(MenuItem::Sep());
         MenuItem other;
         other.id = 999;
-        other.text = L"Andere App auswählen …";
+        other.text = T(L"Andere App auswählen …");
         other.glyph = 0xE71D;
         items.push_back(other);
         return items;
@@ -1454,12 +1455,11 @@ MenuItem App::OpenWithMenuItem(const FileEntry& e, std::shared_ptr<std::vector<O
 }
 
 void App::ShowThemeMenu(const D2D1_RECT_F& rc) {
-    static const wchar_t* names[] = {L"System (Standard)", L"Hell", L"Dunkel"};
     std::vector<MenuItem> items;
     for (int i = 0; i < 3; ++i) {
         MenuItem m;
         m.id = 100 + i;
-        m.text = names[i];
+        m.text = T(kThemeNames[i]);
         m.checked = settings_.theme == i;
         items.push_back(m);
     }
@@ -1471,13 +1471,29 @@ void App::ShowThemeMenu(const D2D1_RECT_F& rc) {
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
+void App::ShowLanguageMenu(const D2D1_RECT_F& rc) {
+    std::vector<MenuItem> items;
+    for (int i = 0; i < 3; ++i) {
+        MenuItem m;
+        m.id = 100 + i;
+        m.text = LanguageName(i);
+        m.checked = settings_.language == i;
+        items.push_back(m);
+    }
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
+    if (cmd < 100 || cmd > 102) return;
+    settings_.language = static_cast<int>(cmd) - 100;
+    langOverride_ = -1;
+    settings_.Save();
+    ApplyLanguage();
+}
+
 void App::ShowViewerSmallMenu(const D2D1_RECT_F& rc) {
-    static const wchar_t* names[] = {L"Originalgr\u00f6\u00dfe (100 %)", L"An die Ansicht anpassen"};
     std::vector<MenuItem> items;
     for (int i = 0; i < 2; ++i) {
         MenuItem m;
         m.id = 100 + i;
-        m.text = names[i];
+        m.text = T(kViewerSmallNames[i]);
         m.checked = settings_.viewerSmall == i;
         items.push_back(m);
     }
@@ -1503,30 +1519,30 @@ void App::ShowViewerMenu(POINT screen) {
     };
     auto openWith = std::make_shared<std::vector<OpenWithApp>>();
     std::vector<MenuItem> items;
-    items.push_back(item(2, L"Mit Standard-App \u00f6ffnen"));
+    items.push_back(item(2, T(L"Mit Standard-App \u00f6ffnen")));
     items.push_back(OpenWithMenuItem(e, openWith));
-    items.push_back(item(3, L"Im Explorer zeigen", L"Strg+E"));
+    items.push_back(item(3, T(L"Im Explorer zeigen"), T(L"Strg+E")));
     items.push_back(MenuItem::Sep());
-    items.push_back(item(4, L"Kopieren", L"Strg+C"));
-    items.push_back(item(5, L"Pfad kopieren", L"Strg+Umschalt+C"));
+    items.push_back(item(4, T(L"Kopieren"), T(L"Strg+C")));
+    items.push_back(item(5, T(L"Pfad kopieren"), T(L"Strg+Umschalt+C")));
     items.push_back(MenuItem::Sep());
-    items.push_back(item(12, viewer_.zoom > 0 ? L"Einpassen" : L"Originalgr\u00f6\u00dfe (100 %)", viewer_.zoom > 0 ? L"0" : L"1"));
-    MenuItem smooth = item(13, L"Beim Vergr\u00f6\u00dfern gl\u00e4tten");
+    items.push_back(item(12, viewer_.zoom > 0 ? T(L"Einpassen") : T(L"Originalgr\u00f6\u00dfe (100 %)"), viewer_.zoom > 0 ? L"0" : L"1"));
+    MenuItem smooth = item(13, T(L"Beim Vergr\u00f6\u00dfern gl\u00e4tten"));
     smooth.checked = settings_.viewerSmooth;
     items.push_back(smooth);
     items.push_back(MenuItem::Sep());
     bool marked = IsBookmarked(e.path);
-    items.push_back(item(8, marked ? L"Von Merkliste entfernen" : L"Zur Merkliste hinzuf\u00fcgen", L"",
+    items.push_back(item(8, marked ? T(L"Von Merkliste entfernen") : T(L"Zur Merkliste hinzuf\u00fcgen"), L"",
                          marked ? 0xE735 : 0xE734));
-    items.push_back(item(6, L"In den Papierkorb", L"Entf", 0xE74D));
+    items.push_back(item(6, T(L"In den Papierkorb"), T(L"Entf"), 0xE74D));
     items.push_back(MenuItem::Sep());
-    items.push_back(item(14, L"Eigenschaften", L"Alt+Enter"));
+    items.push_back(item(14, T(L"Eigenschaften"), L"Alt+Enter"));
     UINT cmd = ShowPopupMenu(hwnd_, items, screen, accent_);
     switch (cmd) {
     case 2: OpenWithDefaultApp(hwnd_, e.path); break;
     case 3: ShowInExplorer(e.path); break;
-    case 4: if (CopyFilesToClipboard({e.path})) SetStatus(L"In die Zwischenablage kopiert."); break;
-    case 5: CopyTextToClipboard(hwnd_, e.path); SetStatus(L"Pfad kopiert."); break;
+    case 4: if (CopyFilesToClipboard({e.path})) SetStatus(T(L"In die Zwischenablage kopiert.")); break;
+    case 5: CopyTextToClipboard(hwnd_, e.path); SetStatus(T(L"Pfad kopiert.")); break;
     case 6: ViewerDeleteCurrent(); break;
     case 8: SetBookmarked({e.path}, !marked); break;
     case 12:
@@ -1557,7 +1573,7 @@ void App::RunOpenWith(const FileEntry& e, const std::vector<OpenWithApp>& apps, 
         if (x && *x && _wcsicmp(x + 1, e.ext.c_str()) == 0) paths.push_back(p);
     }
     if (paths.empty()) paths.push_back(e.path);
-    if (!OpenWithApp_Invoke(apps[i], paths)) SetStatus(L"Die App konnte nicht gestartet werden.");
+    if (!OpenWithApp_Invoke(apps[i], paths)) SetStatus(T(L"Die App konnte nicht gestartet werden."));
 }
 
 void App::ShowSidebarMenu(int index, POINT screen) {
@@ -1571,16 +1587,16 @@ void App::ShowSidebarMenu(int index, POINT screen) {
         return m;
     };
     std::vector<MenuItem> items;
-    items.push_back(item(1, L"Öffnen"));
+    items.push_back(item(1, T(L"Öffnen")));
     if (it.kind == SidebarItem::Collection) {
-        items.push_back(item(2, L"Neu indexieren"));
+        items.push_back(item(2, T(L"Neu indexieren")));
         items.push_back(MenuItem::Sep());
-        items.push_back(item(3, L"Sammlung entfernen"));
+        items.push_back(item(3, T(L"Sammlung entfernen")));
     } else if (it.kind == SidebarItem::AllCollections) {
-        items.push_back(item(2, L"Alle neu indexieren"));
+        items.push_back(item(2, T(L"Alle neu indexieren")));
     } else if (!it.path.empty()) {
-        items.push_back(item(4, L"Als Sammlung hinzufügen"));
-        items.push_back(item(5, L"Im Explorer zeigen"));
+        items.push_back(item(4, T(L"Als Sammlung hinzufügen")));
+        items.push_back(item(5, T(L"Im Explorer zeigen")));
     }
     UINT cmd = ShowPopupMenu(hwnd_, items, screen, accent_);
     switch (cmd) {
@@ -1588,7 +1604,7 @@ void App::ShowSidebarMenu(int index, POINT screen) {
         if (it.kind == SidebarItem::AllCollections) ShowAllCollections();
         else Navigate(it.path);
         break;
-    case 2: indexer_.Rescan(); SetStatus(L"Indexierung gestartet."); break;
+    case 2: indexer_.Rescan(); SetStatus(T(L"Indexierung gestartet.")); break;
     case 3: RemoveCollection(it.path); break;
     case 4: AddCollection(it.path); break;
     case 5: ShowInExplorer(it.path); break;

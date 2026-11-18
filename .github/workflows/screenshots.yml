@@ -49,20 +49,28 @@ jobs:
             -DVCPKG_TARGET_TRIPLET=x64-windows-static
           cmake --build build --config Release
 
-      - name: Beispielordner erzeugen
+      - name: Beispielordner erzeugen (deutsch und englisch)
         shell: powershell
-        run: ./tools/make-demo.ps1 -Root "$env:USERPROFILE\Pictures\peek-Demo"
+        run: |
+          ./tools/make-demo.ps1 -Root "$env:USERPROFILE\Pictures\peek-Demo" -Lang de
+          ./tools/make-demo.ps1 -Root "$env:USERPROFILE\Pictures\peek-Demo-en" -Lang en
 
-      - name: Bildschirmfotos aufnehmen
+      - name: Bildschirmfotos aufnehmen (deutsch)
         shell: powershell
-        run: ./tools/screenshots.ps1 -Exe "$pwd\build\peek.exe" -Root "$env:USERPROFILE\Pictures\peek-Demo" -Out "$pwd\screenshots"
+        run: ./tools/screenshots.ps1 -Exe "$pwd\build\peek.exe" -Root "$env:USERPROFILE\Pictures\peek-Demo" -Out "$pwd\screenshots" -Lang de
+
+      - name: Bildschirmfotos aufnehmen (englisch)
+        shell: powershell
+        run: ./tools/screenshots.ps1 -Exe "$pwd\build\peek.exe" -Root "$env:USERPROFILE\Pictures\peek-Demo-en" -Out "$pwd\screenshots\en" -Lang en
 
       - name: Bildschirmfotos hochladen
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: peek-screenshots
           retention-days: 2   # die Bilder liegen ohnehin im Zweig "screenshots"
-          path: screenshots/*.png
+          path: |
+            screenshots/*.png
+            screenshots/en/*.png
 
       - name: Bildschirmfotos im Zweig "screenshots" ablegen
         shell: pwsh
@@ -72,6 +80,6 @@ jobs:
           git checkout --orphan screenshots
           git rm -rf --cached . | Out-Null
           Get-ChildItem -Force | Where-Object { $_.Name -notin @('.git', 'screenshots') } | Remove-Item -Recurse -Force
-          git add screenshots/*.png
+          git add screenshots/*.png screenshots/en/*.png
           git commit -m "Bildschirmfotos von $env:GITHUB_SHA"
           git push -f origin screenshots

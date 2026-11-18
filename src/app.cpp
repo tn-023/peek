@@ -13,9 +13,48 @@ namespace peek {
 // Start und Fenster
 // ---------------------------------------------------------------------------
 
+// Auswahllisten der Einstellungen
+const wchar_t* const kThemeNames[3] = {N_(L"System (Standard)"), N_(L"Hell"), N_(L"Dunkel")};
+const wchar_t* const kViewerSmallNames[2] = {N_(L"Originalgr\u00f6\u00dfe (100 %)"), N_(L"An die Ansicht anpassen")};
+
+const wchar_t* LanguageName(int setting) {
+    switch (setting) {
+    case 1: return L"Deutsch";   // lang:ok (Sprachnamen stehen immer in der eigenen Sprache)
+    case 2: return L"English";
+    default: return T(L"Wie Windows (Standard)");
+    }
+}
+
+namespace {
+// 0 = wie Windows: Deutsch, wenn die Anzeigesprache von Windows Deutsch ist, sonst Englisch
+Lang ResolveLanguage(int setting) {
+    if (setting == 1) return Lang::De;
+    if (setting == 2) return Lang::En;
+    return PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_GERMAN ? Lang::De : Lang::En;
+}
+}  // namespace
+
+void App::ApplyLanguage() {
+    SetCurrentLang(ResolveLanguage(langOverride_ > 0 ? langOverride_ : settings_.language));
+    if (!hwnd_) return;
+    typeNames_.clear();
+    BuildSidebar();
+    UpdateTitle();
+    rowsGroupKey_ = -1000;   // Gruppenkoepfe neu beschriften
+    Layout();
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
 bool App::Init(HINSTANCE inst, int show) {
     inst_ = inst;
     settings_.Load();
+    // Sprache vor allem anderen (Fehlermeldungen beim Start); --lang=de|en gilt nur fuer diesen Start
+    {
+        std::wstring cmd = GetCommandLineW();
+        if (cmd.find(L"--lang=de") != std::wstring::npos) langOverride_ = 1;
+        else if (cmd.find(L"--lang=en") != std::wstring::npos) langOverride_ = 2;
+        SetCurrentLang(ResolveLanguage(langOverride_ > 0 ? langOverride_ : settings_.language));
+    }
     // Neue Version (oder neues App-Symbol) an gleicher Stelle: Windows haelt das alte Symbol der EXE im
     // Symbol-Cache (Task-Manager, Explorer, Taskleiste). Beim ersten Start einer Version den Eintrag auffrischen.
     const std::wstring build = std::wstring(PEEK_VERSION) + L" " + Utf8ToWide(__DATE__ " " __TIME__);
@@ -62,7 +101,7 @@ bool App::Init(HINSTANCE inst, int show) {
 
     ApplyTheme();
     if (!r_.Init(hwnd_)) {
-        MessageBoxW(hwnd_, L"Die Grafikausgabe (Direct3D 11 / Direct2D) konnte nicht initialisiert werden.", L"peek",
+        MessageBoxW(hwnd_, T(L"Die Grafikausgabe (Direct3D 11 / Direct2D) konnte nicht initialisiert werden."), L"peek",
                     MB_ICONERROR);
         return false;
     }
@@ -588,7 +627,7 @@ void App::SetStatus(const std::wstring& msg) {
 
 void App::UpdateTitle() {
     std::wstring t = L"peek";
-    if (collectionsView_) t += L" – Alle Sammlungen";
+    if (collectionsView_) t += T(L" – Alle Sammlungen");
     else if (!path_.empty()) {
         std::wstring n = FileNameOf(path_);
         t += L" – " + (n.empty() ? path_ : n);
@@ -656,11 +695,11 @@ void App::ApplyViewState(const std::wstring& loc) {
 void App::Navigate(const std::wstring& raw, bool history, const std::wstring& select) {
     std::wstring p = NormalizeDir(raw);
     if (!IsLocalDrivePath(p)) {
-        SetStatus(L"Nur lokale Laufwerke werden unterstützt – Netzlaufwerke sind ausgeschlossen.");
+        SetStatus(T(L"Nur lokale Laufwerke werden unterstützt – Netzlaufwerke sind ausgeschlossen."));
         return;
     }
     if (!DirectoryExists(p)) {
-        SetStatus(L"Ordner nicht gefunden: " + p);
+        SetStatus(T(L"Ordner nicht gefunden: ") + p);
         return;
     }
     bool restore = TakeRestore();
@@ -727,14 +766,14 @@ void App::Reload(bool keepState) {
 }
 
 std::wstring App::CurrentLocation() const {
-    if (bookmarksView_) return L"::merkliste";
+    if (bookmarksView_) return L"::merkliste";   // lang:ok
     if (collectionsView_) return std::wstring();
     return path_;
 }
 
 void App::GoTo(const std::wstring& target, const std::wstring& select) {
     if (target.empty()) ShowAllCollections(false);
-    else if (target == L"::merkliste") ShowBookmarks(false);
+    else if (target == L"::merkliste") ShowBookmarks(false);   // lang:ok
     else Navigate(target, false, select);
 }
 
@@ -743,7 +782,7 @@ void App::ShowBookmarks(bool history) {
         bool restore = restoreNext_;
         restoreNext_ = false;
         SaveViewState();
-        if (restore) ApplyViewState(L"::merkliste");
+        if (restore) ApplyViewState(L"::merkliste");   // lang:ok
     }
     if (history && !bookmarksView_ && (collectionsView_ || !path_.empty())) {
         back_.push_back(CurrentLocation());
@@ -817,7 +856,7 @@ void App::SetBookmarked(const std::vector<std::wstring>& paths, bool add) {
     if (!changed) return;
     settings_.Save();
     BuildSidebar();
-    SetStatus(std::to_wstring(changed) + (add ? L" Element(e) zur Merkliste hinzugef\u00fcgt" : L" Element(e) von der Merkliste entfernt"));
+    SetStatus(std::to_wstring(changed) + (add ? T(L" Element(e) zur Merkliste hinzugef\u00fcgt") : T(L" Element(e) von der Merkliste entfernt")));
     if (bookmarksView_) {
         if (viewer_.open) reloadAfterViewer_ = true;   // Betrachter nicht schliessen, erst danach neu laden
         else Reload(true);
@@ -1482,7 +1521,7 @@ void App::EnsureIcon(const FileEntry& e, int prio) {
     r.gen = 0;
     if (e.kind == Kind::Folder) { r.path = L"folder"; r.isDir = true; }
     else if (key.rfind(L"iconf:", 0) == 0) { r.path = e.path; r.perFile = true; }
-    else r.path = L"datei." + e.ext;
+    else r.path = L"datei." + e.ext;   // lang:ok
     thumbs_.Request(std::move(r));
 }
 
@@ -1545,7 +1584,7 @@ void App::OpenPos(int pos) {
         OpenViewer(pos);
     } else {
         // Videos und alle anderen Dateien: Standard-App (z. B. Standard-Mediaplayer)
-        if (!OpenWithDefaultApp(hwnd_, e.path)) SetStatus(L"Datei konnte nicht geöffnet werden.");
+        if (!OpenWithDefaultApp(hwnd_, e.path)) SetStatus(T(L"Datei konnte nicht geöffnet werden."));
     }
 }
 
@@ -1641,7 +1680,7 @@ void App::ViewerDeleteCurrent() {
     viewer_.pan = {0, 0};
     viewer_.rotation = 0;
     viewer_.animS = 0;
-    viewer_.toast = L"\u201e" + name + L"\u201c in den Papierkorb verschoben";
+    viewer_.toast = TF(L"\u201e{0}\u201c in den Papierkorb verschoben", {name});
     viewer_.toastUntil = GetTickCount() + 2200;
     SetTimer(hwnd_, kTimerToast, 2300, nullptr);
     ViewerPrefetch();
@@ -1693,16 +1732,16 @@ void App::ViewerPrefetch() {
 void App::AddCollection(const std::wstring& raw) {
     std::wstring p = NormalizeDir(raw);
     if (!IsLocalDrivePath(p) || !DirectoryExists(p)) {
-        SetStatus(L"Nur lokale Ordner können Sammlungen sein.");
+        SetStatus(T(L"Nur lokale Ordner können Sammlungen sein."));
         return;
     }
     for (auto& c : settings_.collections)
-        if (_wcsicmp(c.c_str(), p.c_str()) == 0) { SetStatus(L"Ist bereits eine Sammlung."); return; }
+        if (_wcsicmp(c.c_str(), p.c_str()) == 0) { SetStatus(T(L"Ist bereits eine Sammlung.")); return; }
     settings_.collections.push_back(p);
     settings_.Save();
     indexer_.SetRoots(settings_.collections, settings_.showHidden);
     BuildSidebar();
-    SetStatus(L"Sammlung hinzugefügt: " + p + L" – wird im Hintergrund indexiert.");
+    SetStatus(TF(L"Sammlung hinzugefügt: {0} – wird im Hintergrund indexiert.", {p}));
 }
 
 void App::RemoveCollection(const std::wstring& p) {
@@ -1715,7 +1754,7 @@ void App::RemoveCollection(const std::wstring& p) {
     db_.DeleteUnder(p);
     BuildSidebar();
     if (collectionsView_) Reload(false);
-    SetStatus(L"Sammlung entfernt: " + p);
+    SetStatus(T(L"Sammlung entfernt: ") + p);
 }
 
 void App::PickFolder() {
@@ -1724,7 +1763,7 @@ void App::PickFolder() {
     DWORD opts = 0;
     dlg->GetOptions(&opts);
     dlg->SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
-    dlg->SetTitle(L"Ordner als Sammlung hinzufügen");
+    dlg->SetTitle(T(L"Ordner als Sammlung hinzufügen"));
     if (!collectionsView_ && !path_.empty()) {
         ComPtr<IShellItem> folder;
         if (SUCCEEDED(SHCreateItemFromParsingName(path_.c_str(), nullptr, IID_PPV_ARGS(&folder))))
@@ -1744,33 +1783,33 @@ void App::BuildSidebar() {
     bookmarkSet_.clear();
     for (auto& b : settings_.bookmarks) bookmarkSet_.insert(ToLower(b));
     sidebar_.clear();
-    sidebar_.push_back({SidebarItem::Header, L"Schnellzugriff", L"", 0});
+    sidebar_.push_back({SidebarItem::Header, T(L"Schnellzugriff"), L"", 0});
     sidebar_.push_back({SidebarItem::Bookmarks,
-                        L"Merkliste" + (settings_.bookmarks.empty() ? std::wstring()
+                        T(L"Merkliste") + (settings_.bookmarks.empty() ? std::wstring()
                                                                     : L"  (" + std::to_wstring(settings_.bookmarks.size()) + L")"),
                         L"", 0xE734});
     struct KF { const KNOWNFOLDERID* id; const wchar_t* label; wchar_t glyph; };
     const KF kfs[] = {{&FOLDERID_Desktop, L"Desktop", 0xE8B7},
                       {&FOLDERID_Downloads, L"Downloads", 0xE896},
-                      {&FOLDERID_Pictures, L"Bilder", 0xE8B9},
+                      {&FOLDERID_Pictures, TC(L"sidebar:Bilder", L"Bilder"), 0xE8B9},
                       {&FOLDERID_Videos, L"Videos", 0xE714},
-                      {&FOLDERID_Documents, L"Dokumente", 0xE8A5}};
+                      {&FOLDERID_Documents, T(L"Dokumente"), 0xE8A5}};
     for (auto& k : kfs) {
         std::wstring p = KnownFolderPath(*k.id);
         if (!p.empty() && IsLocalDrivePath(p)) sidebar_.push_back({SidebarItem::Folder, k.label, p, k.glyph});
     }
-    sidebar_.push_back({SidebarItem::Header, L"Sammlungen", L"", 0});
+    sidebar_.push_back({SidebarItem::Header, T(L"Sammlungen"), L"", 0});
     if (!settings_.collections.empty())
-        sidebar_.push_back({SidebarItem::AllCollections, L"Alle Sammlungen", L"", 0xE8F1});
+        sidebar_.push_back({SidebarItem::AllCollections, T(L"Alle Sammlungen"), L"", 0xE8F1});
     for (auto& c : settings_.collections) {
         std::wstring n = FileNameOf(c);
         sidebar_.push_back({SidebarItem::Collection, n.empty() ? c : n, c, 0xE8B7});
     }
-    sidebar_.push_back({SidebarItem::Header, L"Laufwerke", L"", 0});
+    sidebar_.push_back({SidebarItem::Header, T(L"Laufwerke"), L"", 0});
     for (auto& d : LocalDrives()) {
         wchar_t label[MAX_PATH + 1] = {};
         GetVolumeInformationW(d.c_str(), label, MAX_PATH, nullptr, nullptr, nullptr, nullptr, 0);
-        std::wstring name = label[0] ? std::wstring(label) : std::wstring(L"Lokaler Datenträger");
+        std::wstring name = label[0] ? std::wstring(label) : std::wstring(T(L"Lokaler Datenträger"));
         name += L" (" + d.substr(0, 2) + L")";
         bool removable = GetDriveTypeW(d.c_str()) == DRIVE_REMOVABLE;
         sidebar_.push_back({SidebarItem::Drive, name, d, static_cast<wchar_t>(removable ? 0xE88E : 0xEDA2)});
@@ -1948,7 +1987,7 @@ DWORD App::OnDrop(const std::vector<std::wstring>& paths, POINT screen, DWORD ke
     }
     const std::wstring& first = paths.front();
     if (!IsLocalDrivePath(first)) {
-        SetStatus(L"Nur lokale Dateien werden unterst\u00fctzt \u2013 Netzlaufwerke sind ausgeschlossen.");
+        SetStatus(T(L"Nur lokale Dateien werden unterst\u00fctzt \u2013 Netzlaufwerke sind ausgeschlossen."));
         return DROPEFFECT_NONE;
     }
     if (DirectoryExists(first)) Navigate(first);
@@ -1983,20 +2022,20 @@ bool App::FolderDropTarget(float x, float y, std::wstring& target, int& pos, int
 
 void App::PasteFiles(const std::wstring& target) {
     if (target.empty() || !IsLocalDrivePath(target)) {
-        SetStatus(L"Einf\u00fcgen ist nur in einem Ordner m\u00f6glich.");
+        SetStatus(T(L"Einf\u00fcgen ist nur in einem Ordner m\u00f6glich."));
         return;
     }
     std::vector<std::wstring> paths;
     bool move = false;
     if (!FilesFromClipboard(hwnd_, paths, move)) {
-        SetStatus(L"Keine Dateien in der Zwischenablage.");
+        SetStatus(T(L"Keine Dateien in der Zwischenablage."));
         return;
     }
     std::vector<std::wstring> ok;
     for (auto& p : paths)
         if (IsLocalDrivePath(p)) ok.push_back(p);
     if (ok.empty()) {
-        SetStatus(L"Nur lokale Dateien werden unterst\u00fctzt \u2013 Netzlaufwerke sind ausgeschlossen.");
+        SetStatus(T(L"Nur lokale Dateien werden unterst\u00fctzt \u2013 Netzlaufwerke sind ausgeschlossen."));
         return;
     }
     // Ordner nicht in sich selbst einfuegen
@@ -2004,7 +2043,7 @@ void App::PasteFiles(const std::wstring& target) {
     for (auto& p : ok) {
         std::wstring pl = ToLower(p);
         if (tl == pl || (tl.size() > pl.size() && tl.compare(0, pl.size(), pl) == 0 && tl[pl.size()] == L'\\')) {
-            SetStatus(L"Ein Ordner kann nicht in sich selbst eingef\u00fcgt werden.");
+            SetStatus(T(L"Ein Ordner kann nicht in sich selbst eingef\u00fcgt werden."));
             return;
         }
     }
@@ -2020,26 +2059,26 @@ void App::DoPendingFileOp() {
     for (auto& op : ops) {
         if (CopyOrMoveFiles(hwnd_, op.paths, op.target, op.move)) {
             any = true;
-            SetStatus(std::to_wstring(op.paths.size()) + (op.move ? L" Element(e) verschoben nach " : L" Element(e) kopiert nach ") +
-                      op.target);
+            SetStatus(op.move ? TF(L"{0} Element(e) verschoben nach {1}", {std::to_wstring(op.paths.size()), op.target})
+                              : TF(L"{0} Element(e) kopiert nach {1}", {std::to_wstring(op.paths.size()), op.target}));
         }
     }
     if (any) QuietReload();
 }
 
 std::wstring App::TypeName(const FileEntry& e) {
-    if (e.kind == Kind::Folder) return L"Dateiordner";
+    if (e.kind == Kind::Folder) return T(L"Dateiordner");
     auto it = typeNames_.find(e.ext);
     if (it != typeNames_.end()) return it->second;
     std::wstring name;
     SHFILEINFOW sfi{};
-    std::wstring probe = L"datei." + e.ext;
+    std::wstring probe = L"datei." + e.ext;   // lang:ok
     if (SHGetFileInfoW(probe.c_str(), FILE_ATTRIBUTE_NORMAL, &sfi, sizeof(sfi), SHGFI_TYPENAME | SHGFI_USEFILEATTRIBUTES))
         name = sfi.szTypeName;
     if (name.empty()) {
         std::wstring up = e.ext;
         for (auto& c : up) c = static_cast<wchar_t>(towupper(c));
-        name = up.empty() ? L"Datei" : up + L"-Datei";
+        name = up.empty() ? std::wstring(T(L"Datei")) : TF(L"{0}-Datei", {up});
     }
     typeNames_[e.ext] = name;
     return name;
@@ -2146,10 +2185,10 @@ void App::CloseSettings() {
 
 void App::DeleteIndex() {
     int r = MessageBoxW(hwnd_,
-                        L"Index und Vorschaubild-Cache werden gel\u00f6scht.\n\n"
+                        T(L"Index und Vorschaubild-Cache werden gel\u00f6scht.\n\n"
                         L"Ihre Dateien bleiben unver\u00e4ndert. Vorhandene Sammlungen werden anschlie\u00dfend im "
-                        L"Hintergrund neu indexiert.\n\nFortfahren?",
-                        L"Index l\u00f6schen", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
+                        L"Hintergrund neu indexiert.\n\nFortfahren?"),
+                        T(L"Index l\u00f6schen"), MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
     if (r != IDYES) return;
     SetCursor(LoadCursorW(nullptr, IDC_WAIT));
     indexer_.SetRoots({}, settings_.showHidden);
@@ -2158,7 +2197,7 @@ void App::DeleteIndex() {
     ClearBitmaps();
     indexer_.SetRoots(settings_.collections, settings_.showHidden);
     RefreshSettingsInfo();
-    SetStatus(L"Index gel\u00f6scht.");
+    SetStatus(T(L"Index gel\u00f6scht."));
 }
 
 } // namespace peek

@@ -55,11 +55,7 @@ D2D1_COLOR_F WithAlpha(D2D1_COLOR_F c, float a) {
     return c;
 }
 
-std::wstring Thousands(uint64_t n) {
-    std::wstring s = std::to_wstring(n);
-    for (int i = static_cast<int>(s.size()) - 3; i > 0; i -= 3) s.insert(static_cast<size_t>(i), 1, L'.');
-    return s;
-}
+std::wstring Thousands(uint64_t n) { return FormatThousands(n); }
 
 float Ease(float t) { return t * t * (3 - 2 * t); }
 
@@ -71,14 +67,12 @@ std::wstring FormatDate(int64_t unix) {
     SYSTEMTIME st;
     FileTimeToLocalFileTime(&ft, &lft);
     FileTimeToSystemTime(&lft, &st);
-    wchar_t buf[64];
-    swprintf_s(buf, L"%02u.%02u.%04u, %02u:%02u", st.wDay, st.wMonth, st.wYear, st.wHour, st.wMinute);
-    return buf;
+    return FormatDayTime(st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute);
 }
 
 // Spalten der Detailansicht: Anzeige-Reihenfolge -> Sortierschluessel
 const int kColSort[5] = {0, 1, 4, 2, 3};   // Name, Datum, Typ, Groesse, Aufloesung
-const wchar_t* kColName[5] = {L"Name", L"Datum", L"Typ", L"Größe", L"Auflösung"};
+const wchar_t* kColName[5] = {N_(L"Name"), N_(L"Datum"), N_(L"Typ"), N_(L"Größe"), N_(L"Auflösung")};
 
 } // namespace
 
@@ -209,22 +203,20 @@ void App::RebuildRows() {
 
 // Beschriftung der Gruppe eines Elements, passend zum Sortierkriterium (Ordner bilden immer eine eigene Gruppe)
 std::wstring App::GroupLabel(const FileEntry& e) const {
-    if (e.kind == Kind::Folder) return L"Ordner";
-    static const wchar_t* kMonth[12] = {L"Januar", L"Februar", L"März", L"April", L"Mai", L"Juni",
-                                        L"Juli", L"August", L"September", L"Oktober", L"November", L"Dezember"};
+    if (e.kind == Kind::Folder) return T(L"Ordner");
     auto dateGroup = [&](int64_t t) -> std::wstring {
-        if (t <= 0) return L"Ohne Datum";
-        if (t >= todayStart_ + 86400) return L"In der Zukunft";
-        if (t >= todayStart_) return L"Heute";
-        if (t >= todayStart_ - 86400) return L"Gestern";
+        if (t <= 0) return T(L"Ohne Datum");
+        if (t >= todayStart_ + 86400) return T(L"In der Zukunft");
+        if (t >= todayStart_) return T(L"Heute");
+        if (t >= todayStart_ - 86400) return T(L"Gestern");
         int64_t local = t + tzOffset_;
         int y; unsigned m, d;
         CivilFromDays(local / 86400, y, m, d);
         int ny; unsigned nm, nd;
         CivilFromDays((now_ + tzOffset_) / 86400, ny, nm, nd);
-        if (y == ny && m == nm) return L"Früher in diesem Monat";
-        if (y == ny) return kMonth[m - 1];
-        return std::wstring(kMonth[m - 1]) + L" " + std::to_wstring(y);
+        if (y == ny && m == nm) return T(L"Früher in diesem Monat");
+        if (y == ny) return MonthName(m);
+        return std::wstring(MonthName(m)) + L" " + std::to_wstring(y);
     };
     switch (settings_.sortKey) {
     case 0: {   // Name: Anfangsbuchstabe
@@ -240,24 +232,24 @@ std::wstring App::GroupLabel(const FileEntry& e) const {
         return L"#";
     }
     case 1: return dateGroup(e.Time());
-    case 5: return e.taken ? dateGroup(e.taken) : std::wstring(L"Ohne Aufnahmedatum");
+    case 5: return e.taken ? dateGroup(e.taken) : std::wstring(T(L"Ohne Aufnahmedatum"));
     case 2: {
         const uint64_t KB = 1024, MB = KB * 1024, GB = MB * 1024;
-        if (e.size == 0) return L"Leer";
-        if (e.size < 16 * KB) return L"Sehr klein (< 16 KB)";
-        if (e.size < MB) return L"Klein (16 KB – 1 MB)";
-        if (e.size < 128 * MB) return L"Mittel (1 – 128 MB)";
-        if (e.size < GB) return L"Groß (128 MB – 1 GB)";
-        return L"Sehr groß (> 1 GB)";
+        if (e.size == 0) return T(L"Leer");
+        if (e.size < 16 * KB) return T(L"Sehr klein (< 16 KB)");
+        if (e.size < MB) return T(L"Klein (16 KB – 1 MB)");
+        if (e.size < 128 * MB) return T(L"Mittel (1 – 128 MB)");
+        if (e.size < GB) return T(L"Groß (128 MB – 1 GB)");
+        return T(L"Sehr groß (> 1 GB)");
     }
     case 3: {
         double mp = double(e.width) * e.height;
-        if (mp <= 0) return L"Ohne Auflösung";
-        if (mp < 1280.0 * 720) return L"Unter HD";
+        if (mp <= 0) return T(L"Ohne Auflösung");
+        if (mp < 1280.0 * 720) return T(L"Unter HD");
         if (mp < 1920.0 * 1080) return L"HD";
         if (mp < 3840.0 * 2160) return L"Full HD";
         if (mp < 20e6) return L"4K";
-        return L"Über 20 Megapixel";
+        return T(L"Über 20 Megapixel");
     }
     case 4: return const_cast<App*>(this)->TypeName(e);
     default: return {};
@@ -434,11 +426,11 @@ void App::PaintTopBar(ID2D1DeviceContext* dc) {
     if (bookmarksView_) {
         wchar_t g[2] = {0xE734, 0};
         DrawText(dc, g, D2D1::RectF(cx + 4, pb.top, cx + 24, pb.bottom), r_.Icon(13), t.text2);
-        DrawText(dc, L"Merkliste", D2D1::RectF(cx + 30, pb.top, pb.right - 8, pb.bottom), f, t.text);
+        DrawText(dc, T(L"Merkliste"), D2D1::RectF(cx + 30, pb.top, pb.right - 8, pb.bottom), f, t.text);
     } else if (collectionsView_) {
         wchar_t g[2] = {0xE8F1, 0};
         DrawText(dc, g, D2D1::RectF(cx + 4, pb.top, cx + 24, pb.bottom), r_.Icon(13), t.text2);
-        DrawText(dc, L"Alle Sammlungen", D2D1::RectF(cx + 30, pb.top, pb.right - 8, pb.bottom), f, t.text);
+        DrawText(dc, T(L"Alle Sammlungen"), D2D1::RectF(cx + 30, pb.top, pb.right - 8, pb.bottom), f, t.text);
     } else if (!path_.empty()) {
         std::vector<std::pair<std::wstring, std::wstring>> segs;
         std::wstring acc;
@@ -532,45 +524,48 @@ void App::PaintTopBar(ID2D1DeviceContext* dc) {
 std::wstring App::ChipLabel(ChipId id) const {
     switch (id) {
     case ChipId::Type: {
-        static const wchar_t* n[] = {L"Ordner", L"Bilder", L"Videos", L"Sonstige"};
+        static const wchar_t* n[] = {N_(L"Ordner"), N_(L"Bilder"), N_(L"Videos"), N_(L"Sonstige")};
         static const wchar_t* d[] = {L"PDF", L"Photoshop", L"Illustrator", L"SVG"};
         if (filters_.type >= 10) return d[std::clamp(filters_.type - 10, 0, 3)];
-        return filters_.type < 0 ? L"Typ" : n[std::clamp(filters_.type, 0, 3)];
+        return filters_.type < 0 ? T(L"Typ") : T(n[std::clamp(filters_.type, 0, 3)]);
     }
     case ChipId::Date: {
-        static const wchar_t* n[] = {L"Datum", L"Heute", L"Letzte 7 Tage", L"Letzte 30 Tage", L"Dieses Jahr",
-                                     L"Letztes Jahr", L"Älter"};
+        static const wchar_t* n[] = {N_(L"Datum"), N_(L"Heute"), N_(L"Letzte 7 Tage"), N_(L"Letzte 30 Tage"),
+                                     N_(L"Dieses Jahr"), N_(L"Letztes Jahr"), N_(L"Älter")};
         if (filters_.date == 7) return SpanLabel(filters_.dateFrom, filters_.dateTo);
-        return n[std::clamp(filters_.date, 0, 6)];
+        return T(n[std::clamp(filters_.date, 0, 6)]);
     }
     case ChipId::Taken: {
-        static const wchar_t* n[] = {L"Aufgenommen", L"Heute aufgenommen", L"Letzte 7 Tage", L"Letzte 30 Tage",
-                                     L"Dieses Jahr", L"Letztes Jahr", L"Älter"};
-        if (filters_.taken == 7) return L"Aufgenommen " + SpanLabel(filters_.takenFrom, filters_.takenTo);
-        return n[std::clamp(filters_.taken, 0, 6)];
+        static const wchar_t* n[] = {N_(L"Aufgenommen"), N_(L"Heute aufgenommen"), N_(L"Letzte 7 Tage"),
+                                     N_(L"Letzte 30 Tage"), N_(L"Dieses Jahr"), N_(L"Letztes Jahr"), N_(L"Älter")};
+        if (filters_.taken == 7) return TF(L"Aufgenommen {0}", {SpanLabel(filters_.takenFrom, filters_.takenTo)});
+        return T(n[std::clamp(filters_.taken, 0, 6)]);
     }
     case ChipId::Size: {
-        static const wchar_t* n[] = {L"Größe", L"< 1 MB", L"1–10 MB", L"10–100 MB", L"> 100 MB"};
-        return n[std::clamp(filters_.size, 0, 4)];
+        static const wchar_t* n[] = {N_(L"Größe"), L"< 1 MB", L"1–10 MB", L"10–100 MB", L"> 100 MB"};
+        return T(n[std::clamp(filters_.size, 0, 4)]);
     }
     case ChipId::Resolution: {
-        static const wchar_t* n[] = {L"Auflösung", L"Unter HD", L"Ab HD", L"Ab Full HD", L"Ab 4K", L"Über 20 MP"};
-        return n[std::clamp(filters_.res, 0, 5)];
+        static const wchar_t* n[] = {N_(L"Auflösung"), N_(L"Unter HD"), N_(L"Ab HD"), N_(L"Ab Full HD"), N_(L"Ab 4K"),
+                                     N_(L"Über 20 MP")};
+        return T(n[std::clamp(filters_.res, 0, 5)]);
     }
     case ChipId::Orientation: {
-        static const wchar_t* n[] = {L"Ausrichtung", L"Querformat", L"Hochformat", L"Quadratisch", L"Panorama"};
-        return n[std::clamp(filters_.orient, 0, 4)];
+        static const wchar_t* n[] = {N_(L"Ausrichtung"), N_(L"Querformat"), N_(L"Hochformat"), N_(L"Quadratisch"),
+                                     N_(L"Panorama")};
+        return T(n[std::clamp(filters_.orient, 0, 4)]);
     }
     case ChipId::Source:
-        return filters_.source.empty() ? L"Quelle" : filters_.source;
+        return filters_.source.empty() ? std::wstring(T(L"Quelle")) : T(filters_.source);
     case ChipId::Pattern:
-        return filters_.templ == UINT32_MAX ? L"Muster" : templDict_.Word(filters_.templ);
+        return filters_.templ == UINT32_MAX ? std::wstring(T(L"Muster")) : TPattern(templDict_.Word(filters_.templ));
     case ChipId::Sort: {
-        static const wchar_t* n[] = {L"Name", L"Datum", L"Größe", L"Auflösung", L"Typ", L"Aufgenommen"};
-        return n[std::clamp(settings_.sortKey, 0, 5)];
+        static const wchar_t* n[] = {N_(L"Name"), N_(L"Datum"), N_(L"Größe"), N_(L"Auflösung"), N_(L"Typ"),
+                                     N_(L"Aufgenommen")};
+        return T(n[std::clamp(settings_.sortKey, 0, 5)]);
     }
     case ChipId::Recursive:
-        return L"Unterordner";
+        return T(L"Unterordner");
     default:
         return {};
     }
@@ -608,12 +603,12 @@ void App::PaintChips(ID2D1DeviceContext* dc) {
     bool resetShown = filters_.Any();
     IDWriteTextFormat* fr = r_.Text(12.5f, DWRITE_FONT_WEIGHT_BOLD);
     if (resetShown) {
-        float resetW = r_.MeasureText(L"Zurücksetzen", fr) + 24;
+        float resetW = r_.MeasureText(T(L"Zurücksetzen"), fr) + 24;
         D2D1_RECT_F rc = D2D1::RectF(right - resetW, y, right, y + h);
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({rc, HitType::ResetFilters, 0});
         if (hoverHit_ == idx) FillRound(dc, rc, h / 2, t.hover);
-        DrawText(dc, L"Zurücksetzen", D2D1::RectF(rc.left + 12, rc.top, rc.right + 20, rc.bottom), fr, accent_);
+        DrawText(dc, T(L"Zurücksetzen"), D2D1::RectF(rc.left + 12, rc.top, rc.right + 20, rc.bottom), fr, accent_);
         right = rc.left - 8;
     }
     float limit = right;
@@ -767,7 +762,7 @@ void App::PaintSearchHistory(ID2D1DeviceContext* dc) {
     if (hoverHit_ == aIdx) dc->FillRoundedRectangle(D2D1::RoundedRect(all, 4, 4), r_.Brush(D2D1::ColorF(1, 1, 1, 0.08f)));
     wchar_t gd[2] = {0xE74D, 0};
     DrawText(dc, gd, D2D1::RectF(all.left + 6, all.top, all.left + 28, all.bottom), r_.Icon(12), accent_);
-    DrawText(dc, L"Alle l\u00f6schen", D2D1::RectF(all.left + 34, all.top, all.right, all.bottom), f, accent_);
+    DrawText(dc, T(L"Alle l\u00f6schen"), D2D1::RectF(all.left + 34, all.top, all.right, all.bottom), f, accent_);
 }
 
 // ---------------------------------------------------------------------------
@@ -792,7 +787,7 @@ void App::PaintSidebar(ID2D1DeviceContext* dc) {
     const float textX = ox + 48, textW = sidebarW_ - 48 - 16;
 
     auto addButton = [&]() {
-        float th = r_.MeasureWrapped(L"Ordner hinzufügen", fw, textW);
+        float th = r_.MeasureWrapped(T(L"Ordner hinzufügen"), fw, textW);
         float ih = std::max(34.0f, th + 16);
         D2D1_RECT_F ar = D2D1::RectF(ox + 8, y, ox + sidebarW_ - 8, y + ih);
         int aIdx = static_cast<int>(hits_.size());
@@ -800,7 +795,7 @@ void App::PaintSidebar(ID2D1DeviceContext* dc) {
         if (hoverHit_ == aIdx) FillRound(dc, ar, 5, t.hover);
         wchar_t ga[2] = {0xE710, 0};
         DrawText(dc, ga, D2D1::RectF(ar.left + 10, ar.top, ar.left + 34, ar.top + 34), r_.Icon(12), t.text2);
-        r_.DrawWrapped(L"Ordner hinzufügen", textX, ar.top + (ih - th) / 2, textW, fw, t.text2);
+        r_.DrawWrapped(T(L"Ordner hinzufügen"), textX, ar.top + (ih - th) / 2, textW, fw, t.text2);
         y += ih + 2;
     };
 
@@ -809,7 +804,7 @@ void App::PaintSidebar(ID2D1DeviceContext* dc) {
         if (it.kind == SidebarItem::Header) {
             y += 6;
             y += r_.DrawWrapped(it.label, ox + 20, y + 4, sidebarW_ - 32, fh, t.text3) + 10;
-            if (it.label == L"Sammlungen" && settings_.collections.empty()) addButton();
+            if (it.label == T(L"Sammlungen") && settings_.collections.empty()) addButton();
             continue;
         }
         float th = r_.MeasureWrapped(it.label, fw, textW);
@@ -859,7 +854,7 @@ void App::PaintSidebar(ID2D1DeviceContext* dc) {
     if (hoverHit_ == gIdx) FillRound(dc, gr, 5, t.hover);
     wchar_t gg[2] = {0xE713, 0};
     DrawText(dc, gg, D2D1::RectF(gr.left + 10, gr.top, gr.left + 34, gr.bottom), r_.Icon(15), t.text2);
-    DrawText(dc, L"Einstellungen", D2D1::RectF(gr.left + 40, gr.top, gr.right, gr.bottom), r_.Text(13), t.text);
+    DrawText(dc, T(L"Einstellungen"), D2D1::RectF(gr.left + 40, gr.top, gr.right, gr.bottom), r_.Text(13), t.text);
     dc->PopAxisAlignedClip();
 }
 
@@ -879,12 +874,12 @@ void App::PaintGrid(ID2D1DeviceContext* dc) {
         D2D1_RECT_F br = bookmarkBarRc_;
         wchar_t gs[2] = {0xE735, 0};
         DrawText(dc, gs, D2D1::RectF(br.left + 16, br.top, br.left + 36, br.bottom), r_.Icon(14), accent_);
-        std::wstring label = L"Merkliste  \u00b7  " + std::to_wstring(entries_.size()) +
-                             (entries_.size() == 1 ? L" Element" : L" Elemente");
+        std::wstring label = T(L"Merkliste") + std::wstring(L"  \u00b7  ") + Thousands(entries_.size()) +
+                             (entries_.size() == 1 ? T(L" Element") : T(L" Elemente"));
         DrawText(dc, label, D2D1::RectF(br.left + 44, br.top, br.right - 200, br.bottom), r_.Text(14), t.text);
         if (!settings_.bookmarks.empty()) {
             IDWriteTextFormat* bf = r_.Text(13.5f);
-            std::wstring bl = L"Merkliste leeren";
+            std::wstring bl = T(L"Merkliste leeren");
             float bw = r_.MeasureText(bl, bf) + 46;
             D2D1_RECT_F bb = D2D1::RectF(br.right - 16 - bw, br.top + 6, br.right - 16, br.bottom - 6);
             int idx = static_cast<int>(hits_.size());
@@ -894,7 +889,7 @@ void App::PaintGrid(ID2D1DeviceContext* dc) {
             DrawText(dc, gd, D2D1::RectF(bb.left + 10, bb.top, bb.left + 28, bb.bottom), r_.Icon(12), t.text2);
             DrawText(dc, bl, D2D1::RectF(bb.left + 34, bb.top, bb.right, bb.bottom), bf, t.text);
             // links daneben: Kontaktabzug aus der Merkliste (ausgewaehlte oder alle Elemente)
-            std::wstring kl = L"Kontaktabzug erstellen \u2026";
+            std::wstring kl = T(L"Kontaktabzug erstellen \u2026");
             float kw = r_.MeasureText(kl, bf) + 46;
             D2D1_RECT_F kb = D2D1::RectF(bb.left - 8 - kw, bb.top, bb.left - 8, bb.bottom);
             int kIdx = static_cast<int>(hits_.size());
@@ -915,13 +910,13 @@ void App::PaintGrid(ID2D1DeviceContext* dc) {
     int n = metaHold_ ? 0 : static_cast<int>(visible_.size());
     if (n == 0) {
         std::wstring msg =
-            (loading_ || metaHold_) ? L"Wird geladen …"
+            (loading_ || metaHold_) ? T(L"Wird geladen …")
                      : (entries_.empty()
-                            ? (bookmarksView_ ? std::wstring(L"Die Merkliste ist leer \u2013 Elemente per Kontextmen\u00fc oder durch Ziehen auf \u201eMerkliste\u201c hinzuf\u00fcgen.") : collectionsView_ ? (settings_.collections.empty()
-                                                       ? L"Noch keine Sammlungen – Ordner in die Seitenleiste ziehen"
-                                                       : L"Sammlungen werden indexiert …")
-                                                : L"Dieser Ordner ist leer.")
-                            : L"Keine Treffer für diese Filter.");
+                            ? (bookmarksView_ ? T(L"Die Merkliste ist leer \u2013 Elemente per Kontextmen\u00fc oder durch Ziehen auf \u201eMerkliste\u201c hinzuf\u00fcgen.") : collectionsView_ ? (settings_.collections.empty()
+                                                       ? T(L"Noch keine Sammlungen – Ordner in die Seitenleiste ziehen")
+                                                       : T(L"Sammlungen werden indexiert …"))
+                                                : T(L"Dieser Ordner ist leer."))
+                            : T(L"Keine Treffer für diese Filter."));
         IDWriteTextFormat* fw = r_.TextWrap(14, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
         r_.DrawWrapped(msg, gridRc_.left + 20, gridRc_.top + 40, gridRc_.right - gridRc_.left - 40, fw, t.text2);
     } else {
@@ -1151,8 +1146,8 @@ void App::PaintListHeader(ID2D1DeviceContext* dc) {
         if (hoverHit_ == idx) FillRound(dc, rc, 4, t.hover);
         bool sorted = settings_.sortKey == kColSort[c];
         float tx = rc.left + (c == 0 ? 40 : 8);
-        float lw = r_.MeasureText(kColName[c], f);
-        DrawText(dc, kColName[c], D2D1::RectF(tx, rc.top, rc.right, rc.bottom), f, sorted ? t.text : t.text2);
+        float lw = r_.MeasureText(T(kColName[c]), f);
+        DrawText(dc, T(kColName[c]), D2D1::RectF(tx, rc.top, rc.right, rc.bottom), f, sorted ? t.text : t.text2);
         if (sorted && tx + lw + 20 < rc.right) {
             wchar_t ga[2] = {static_cast<wchar_t>(settings_.sortDesc ? 0xE74B : 0xE74A), 0};
             DrawText(dc, ga, D2D1::RectF(tx + lw + 6, rc.top, tx + lw + 20, rc.bottom), r_.Icon(10), accent_);
@@ -1236,7 +1231,7 @@ int App::ColumnMinWidth(int c) {
     if (c <= 0 || c >= 5) return 120;
     IDWriteTextFormat* fh = r_.Text(12, DWRITE_FONT_WEIGHT_SEMI_BOLD);
     IDWriteTextFormat* fv = r_.Text(12);
-    float m = r_.MeasureText(kColName[c], fh) + 8 + 26;
+    float m = r_.MeasureText(T(kColName[c]), fh) + 8 + 26;
     std::unordered_map<size_t, bool> seenLen;   // Laengen-Stichprobe: gleiche Textlaenge selten breiter
     for (uint32_t i : visible_) {
         std::wstring v = CellText(entries_[i], c);
@@ -1268,8 +1263,8 @@ void App::PaintStatus(ID2D1DeviceContext* dc) {
         x += w + 22;
     };
 
-    segment(Thousands(visible_.size()) + (visible_.size() == 1 ? L" Element" : L" Elemente") +
-                (visible_.size() != entries_.size() ? L" von " + Thousands(entries_.size()) : std::wstring()),
+    segment(Thousands(visible_.size()) + (visible_.size() == 1 ? T(L" Element") : T(L" Elemente")) +
+                (visible_.size() != entries_.size() ? T(L" von ") + Thousands(entries_.size()) : std::wstring()),
             f, t.text2);
     std::vector<uint32_t> sel = InfoSelection();
     if (sel.size() == 1) {
@@ -1281,7 +1276,7 @@ void App::PaintStatus(ID2D1DeviceContext* dc) {
     } else if (sel.size() > 1) {
         uint64_t bytes = 0;
         for (uint32_t i : sel) bytes += entries_[i].size;
-        segment(Thousands(sel.size()) + L" ausgewählt", fb, t.text);
+        segment(Thousands(sel.size()) + T(L" ausgewählt"), fb, t.text);
         if (bytes) segment(FormatSize(bytes), f, t.text);
     }
 
@@ -1330,15 +1325,15 @@ void App::PaintStatus(ID2D1DeviceContext* dc) {
     std::wstring right;
     if (!status_.empty()) right = status_;
     else {
-        if (loading_) right = L"Wird geladen …";
+        if (loading_) right = T(L"Wird geladen …");
         size_t pending = meta_.Pending();
         if (pending) {
             if (!right.empty()) right += L"   ·   ";
-            right += L"Metadaten: " + Thousands(pending) + L" offen";
+            right += TF(L"Metadaten: {0} offen", {Thousands(pending)});
         }
         if (indexBusy_) {
             if (!right.empty()) right += L"   ·   ";
-            right += L"Index: " + Thousands(indexDone_) + L" / " + Thousands(indexTotal_);
+            right += L"Index: " + Thousands(indexDone_) + L" / " + Thousands(indexTotal_);   // lang:ok
         }
     }
     if (rx > x + 40)
@@ -1400,22 +1395,22 @@ void App::PaintInfoPanel(ID2D1DeviceContext* dc, const D2D1_RECT_F& rc, const st
         y = pv.bottom + 14;
         y += r_.DrawWrapped(e.name, x0, y, w, r_.TextWrap(15, DWRITE_FONT_WEIGHT_SEMI_BOLD), t.text) + 2;
         y += r_.DrawWrapped(TypeName(e), x0, y, w, r_.TextWrap(12.5f), t.text2) + 18;
-        if (e.kind != Kind::Folder) row(L"Größe", FormatSize(e.size));
+        if (e.kind != Kind::Folder) row(T(L"Größe"), FormatSize(e.size));
         if (e.width) {
             wchar_t mp[64];
             swprintf_s(mp, L"%u × %u  (%.1f MP)", e.width, e.height, double(e.width) * e.height / 1e6);
-            row(L"Auflösung", mp);
+            row(T(L"Auflösung"), mp);
         }
-        if (e.kind == Kind::Video && e.durationMs) row(L"Dauer", FormatDuration(e.durationMs));
-        if (e.Doc() == 1 && e.pages) row(L"Seiten", Thousands(e.pages));
-        row(L"Aufgenommen", FormatDate(e.taken));
-        row(L"Geändert", FormatDate(e.mtime));
-        row(L"Erstellt", FormatDate(e.ctime));
-        row(L"Kamera", e.camera);
-        if (!e.source.empty()) row(L"Quelle", e.source);
-        if (e.templateId != UINT32_MAX) row(L"Namensmuster", templDict_.Word(e.templateId));
-        row(L"Ordner", ParentPath(e.path));
-        if (e.offline) row(L"Hinweis", L"Nur online verfügbar – wird nicht gelesen");
+        if (e.kind == Kind::Video && e.durationMs) row(T(L"Dauer"), FormatDuration(e.durationMs));
+        if (e.Doc() == 1 && e.pages) row(T(L"Seiten"), Thousands(e.pages));
+        row(T(L"Aufgenommen"), FormatDate(e.taken));
+        row(T(L"Geändert"), FormatDate(e.mtime));
+        row(T(L"Erstellt"), FormatDate(e.ctime));
+        row(T(L"Kamera"), e.camera);
+        if (!e.source.empty()) row(T(L"Quelle"), T(e.source));
+        if (e.templateId != UINT32_MAX) row(T(L"Namensmuster"), TPattern(templDict_.Word(e.templateId)));
+        row(T(L"Ordner"), ParentPath(e.path));
+        if (e.offline) row(T(L"Hinweis"), T(L"Nur online verfügbar – wird nicht gelesen"));
     } else if (sel.size() > 1) {
         uint64_t bytes = 0;
         size_t n[4] = {0, 0, 0, 0};
@@ -1423,18 +1418,18 @@ void App::PaintInfoPanel(ID2D1DeviceContext* dc, const D2D1_RECT_F& rc, const st
             bytes += entries_[i].size;
             ++n[static_cast<int>(entries_[i].kind)];
         }
-        y += r_.DrawWrapped(Thousands(sel.size()) + L" Elemente ausgewählt", x0, y, w,
+        y += r_.DrawWrapped(Thousands(sel.size()) + T(L" Elemente ausgewählt"), x0, y, w,
                             r_.TextWrap(15, DWRITE_FONT_WEIGHT_SEMI_BOLD), t.text) + 18;
-        row(L"Gesamtgröße", FormatSize(bytes));
-        if (n[1]) row(L"Bilder", Thousands(n[1]));
-        if (n[2]) row(L"Videos", Thousands(n[2]));
-        if (n[0]) row(L"Ordner", Thousands(n[0]));
-        if (n[3]) row(L"Sonstige Dateien", Thousands(n[3]));
+        row(T(L"Gesamtgröße"), FormatSize(bytes));
+        if (n[1]) row(T(L"Bilder"), Thousands(n[1]));
+        if (n[2]) row(T(L"Videos"), Thousands(n[2]));
+        if (n[0]) row(T(L"Ordner"), Thousands(n[0]));
+        if (n[3]) row(T(L"Sonstige Dateien"), Thousands(n[3]));
     } else {
-        y += r_.DrawWrapped(L"Kein Element ausgewählt", x0, y, w, r_.TextWrap(15, DWRITE_FONT_WEIGHT_SEMI_BOLD),
+        y += r_.DrawWrapped(T(L"Kein Element ausgewählt"), x0, y, w, r_.TextWrap(15, DWRITE_FONT_WEIGHT_SEMI_BOLD),
                             t.text) + 18;
-        row(L"Ansicht", collectionsView_ ? std::wstring(L"Alle Sammlungen") : path_);
-        row(L"Elemente", Thousands(visible_.size()));
+        row(T(L"Ansicht"), collectionsView_ ? std::wstring(T(L"Alle Sammlungen")) : path_);
+        row(T(L"Elemente"), Thousands(visible_.size()));
     }
     dc->PopAxisAlignedClip();
 }
@@ -1481,7 +1476,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
     int n = static_cast<int>(visible_.size());
     if (viewer_.pos < 0 || viewer_.pos >= n) {
         // alle Bilder geloescht: Betrachter bleibt offen (Esc/X schliesst)
-        DrawText(dc, L"Keine Bilder mehr in dieser Ansicht.", D2D1::RectF(0, H_ / 2 - 20, W_, H_ / 2 + 20),
+        DrawText(dc, T(L"Keine Bilder mehr in dieser Ansicht."), D2D1::RectF(0, H_ / 2 - 20, W_, H_ / 2 + 20),
                  r_.Text(14, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER), D2D1::ColorF(1, 1, 1, 0.6f));
         D2D1_RECT_F xr = D2D1::RectF(W_ - 48, 0, W_, 44);
         int idx = static_cast<int>(hits_.size());
@@ -1629,7 +1624,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         }
     } else {
         bool failed = fit != fullBmps_.end() && fit->second.failed;
-        DrawText(dc, failed ? L"Bild kann nicht angezeigt werden." : L"Wird geladen …",
+        DrawText(dc, failed ? T(L"Bild kann nicht angezeigt werden.") : T(L"Wird geladen …"),
                  D2D1::RectF(0, H_ / 2 - 20, VW, H_ / 2 + 20),
                  r_.Text(14, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER), dim);
     }
@@ -1696,9 +1691,9 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         dc->FillRectangle(D2D1::RectF(0, 0, W_, ch), r_.Brush(D2D1::ColorF(0, 0, 0, 0.6f)));
         wchar_t gc[2] = {0xE7A8, 0};
         DrawText(dc, gc, D2D1::RectF(16, 0, 40, ch), r_.Icon(15), white);
-        DrawText(dc, L"Zuschneiden", D2D1::RectF(48, 0, 200, ch), r_.Text(14, DWRITE_FONT_WEIGHT_SEMI_BOLD), white);
+        DrawText(dc, T(L"Zuschneiden"), D2D1::RectF(48, 0, 260, ch), r_.Text(14, DWRITE_FONT_WEIGHT_SEMI_BOLD), white);
         IDWriteTextFormat* bf = r_.Text(13, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
-        float sw = r_.MeasureText(L"Speichern", bf) + 36, cw = r_.MeasureText(L"Abbrechen", bf) + 36;
+        float sw = r_.MeasureText(T(L"Speichern"), bf) + 36, cw = r_.MeasureText(T(L"Abbrechen"), bf) + 36;
         D2D1_RECT_F save = D2D1::RectF(W_ - 16 - sw, 10, W_ - 16, ch - 10);
         D2D1_RECT_F cancel = D2D1::RectF(save.left - 8 - cw, 10, save.left - 8, ch - 10);
         int ci = static_cast<int>(hits_.size());
@@ -1706,12 +1701,12 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         int si = static_cast<int>(hits_.size());
         hits_.push_back({save, HitType::CropSave, 0});
         FillRound(dc, cancel, 5, D2D1::ColorF(1, 1, 1, hoverHit_ == ci ? 0.2f : 0.12f));
-        DrawText(dc, L"Abbrechen", cancel, bf, white);
+        DrawText(dc, T(L"Abbrechen"), cancel, bf, white);
         D2D1_COLOR_F sa = accent_;
         if (hoverHit_ == si) sa = D2D1::ColorF(std::min(1.0f, sa.r * 1.15f + 0.05f), std::min(1.0f, sa.g * 1.15f + 0.05f),
                                               std::min(1.0f, sa.b * 1.15f + 0.05f), 1);
         FillRound(dc, save, 5, sa);
-        DrawText(dc, L"Speichern", save, bf, D2D1::ColorF(1, 1, 1, 1));
+        DrawText(dc, T(L"Speichern"), save, bf, D2D1::ColorF(1, 1, 1, 1));
     } else if (viewer_.bar) {
         dc->FillRectangle(D2D1::RectF(0, 0, W_, barH), r_.Brush(D2D1::ColorF(0, 0, 0, 0.45f)));
         r_.DrawWrapped(e.name, 20, (barH - nameH) / 2, nameW, fnw, white);
@@ -1764,7 +1759,7 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
     if (hoverHit_ == bIdx) FillRound(dc, back, 5, t.hover);
     wchar_t gb[2] = {0xE72B, 0};
     DrawText(dc, gb, back, r_.Icon(14), t.text);
-    DrawText(dc, L"Einstellungen", D2D1::RectF(60, 10, W_ - 20, 50), r_.Text(22, DWRITE_FONT_WEIGHT_SEMI_BOLD), t.text);
+    DrawText(dc, T(L"Einstellungen"), D2D1::RectF(60, 10, W_ - 20, 50), r_.Text(22, DWRITE_FONT_WEIGHT_SEMI_BOLD), t.text);
 
     float x0 = 60, x1 = std::min(W_ - 40, 60.0f + 760);
     float y = 72;
@@ -1805,10 +1800,10 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
     };
 
     // --- Darstellung: Farbmodus per Dropdown
-    DrawText(dc, L"Darstellung", D2D1::RectF(x0, y, x1, y + 28), fh, t.text);
+    DrawText(dc, T(L"Darstellung"), D2D1::RectF(x0, y, x1, y + 28), fh, t.text);
     y += 34;
     {
-        D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 8 + 2 * 56);
+        D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 8 + 3 * 56);
         FillRound(dc, rc, 8, t.chip);
         auto dropRow = [&](float ry, const wchar_t* label, HitType type, const std::wstring& cur) {
             DrawText(dc, label, D2D1::RectF(x0 + 20, ry, x1 - 260, ry + 56), r_.Text(13), t.text);
@@ -1822,17 +1817,17 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
             wchar_t g[2] = {0xE70D, 0};
             DrawText(dc, g, D2D1::RectF(dd.right - 30, dd.top, dd.right - 8, dd.bottom), r_.Icon(11), t.text2);
         };
-        static const wchar_t* themes[] = {L"System (Standard)", L"Hell", L"Dunkel"};
-        static const wchar_t* smalls[] = {L"Originalgr\u00f6\u00dfe (100 %)", L"An die Ansicht anpassen"};
-        dropRow(rc.top + 4, L"Farbmodus", HitType::SettingsTheme, themes[std::clamp(settings_.theme, 0, 2)]);
+        dropRow(rc.top + 4, T(L"Sprache"), HitType::SettingsLanguage, LanguageName(settings_.language));
         dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 60), D2D1::Point2F(x1 - 16, rc.top + 60), r_.Brush(t.stroke), 1.0f);
-        dropRow(rc.top + 60, L"Kleine Bilder im Betrachter", HitType::SettingsViewerSmall,
-                smalls[std::clamp(settings_.viewerSmall, 0, 1)]);
+        dropRow(rc.top + 60, T(L"Farbmodus"), HitType::SettingsTheme, T(kThemeNames[std::clamp(settings_.theme, 0, 2)]));
+        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 116), D2D1::Point2F(x1 - 16, rc.top + 116), r_.Brush(t.stroke), 1.0f);
+        dropRow(rc.top + 116, T(L"Kleine Bilder im Betrachter"), HitType::SettingsViewerSmall,
+                T(kViewerSmallNames[std::clamp(settings_.viewerSmall, 0, 1)]));
         y = rc.bottom + 28;
     }
 
     // --- Tastenkombinationen (eigene Seite)
-    DrawText(dc, L"Tastenkombinationen", D2D1::RectF(x0, y, x1, y + 28), fh, t.text);
+    DrawText(dc, T(L"Tastenkombinationen"), D2D1::RectF(x0, y, x1, y + 28), fh, t.text);
     y += 34;
     {
         D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 56);
@@ -1841,7 +1836,7 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
         FillRound(dc, rc, 8, hoverHit_ == idx ? t.chipHover : t.chip);
         wchar_t gk[2] = {0xE765, 0};
         DrawText(dc, gk, D2D1::RectF(x0 + 16, rc.top, x0 + 44, rc.bottom), r_.Icon(16), t.text);
-        DrawText(dc, L"Alle Tastenkombinationen anzeigen", D2D1::RectF(x0 + 56, rc.top, x1 - 50, rc.bottom), r_.Text(13), t.text);
+        DrawText(dc, T(L"Alle Tastenkombinationen anzeigen"), D2D1::RectF(x0 + 56, rc.top, x1 - 50, rc.bottom), r_.Text(13), t.text);
         wchar_t gc[2] = {0xE76C, 0};
         DrawText(dc, gc, D2D1::RectF(x1 - 44, rc.top, x1 - 16, rc.bottom), r_.Icon(13), t.text2);
         y = rc.bottom + 28;
@@ -1854,27 +1849,27 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
     std::wstring exeDir = ExeDir();
     bool portable = _wcsnicmp(dataDir.c_str(), exeDir.c_str(), exeDir.size()) == 0;
     Rows rows = {
-        {L"Datenordner", dataDir},
-        {L"Speicherort", portable ? L"Portabel (neben peek.exe)" : L"Benutzerprofil (lokale Anwendungsdaten)"},
-        {L"Dateien im Index", Thousands(dbStats_.files) + L"  (davon " + Thousands(dbStats_.media) + L" Bilder/Videos, " +
-                                  Thousands(dbStats_.withMeta) + L" mit Metadaten)"},
-        {L"Vorschaubilder", Thousands(dbStats_.thumbs)},
-        {L"Speicherbedarf", L"Index " + FormatSize(dbBytes_) + L"  ·  Vorschaubilder " + FormatSize(thumbBytes_)},
-        {L"Status", indexBusy_ ? L"Indexierung läuft: " + Thousands(indexDone_) + L" / " + Thousands(indexTotal_)
-                               : std::wstring(L"Bereit")}};
-    if (collectionCounts_.empty()) rows.push_back({L"Sammlungen", L"Keine – Ordner in die Seitenleiste ziehen"});
+        {T(L"Datenordner"), dataDir},
+        {T(L"Speicherort"), portable ? T(L"Portabel (neben peek.exe)") : T(L"Benutzerprofil (lokale Anwendungsdaten)")},
+        {T(L"Dateien im Index"), TF(L"{0}  (davon {1} Bilder/Videos, {2} mit Metadaten)",
+                                    {Thousands(dbStats_.files), Thousands(dbStats_.media), Thousands(dbStats_.withMeta)})},
+        {T(L"Vorschaubilder"), Thousands(dbStats_.thumbs)},
+        {T(L"Speicherbedarf"), TF(L"Index {0}  ·  Vorschaubilder {1}", {FormatSize(dbBytes_), FormatSize(thumbBytes_)})},
+        {L"Status", indexBusy_ ? TF(L"Indexierung läuft: {0} / {1}", {Thousands(indexDone_), Thousands(indexTotal_)})
+                               : std::wstring(T(L"Bereit"))}};
+    if (collectionCounts_.empty()) rows.push_back({T(L"Sammlungen"), T(L"Keine – Ordner in die Seitenleiste ziehen")});
     for (size_t i = 0; i < collectionCounts_.size(); ++i)
-        rows.push_back({i == 0 ? L"Sammlungen" : L"",
-                        collectionCounts_[i].first + L"  ·  " + Thousands(collectionCounts_[i].second) + L" Dateien"});
+        rows.push_back({i == 0 ? T(L"Sammlungen") : L"",
+                        collectionCounts_[i].first + L"  ·  " + Thousands(collectionCounts_[i].second) + T(L" Dateien")});
     D2D1_RECT_F ic = card(rows, 60);
     float bx = ic.left + 20, by = ic.bottom + 12;
-    bx += button(HitType::SettingsOpenData, L"Datenordner öffnen", bx, by, false) + 10;
-    bx += button(HitType::SettingsRescan, L"Neu indexieren", bx, by, false) + 10;
-    button(HitType::SettingsDeleteIndex, L"Index löschen", bx, by, true);
+    bx += button(HitType::SettingsOpenData, T(L"Datenordner öffnen"), bx, by, false) + 10;
+    bx += button(HitType::SettingsRescan, T(L"Neu indexieren"), bx, by, false) + 10;
+    button(HitType::SettingsDeleteIndex, T(L"Index löschen"), bx, by, true);
     y = by + 32 + 16 + 28;
 
     // --- Ueber peek (mit App-Symbol)
-    DrawText(dc, L"Über peek", D2D1::RectF(x0, y, x1, y + 28), fh, t.text);
+    DrawText(dc, T(L"Über peek"), D2D1::RectF(x0, y, x1, y + 28), fh, t.text);
     y += 34;
     D2D1_RECT_F about = D2D1::RectF(x0, y, x1, y + 104);
     FillRound(dc, about, 8, t.chip);
@@ -1883,7 +1878,7 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
     r_.DrawSvgResource(dark_ ? 201 : 202, D2D1::RectF(about.left + 8, about.top + 12, about.left + 8 + logoW, about.top + 12 + logoH));
     float tx = about.left + 8 + logoW + 12;
     std::wstring about1 = std::wstring(L"Version ") + PEEK_VERSION + L"  \u00b7  Build " + Utf8ToWide(__DATE__);
-    std::wstring about2 = L"Nativ \u00b7 portabel \u00b7 ohne Netzwerk- und Internetfunktionen\n" + std::wstring(DecoderSandboxText());
+    std::wstring about2 = T(L"Nativ \u00b7 portabel \u00b7 ohne Netzwerk- und Internetfunktionen") + std::wstring(L"\n") + DecoderSandboxText();
     IDWriteTextFormat* fa = r_.TextWrap(12.5f);
     float aw = about.right - 20 - tx;
     float ah = r_.MeasureWrapped(about1 + L"\n" + about2, fa, aw);
@@ -1898,63 +1893,63 @@ void App::PaintShortcuts(ID2D1DeviceContext* dc) {
 
     struct Group { const wchar_t* title; std::vector<std::pair<std::wstring, std::wstring>> rows; };
     static const std::vector<Group> groups = {
-        {L"Allgemein",
-         {{L"Strg+F / Tippen", L"Suchen"},
-          {L"Strg+,", L"Einstellungen"},
-          {L"F11", L"Vollbild ein/aus"},
-          {L"F9", L"Seitenleiste ein/aus"},
-          {L"Strg+I", L"Info-Bereich ein/aus"},
-          {L"F5", L"Aktualisieren"},
-          {L"Maustaste Zurück / Vor", L"Zurück / Vor (in den Einstellungen: schließen)"}}},
-        {L"Navigation und Auswahl",
-         {{L"Alt+← / Rücktaste", L"Zurück"},
-          {L"Alt+→", L"Vor"},
-          {L"Alt+↑", L"Übergeordneter Ordner"},
-          {L"Pfeiltasten", L"Fokus bewegen"},
-          {L"Bild↑ / Bild↓", L"Seitenweise bewegen"},
-          {L"Pos1 / Ende", L"Erstes / letztes Element"},
-          {L"Umschalt+Pfeiltasten", L"Auswahl erweitern"},
-          {L"Strg+Leertaste", L"Element zur Auswahl hinzufügen oder entfernen"},
-          {L"Strg+A", L"Alles auswählen"},
-          {L"Esc", L"Auswahl aufheben"},
-          {L"Enter / Doppelklick", L"Öffnen (Ordner, Bildbetrachter, Standard-App)"},
-          {L"Leertaste", L"Bild im Betrachter öffnen"},
-          {L"Kontextmenü-Taste", L"Kontextmenü"}}},
-        {L"Dateien",
-         {{L"Strg+C", L"Kopieren"},
-          {L"Strg+Umschalt+C", L"Pfad kopieren"},
-          {L"Strg+V", L"Einfügen"},
-          {L"F2", L"Umbenennen"},
-          {L"Entf", L"In den Papierkorb"},
-          {L"Strg+E", L"Im Explorer zeigen"},
-          {L"Alt+Enter", L"Eigenschaften"}}},
-        {L"Ansicht",
-         {{L"Strg+1 / Strg+2 / Strg+3", L"Vorschaubilder / Liste / Bilderwolke"},
-          {L"Strg+Plus / Strg+Minus", L"Vorschaubilder größer / kleiner"},
-          {L"Strg+Mausrad", L"Vorschaubildgröße stufenlos"},
-          {L"Strg+0", L"Standardgröße"},
-          {L"Strg+R", L"Unterordner ein/aus"}}},
-        {L"Suchfeld",
-         {{L"Enter / ↓", L"Zu den Ergebnissen"},
-          {L"Esc", L"Suche leeren"},
-          {L"Strg+A / Doppelklick", L"Gesamten Text markieren"}}},
-        {L"Bilder vergleichen",
-         {{L"Tab / M", L"Nebeneinander / übereinander"},
-          {L"Mausrad / Ziehen", L"Zoomen / verschieben (beide Bilder)"},
-          {L"0 / Doppelklick", L"Einpassen"},
-          {L"Esc", L"Schließen"}}},
-        {L"Bildbetrachter",
-         {{L"← / →", L"Vorheriges / nächstes Bild"},
-          {L"Leertaste / Bild↓", L"Nächstes Bild"},
-          {L"Pos1 / Ende", L"Erstes / letztes Bild"},
-          {L"Plus / Minus / Mausrad", L"Zoomen"},
-          {L"0 / 1 / Doppelklick", L"Einpassen / 100 % / umschalten"},
-          {L"R / Umschalt+R", L"Nach rechts / links drehen"},
-          {L"I", L"Info-Bereich ein/aus"},
-          {L"Entf", L"In den Papierkorb"},
-          {L"Strg+C / Strg+Umschalt+C", L"Kopieren / Pfad kopieren"},
-          {L"Strg+E", L"Im Explorer zeigen"},
-          {L"Esc / Enter / Rücktaste", L"Betrachter schließen"}}},
+        {N_(L"Allgemein"),
+         {{N_(L"Strg+F / Tippen"), N_(L"Suchen")},
+          {N_(L"Strg+,"), N_(L"Einstellungen")},
+          {L"F11", N_(L"Vollbild ein/aus")},
+          {L"F9", N_(L"Seitenleiste ein/aus")},
+          {N_(L"Strg+I"), N_(L"Info-Bereich ein/aus")},
+          {L"F5", N_(L"Aktualisieren")},
+          {N_(L"Maustaste Zurück / Vor"), N_(L"Zurück / Vor (in den Einstellungen: schließen)")}}},
+        {N_(L"Navigation und Auswahl"),
+         {{N_(L"Alt+← / Rücktaste"), N_(L"Zurück")},
+          {L"Alt+→", N_(L"Vor")},
+          {L"Alt+↑", N_(L"Übergeordneter Ordner")},
+          {N_(L"Pfeiltasten"), N_(L"Fokus bewegen")},
+          {N_(L"Bild↑ / Bild↓"), N_(L"Seitenweise bewegen")},
+          {N_(L"Pos1 / Ende"), N_(L"Erstes / letztes Element")},
+          {N_(L"Umschalt+Pfeiltasten"), N_(L"Auswahl erweitern")},
+          {N_(L"Strg+Leertaste"), N_(L"Element zur Auswahl hinzufügen oder entfernen")},
+          {N_(L"Strg+A"), N_(L"Alles auswählen")},
+          {L"Esc", N_(L"Auswahl aufheben")},
+          {N_(L"Enter / Doppelklick"), N_(L"Öffnen (Ordner, Bildbetrachter, Standard-App)")},
+          {N_(L"Leertaste"), N_(L"Bild im Betrachter öffnen")},
+          {N_(L"Kontextmenü-Taste"), N_(L"Kontextmenü")}}},
+        {N_(L"Dateien"),
+         {{N_(L"Strg+C"), N_(L"Kopieren")},
+          {N_(L"Strg+Umschalt+C"), N_(L"Pfad kopieren")},
+          {N_(L"Strg+V"), N_(L"Einfügen")},
+          {L"F2", N_(L"Umbenennen")},
+          {N_(L"Entf"), N_(L"In den Papierkorb")},
+          {N_(L"Strg+E"), N_(L"Im Explorer zeigen")},
+          {L"Alt+Enter", N_(L"Eigenschaften")}}},
+        {N_(L"Ansicht"),
+         {{N_(L"Strg+1 / Strg+2 / Strg+3"), N_(L"Vorschaubilder / Liste / Bilderwolke")},
+          {N_(L"Strg+Plus / Strg+Minus"), N_(L"Vorschaubilder größer / kleiner")},
+          {N_(L"Strg+Mausrad"), N_(L"Vorschaubildgröße stufenlos")},
+          {N_(L"Strg+0"), N_(L"Standardgröße")},
+          {N_(L"Strg+R"), N_(L"Unterordner ein/aus")}}},
+        {N_(L"Suchfeld"),
+         {{L"Enter / ↓", N_(L"Zu den Ergebnissen")},
+          {L"Esc", N_(L"Suche leeren")},
+          {N_(L"Strg+A / Doppelklick"), N_(L"Gesamten Text markieren")}}},
+        {N_(L"Bilder vergleichen"),
+         {{L"Tab / M", N_(L"Nebeneinander / übereinander")},
+          {N_(L"Mausrad / Ziehen"), N_(L"Zoomen / verschieben (beide Bilder)")},
+          {N_(L"0 / Doppelklick"), N_(L"Einpassen")},
+          {L"Esc", N_(L"Schließen")}}},
+        {N_(L"Bildbetrachter"),
+         {{L"← / →", N_(L"Vorheriges / nächstes Bild")},
+          {N_(L"Leertaste / Bild↓"), N_(L"Nächstes Bild")},
+          {N_(L"Pos1 / Ende"), N_(L"Erstes / letztes Bild")},
+          {N_(L"Plus / Minus / Mausrad"), N_(L"Zoomen")},
+          {N_(L"0 / 1 / Doppelklick"), N_(L"Einpassen / 100 % / umschalten")},
+          {N_(L"R / Umschalt+R"), N_(L"Nach rechts / links drehen")},
+          {L"I", N_(L"Info-Bereich ein/aus")},
+          {N_(L"Entf"), N_(L"In den Papierkorb")},
+          {N_(L"Strg+C / Strg+Umschalt+C"), N_(L"Kopieren / Pfad kopieren")},
+          {N_(L"Strg+E"), N_(L"Im Explorer zeigen")},
+          {N_(L"Esc / Enter / Rücktaste"), N_(L"Betrachter schließen")}}},
     };
 
     float sy = settingsScroll_;
@@ -1966,7 +1961,7 @@ void App::PaintShortcuts(ID2D1DeviceContext* dc) {
     IDWriteTextFormat* fs = r_.Text(12, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
     const float rowH = 40, keyW = 300;
     for (auto& g : groups) {
-        DrawText(dc, g.title, D2D1::RectF(x0, y, x1, y + 28), fh, t.text);
+        DrawText(dc, T(g.title), D2D1::RectF(x0, y, x1, y + 28), fh, t.text);
         y += 34;
         D2D1_RECT_F card = D2D1::RectF(x0, y, x1, y + 8 + rowH * g.rows.size());
         FillRound(dc, card, 8, t.chip);
@@ -1975,7 +1970,7 @@ void App::PaintShortcuts(ID2D1DeviceContext* dc) {
             if (i > 0)
                 dc->DrawLine(D2D1::Point2F(x0 + 16, ry), D2D1::Point2F(x1 - 16, ry), r_.Brush(t.stroke), 1.0f);
             // Tasten als kleine Tastenkappen; Alternativen mit " / " getrennt
-            const std::wstring& keys = g.rows[i].first;
+            const std::wstring keys = T(g.rows[i].first);
             float kx = x0 + 16;
             size_t s = 0;
             while (s <= keys.size()) {
@@ -1992,7 +1987,7 @@ void App::PaintShortcuts(ID2D1DeviceContext* dc) {
                 kx += 16;
                 s = e + 3;
             }
-            DrawText(dc, g.rows[i].second, D2D1::RectF(std::max(x0 + 16 + keyW, kx + 16), ry, x1 - 16, ry + rowH), fd, t.text2);
+            DrawText(dc, T(g.rows[i].second), D2D1::RectF(std::max(x0 + 16 + keyW, kx + 16), ry, x1 - 16, ry + rowH), fd, t.text2);
             ry += rowH;
         }
         y = card.bottom + 28;
@@ -2008,7 +2003,7 @@ void App::PaintShortcuts(ID2D1DeviceContext* dc) {
     if (hoverHit_ == bIdx) FillRound(dc, back, 5, t.hover);
     wchar_t gb[2] = {0xE72B, 0};
     DrawText(dc, gb, back, r_.Icon(14), t.text);
-    DrawText(dc, L"Tastenkombinationen", D2D1::RectF(60, 10, W_ - 20, 50), r_.Text(22, DWRITE_FONT_WEIGHT_SEMI_BOLD), t.text);
+    DrawText(dc, T(L"Tastenkombinationen"), D2D1::RectF(60, 10, W_ - 20, 50), r_.Text(22, DWRITE_FONT_WEIGHT_SEMI_BOLD), t.text);
 
     // Bildlaufleiste
     if (settingsContentH_ > H_) {
@@ -2056,9 +2051,9 @@ void App::PaintSheet(ID2D1DeviceContext* dc) {
     dc->FillRectangle(D2D1::RectF(0, 0, W_, toolH), r_.Brush(t.status));
     wchar_t gi[2] = {0xECA5, 0};
     DrawText(dc, gi, D2D1::RectF(16, 0, 40, toolH), r_.Icon(15), t.text);
-    DrawText(dc, L"Kontaktabzug", D2D1::RectF(48, 0, 220, toolH), r_.Text(15, DWRITE_FONT_WEIGHT_SEMI_BOLD), t.text);
-    std::wstring cnt = Thousands(on.size()) + L" von " + Thousands(s.items.size()) + L" Bildern  ·  " +
-                       Thousands(pages) + (pages == 1 ? L" Seite" : L" Seiten");
+    DrawText(dc, T(L"Kontaktabzug"), D2D1::RectF(48, 0, 220, toolH), r_.Text(15, DWRITE_FONT_WEIGHT_SEMI_BOLD), t.text);
+    std::wstring cnt = TF(L"{0} von {1} Bildern", {Thousands(on.size()), Thousands(s.items.size())}) + L"  ·  " +
+                       Thousands(pages) + (pages == 1 ? T(L" Seite") : T(L" Seiten"));
     DrawText(dc, cnt, D2D1::RectF(170, 0, W_ / 2 + 120, toolH), r_.Text(12.5f), t.text2);
     IDWriteTextFormat* bf = r_.Text(13, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
     auto toolButton = [&](HitType type, const std::wstring& label, float right, bool primary) {
@@ -2076,16 +2071,16 @@ void App::PaintSheet(ID2D1DeviceContext* dc) {
     };
     float rx = W_ - 16;
     if (s.busy) {
-        rx = toolButton(HitType::SheetCancel, L"Abbrechen", rx, false) - 16;
+        rx = toolButton(HitType::SheetCancel, T(L"Abbrechen"), rx, false) - 16;
         float pw = 200;
         D2D1_RECT_F bar = D2D1::RectF(rx - pw, toolH / 2 - 3, rx, toolH / 2 + 3);
         FillRound(dc, bar, 3, t.chip);
         FillRound(dc, D2D1::RectF(bar.left, bar.top, bar.left + pw * s.progress / 1000.0f, bar.bottom), 3, accent_);
-        DrawText(dc, L"PDF wird erstellt …", D2D1::RectF(rx - pw - 170, 0, rx - pw - 12, toolH),
+        DrawText(dc, T(L"PDF wird erstellt …"), D2D1::RectF(rx - pw - 170, 0, rx - pw - 12, toolH),
                  r_.Text(12.5f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING), t.text2);
     } else {
-        rx = toolButton(HitType::SheetCreate, L"PDF erstellen …", rx, true) - 8;
-        toolButton(HitType::SheetCancel, L"Abbrechen", rx, false);
+        rx = toolButton(HitType::SheetCreate, T(L"PDF erstellen …"), rx, true) - 8;
+        toolButton(HitType::SheetCancel, T(L"Abbrechen"), rx, false);
     }
 
     // --- Optionen (wie die Filterleiste)
@@ -2131,16 +2126,16 @@ void App::PaintSheet(ID2D1DeviceContext* dc) {
         btn(plus, 0xE710);
         ox += 12;
     };
-    chip(HitType::SheetOrient, settings_.sheetLandscape ? L"A4 Querformat" : L"A4 Hochformat", false, true,
+    chip(HitType::SheetOrient, settings_.sheetLandscape ? T(L"A4 Querformat") : T(L"A4 Hochformat"), false, true,
          settings_.sheetLandscape ? 0xE7AD : 0xE7C3, false);
     ox += 6;
-    stepper(L"Spalten", settings_.sheetCols, HitType::SheetColsMinus, HitType::SheetColsPlus);
-    stepper(L"Zeilen", settings_.sheetRows, HitType::SheetRowsMinus, HitType::SheetRowsPlus);
-    chip(HitType::SheetNames, L"Dateinamen", settings_.sheetNames, true, settings_.sheetNames ? 0xE73E : 0, false);
-    chip(HitType::SheetExts, L"Dateiendungen", settings_.sheetNames && settings_.sheetExts, settings_.sheetNames,
+    stepper(T(L"Spalten"), settings_.sheetCols, HitType::SheetColsMinus, HitType::SheetColsPlus);
+    stepper(T(L"Zeilen"), settings_.sheetRows, HitType::SheetRowsMinus, HitType::SheetRowsPlus);
+    chip(HitType::SheetNames, T(L"Dateinamen"), settings_.sheetNames, true, settings_.sheetNames ? 0xE73E : 0, false);
+    chip(HitType::SheetExts, T(L"Dateiendungen"), settings_.sheetNames && settings_.sheetExts, settings_.sheetNames,
          settings_.sheetNames && settings_.sheetExts ? 0xE73E : 0, false);
-    static const wchar_t* qn[] = {L"Qualität: Klein", L"Qualität: Mittel", L"Qualität: Hoch"};
-    chip(HitType::SheetQuality, qn[std::clamp(settings_.sheetQuality, 0, 2)], false, true, 0, true);
+    static const wchar_t* qn[] = {N_(L"Qualität: Klein"), N_(L"Qualität: Mittel"), N_(L"Qualität: Hoch")};
+    chip(HitType::SheetQuality, T(qn[std::clamp(settings_.sheetQuality, 0, 2)]), false, true, 0, true);
 
     // --- Seite
     SheetOptions so;
@@ -2184,7 +2179,7 @@ void App::PaintSheet(ID2D1DeviceContext* dc) {
         if (!s.editing && hoverHit_ == idx) FillRound(dc, hr, 4, D2D1::ColorF(0, 0, 0, 0.05f));
         if (s.editing) dc->DrawRoundedRectangle(D2D1::RoundedRect(hr, 4, 4), r_.Brush(WithAlpha(accent_, 0.7f)), 1.0f);
         if (text.empty() && !s.editing) {
-            std::wstring ph2 = L"Überschrift eingeben";
+            std::wstring ph2 = T(L"Überschrift eingeben");
             float w2 = fr.Width(ph2, size);
             glyphText(fr, ph2, size, page.left + (g.header.x + g.header.w / 2) * k - w2 / 2, base, D2D1::ColorF(0, 0, 0, 0.35f));
         } else {
@@ -2352,10 +2347,10 @@ void App::PaintAtlas(ID2D1DeviceContext* dc) {
     wchar_t gi[2] = {0xE8A9, 0};
     DrawText(dc, gi, D2D1::RectF(16, 0, 40, toolH), r_.Icon(15), t.text);
     IDWriteTextFormat* tf = r_.Text(15, DWRITE_FONT_WEIGHT_SEMI_BOLD);
-    DrawText(dc, L"Kacheltextur", D2D1::RectF(48, 0, 220, toolH), tf, t.text);
-    float tx = 48 + r_.MeasureText(L"Kacheltextur", tf) + 16;
+    DrawText(dc, T(L"Kacheltextur"), D2D1::RectF(48, 0, 220, toolH), tf, t.text);
+    float tx = 48 + r_.MeasureText(T(L"Kacheltextur"), tf) + 16;
     std::wstring folderName = FileNameOf(a.folder);
-    std::wstring cnt = (folderName.empty() ? a.folder : folderName) + L"  ·  " + Thousands(n) + (n == 1 ? L" Bild" : L" Bilder");
+    std::wstring cnt = (folderName.empty() ? a.folder : folderName) + L"  ·  " + Thousands(n) + (n == 1 ? T(L" Bild") : T(L" Bilder"));
     IDWriteTextFormat* bf = r_.Text(13, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
     auto toolButton = [&](HitType type, const std::wstring& label, float right, bool primary, bool enabled) {
         float w = r_.MeasureText(label, bf) + 36;
@@ -2373,17 +2368,17 @@ void App::PaintAtlas(ID2D1DeviceContext* dc) {
     };
     float rx = W_ - 16;
     if (a.busy) {
-        rx = toolButton(HitType::AtlasCancel, L"Abbrechen", rx, false, true) - 16;
+        rx = toolButton(HitType::AtlasCancel, T(L"Abbrechen"), rx, false, true) - 16;
         float pw = 200;
         D2D1_RECT_F bar = D2D1::RectF(rx - pw, toolH / 2 - 3, rx, toolH / 2 + 3);
         FillRound(dc, bar, 3, t.chip);
         FillRound(dc, D2D1::RectF(bar.left, bar.top, bar.left + pw * a.progress / 1000.0f, bar.bottom), 3, accent_);
-        DrawText(dc, L"Textur wird erstellt …", D2D1::RectF(rx - pw - 190, 0, rx - pw - 12, toolH),
+        DrawText(dc, T(L"Textur wird erstellt …"), D2D1::RectF(rx - pw - 190, 0, rx - pw - 12, toolH),
                  r_.Text(12.5f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING), t.text2);
         rx -= pw + 190;
     } else {
-        rx = toolButton(HitType::AtlasCreate, L"PNG erstellen …", rx, true, valid) - 8;
-        rx = toolButton(HitType::AtlasCancel, L"Abbrechen", rx, false, true);
+        rx = toolButton(HitType::AtlasCreate, T(L"PNG erstellen …"), rx, true, valid) - 8;
+        rx = toolButton(HitType::AtlasCancel, T(L"Abbrechen"), rx, false, true);
     }
     DrawText(dc, cnt, D2D1::RectF(tx, 0, std::max(tx, rx - 16), toolH), r_.Text(12.5f), t.text2);
 
@@ -2409,29 +2404,30 @@ void App::PaintAtlas(ID2D1DeviceContext* dc) {
         btn(plus, 0xE710, plusOn && !a.busy);
         ox += 16;
     };
-    stepper(L"Spalten", cols, HitType::AtlasColsMinus, cols > 1, HitType::AtlasColsPlus, cols < n);
-    stepper(L"Zeilen", rows, HitType::AtlasRowsMinus, rows > 1, HitType::AtlasRowsPlus, rows < n);
+    stepper(T(L"Spalten"), cols, HitType::AtlasColsMinus, cols > 1, HitType::AtlasColsPlus, cols < n);
+    stepper(T(L"Zeilen"), rows, HitType::AtlasRowsMinus, rows > 1, HitType::AtlasRowsPlus, rows < n);
     ox += 8;
     if (!valid) {
         wchar_t wg[2] = {0xE7BA, 0};
         DrawText(dc, wg, D2D1::RectF(ox, oy, ox + 20, oy + oh), r_.Icon(13), t.danger);
-        DrawText(dc, a.problem.empty() ? std::wstring(L"Keine Textur möglich.") : a.problem,
+        DrawText(dc, a.problem.empty() ? std::wstring(T(L"Keine Textur möglich.")) : a.problem,
                  D2D1::RectF(ox + 26, oy, W_ - 16, oy + oh), of, t.danger);
     } else {
         IDWriteTextFormat* sf = r_.Text(13, DWRITE_FONT_WEIGHT_SEMI_BOLD);
-        std::wstring size = L"Texturgröße: " + Thousands(texW) + L" × " + Thousands(texH) + L" px";
+        std::wstring size = TF(L"Texturgröße: {0} × {1} px", {Thousands(texW), Thousands(texH)});
         DrawText(dc, size, D2D1::RectF(ox, oy, W_ - 16, oy + oh), sf, t.text);
         ox += r_.MeasureText(size, sf) + 4;
         int empty = cols * rows - n;
-        std::wstring det = L"  ·  " + Thousands(n) + (n == 1 ? L" Bild à " : L" Bilder à ") + Thousands(a.info.w) + L" × " +
-                           Thousands(a.info.h) + L"  ·  " + a.info.label;
-        if (empty > 0) det += L"  ·  " + Thousands(empty) + (empty == 1 ? L" leeres Feld" : L" leere Felder");
+        std::initializer_list<std::wstring> dims = {Thousands(n), Thousands(a.info.w), Thousands(a.info.h)};
+        std::wstring det = L"  ·  " + (n == 1 ? TF(L"{0} Bild à {1} × {2}", dims) : TF(L"{0} Bilder à {1} × {2}", dims)) +
+                           L"  ·  " + a.info.label;
+        if (empty > 0) det += L"  ·  " + Thousands(empty) + (empty == 1 ? T(L" leeres Feld") : T(L" leere Felder"));
         DrawText(dc, det, D2D1::RectF(ox, oy, W_ - 16, oy + oh), of, t.text2);
         ox += r_.MeasureText(det, of) + 16;
         if (texW > 16384 || texH > 16384) {
             wchar_t wg[2] = {0xE7BA, 0};
             DrawText(dc, wg, D2D1::RectF(ox, oy, ox + 20, oy + oh), r_.Icon(13), t.text2);
-            DrawText(dc, L"Größer als 16.384 px – nicht jedes Programm lädt so große Texturen.",
+            DrawText(dc, T(L"Größer als 16.384 px – nicht jedes Programm lädt so große Texturen."),
                      D2D1::RectF(ox + 24, oy, W_ - 16, oy + oh), of, t.text2);
         }
     }
@@ -2487,8 +2483,9 @@ void App::PaintAtlas(ID2D1DeviceContext* dc) {
     dc->DrawRectangle(D2D1::RectF(tex.left - 0.5f, tex.top - 0.5f, tex.right + 0.5f, tex.bottom + 0.5f), r_.Brush(t.stroke), 1.0f);
     if (a.hover >= 0 && a.hover < n) {
         dc->DrawRectangle(hoverRc, r_.Brush(accent_), 2.0f);
-        std::wstring label = L"Nr. " + Thousands(a.hover + 1) + L"  ·  " + a.items[a.hover].name + L"  ·  Spalte " +
-                             std::to_wstring(a.hover % cols + 1) + L", Zeile " + std::to_wstring(a.hover / cols + 1) + L"  ·  x " +
+        std::wstring label = TF(L"Nr. {0}", {Thousands(a.hover + 1)}) + L"  ·  " + a.items[a.hover].name + L"  ·  " +
+                             TF(L"Spalte {0}, Zeile {1}", {std::to_wstring(a.hover % cols + 1), std::to_wstring(a.hover / cols + 1)}) +
+                             L"  ·  x " +
                              Thousands(static_cast<uint64_t>(a.hover % cols) * a.info.w) + L", y " +
                              Thousands(static_cast<uint64_t>(a.hover / cols) * a.info.h);
         DrawText(dc, label, D2D1::RectF(16, H_ - 40, W_ - 16, H_ - 8),

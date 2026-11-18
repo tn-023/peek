@@ -18,15 +18,13 @@ std::wstring Stem(const std::wstring& name) {
 std::wstring Today() {
     SYSTEMTIME st;
     GetLocalTime(&st);
-    wchar_t b[16];
-    swprintf_s(b, L"%02u.%02u.%04u", st.wDay, st.wMonth, st.wYear);
-    return b;
+    return FormatDay(st.wYear, st.wMonth, st.wDay);
 }
 std::wstring SafeFileName(std::wstring s) {
     for (auto& c : s)
         if (c < 32 || wcschr(L"\\/:*?\"<>|", c)) c = L'-';
     while (!s.empty() && (s.back() == L' ' || s.back() == L'.')) s.pop_back();
-    return s.empty() ? std::wstring(L"Kontaktabzug") : s;
+    return s.empty() ? std::wstring(T(L"Kontaktabzug")) : s;
 }
 }  // namespace
 
@@ -70,7 +68,7 @@ void App::OpenContactSheet(const std::vector<std::wstring>& paths) {
         }
     }
     if (items.empty()) {
-        SetStatus(L"Keine Bilder für einen Kontaktabzug ausgewählt.");
+        SetStatus(T(L"Keine Bilder für einen Kontaktabzug ausgewählt."));
         return;
     }
     if (!sheetFontR_) {
@@ -79,7 +77,7 @@ void App::OpenContactSheet(const std::vector<std::wstring>& paths) {
         if (!sheetFontR_->Load(false) || !sheetFontB_->Load(true)) {
             sheetFontR_.reset();
             sheetFontB_.reset();
-            SetStatus(L"Schrift Segoe UI nicht gefunden – Kontaktabzug nicht möglich.");
+            SetStatus(T(L"Schrift Segoe UI nicht gefunden – Kontaktabzug nicht möglich."));
             return;
         }
     }
@@ -90,7 +88,7 @@ void App::OpenContactSheet(const std::vector<std::wstring>& paths) {
         if (_wcsicmp(ParentPath(it.e.path).c_str(), folder.c_str()) != 0) { same = false; break; }
     if (paths.size() == 1 && DirectoryExists(paths.front())) { folder = paths.front(); same = true; }
     std::wstring name = same ? folder.substr(folder.find_last_of(L'\\') + 1) : std::wstring();
-    if (name.empty() || name.back() == L':') name = L"Kontaktabzug";
+    if (name.empty() || name.back() == L':') name = T(L"Kontaktabzug");
 
     if (viewer_.open) CloseViewer();
     sheet_.items = std::move(items);
@@ -162,12 +160,12 @@ void App::SheetMouseDown(float x, float y) {
     case HitType::SheetNames: settings_.sheetNames = !settings_.sheetNames; settings_.Save(); break;
     case HitType::SheetExts: if (settings_.sheetNames) { settings_.sheetExts = !settings_.sheetExts; settings_.Save(); } break;
     case HitType::SheetQuality: {
-        static const wchar_t* n[] = {L"Klein (150 dpi)", L"Mittel (220 dpi)", L"Hoch (300 dpi)"};
+        static const wchar_t* n[] = {N_(L"Klein (150 dpi)"), N_(L"Mittel (220 dpi)"), N_(L"Hoch (300 dpi)")};
         std::vector<MenuItem> items;
         for (int i = 0; i < 3; ++i) {
             MenuItem m;
             m.id = 100 + i;
-            m.text = n[i];
+            m.text = T(n[i]);
             m.checked = settings_.sheetQuality == i;
             items.push_back(m);
         }
@@ -436,7 +434,7 @@ void App::SheetCreatePdf() {
     auto& s = sheet_;
     std::vector<int> on = SheetOnItems();
     if (on.empty()) {
-        SetStatus(L"Keine Bilder angehakt.");
+        SetStatus(T(L"Keine Bilder angehakt."));
         return;
     }
     s.editing = false;
@@ -445,11 +443,11 @@ void App::SheetCreatePdf() {
     std::wstring out;
     ComPtr<IFileSaveDialog> dlg;
     if (SUCCEEDED(CoCreateInstance(CLSID_FileSaveDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) {
-        COMDLG_FILTERSPEC spec[] = {{L"PDF-Dokument", L"*.pdf"}};
+        COMDLG_FILTERSPEC spec[] = {{T(L"PDF-Dokument"), L"*.pdf"}};
         dlg->SetFileTypes(1, spec);
         dlg->SetDefaultExtension(L"pdf");
         dlg->SetFileName(name.c_str());
-        dlg->SetTitle(L"Kontaktabzug speichern");
+        dlg->SetTitle(T(L"Kontaktabzug speichern"));
         DWORD opt = 0;
         dlg->GetOptions(&opt);
         dlg->SetOptions(opt | FOS_OVERWRITEPROMPT | FOS_FORCEFILESYSTEM);
@@ -466,7 +464,7 @@ void App::SheetCreatePdf() {
     }
     if (out.empty()) return;
     if (!IsLocalDrivePath(out)) {
-        SetStatus(L"Nur lokale Laufwerke werden unterstützt – Netzlaufwerke sind ausgeschlossen.");
+        SetStatus(T(L"Nur lokale Laufwerke werden unterstützt – Netzlaufwerke sind ausgeschlossen."));
         return;
     }
 
@@ -518,11 +516,11 @@ void App::SheetDone() {
         std::wstring nm = s.savedPath.substr(s.savedPath.find_last_of(L'\\') + 1);
         s.open = false;
         s.items.clear();
-        SetStatus(L"Kontaktabzug gespeichert: " + nm);
+        SetStatus(T(L"Kontaktabzug gespeichert: ") + nm);
         OpenWithDefaultApp(hwnd_, s.savedPath);   // fertiges PDF in der Standard-App zeigen
     } else {
         s.savedPath.clear();
-        if (!s.cancel) SetStatus(s.error.empty() ? std::wstring(L"PDF konnte nicht erstellt werden.") : s.error);
+        if (!s.cancel) SetStatus(s.error.empty() ? std::wstring(T(L"PDF konnte nicht erstellt werden.")) : s.error);
         if (s.cancel && !s.open) {}
     }
     InvalidateRect(hwnd_, nullptr, FALSE);

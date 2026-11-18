@@ -1,5 +1,6 @@
 #pragma once
 // Hauptfenster von peek: Zustand, Navigation, Filter, Darstellung und Eingabe.
+#include "core/lang.h"
 #include "core/patterns.h"
 #include "db.h"
 #include "dragdrop.h"
@@ -17,6 +18,11 @@
 
 namespace peek {
 
+// Auswahllisten der Einstellungen (deutsche Schluessel, Anzeige mit T())
+extern const wchar_t* const kThemeNames[3];
+extern const wchar_t* const kViewerSmallNames[2];
+const wchar_t* LanguageName(int setting);   // 0 wie Windows, 1 Deutsch, 2 English
+
 enum class HitType {
     None, SidebarToggle, NavBack, NavForward, NavUp, Refresh, Crumb, CrumbChevron, Search, SearchClear,
     Chip, Term, ResetFilters, SidebarItem, SidebarAdd, SettingsButton, InfoToggle, ZoomSlider,
@@ -24,7 +30,7 @@ enum class HitType {
     ViewerClose, ViewerPrev, ViewerNext, ViewerInfo, ViewerCrop, CropSave, CropCancel,
     ClearBookmarks, SearchHistItem, SearchHistDel, SearchHistClear, SearchParam,
     ViewCloud,
-    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall,
+    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage,
     SheetCancel, SheetCreate, SheetOrient, SheetColsMinus, SheetColsPlus, SheetRowsMinus, SheetRowsPlus, SheetNames,
     SheetExts, SheetQuality, SheetPrev, SheetNext, SheetHeadline, SheetCheck, SheetCell, SheetStripCheck, SheetStrip,
     SheetOpenPdf, BookmarkSheet,
@@ -168,6 +174,7 @@ private:
     void DeleteSelection();
     void ToggleFullscreen();
     void ApplyTheme();
+    void ApplyLanguage();   // Sprache aus Einstellung bzw. --lang= setzen und Oberflaeche neu aufbauen
     DWORD OnDragOver(const std::vector<std::wstring>& paths, POINT screen, DWORD keys, DWORD allowed, bool leave);
     DWORD OnDrop(const std::vector<std::wstring>& paths, POINT screen, DWORD keys, DWORD allowed);
     DWORD CrumbDropEffect(const std::vector<std::wstring>& paths, const std::wstring& target, DWORD keys,
@@ -515,6 +522,7 @@ private:
     std::wstring pendingDateRange_;   // Dokumentation: "JJJJ-MM-TT..JJJJ-MM-TT"
     bool pendingDatePicker_ = false;
     float pendingCloudZoom_ = 0;
+    int langOverride_ = -1;      // --lang=de|en: 1 Deutsch, 2 Englisch (nur fuer diesen Start)
     bool pendingCrop_ = false;   // --crop: Betrachter gleich im Zuschnitt-Modus (Dokumentation)
     std::vector<std::wstring> keepSelection_;
     float keepScroll_ = -1;
@@ -628,6 +636,7 @@ private:
     void ShowViewerMenu(POINT screen);
     void ShowThemeMenu(const D2D1_RECT_F& rc);
     void ShowViewerSmallMenu(const D2D1_RECT_F& rc);
+    void ShowLanguageMenu(const D2D1_RECT_F& rc);
     int settingsPage_ = 0;          // 0 Einstellungen, 1 Tastenkombinationen
     float settingsScroll_ = 0, settingsContentH_ = 0;
     void PaintShortcuts(ID2D1DeviceContext* dc);

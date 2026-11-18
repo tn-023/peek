@@ -7,3 +7,4 @@ vcpkg-cache/
 peek-data/
 CMakeUserPresets.json
 deps/
+__pycache__/

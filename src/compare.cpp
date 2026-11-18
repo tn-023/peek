@@ -125,7 +125,7 @@ void App::PaintCompare(ID2D1DeviceContext* dc) {
             dc->DrawBitmap(b->bmp.Get(), dst, 1.0f, im);
         } else {
             bool failed = fi != fullBmps_.end() && fi->second.failed;
-            DrawText(dc, failed ? L"Bild kann nicht angezeigt werden." : L"Wird geladen …", pane,
+            DrawText(dc, failed ? T(L"Bild kann nicht angezeigt werden.") : T(L"Wird geladen …"), pane,
                      r_.Text(14, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER), D2D1::ColorF(1, 1, 1, 0.6f));
         }
         dc->PopAxisAlignedClip();
@@ -294,30 +294,30 @@ void App::ShowCompareMenu(float x, float y, POINT screen) {
     };
     auto openWith = std::make_shared<std::vector<OpenWithApp>>();
     std::vector<MenuItem> items;
-    items.push_back(item(2, L"Mit Standard-App \u00f6ffnen"));
+    items.push_back(item(2, T(L"Mit Standard-App \u00f6ffnen")));
     items.push_back(OpenWithMenuItem(e, openWith));
-    items.push_back(item(3, L"Im Explorer zeigen"));
+    items.push_back(item(3, T(L"Im Explorer zeigen")));
     items.push_back(MenuItem::Sep());
-    items.push_back(item(4, L"Kopieren"));
-    items.push_back(item(5, L"Pfad kopieren"));
+    items.push_back(item(4, T(L"Kopieren")));
+    items.push_back(item(5, T(L"Pfad kopieren")));
     items.push_back(MenuItem::Sep());
-    items.push_back(item(10, c.mode == 0 ? L"\u00dcbereinander vergleichen" : L"Nebeneinander vergleichen", L"Tab"));
-    items.push_back(item(11, L"Einpassen", L"0"));
-    MenuItem smooth = item(13, L"Beim Vergr\u00f6\u00dfern gl\u00e4tten");
+    items.push_back(item(10, c.mode == 0 ? T(L"\u00dcbereinander vergleichen") : T(L"Nebeneinander vergleichen"), L"Tab"));
+    items.push_back(item(11, T(L"Einpassen"), L"0"));
+    MenuItem smooth = item(13, T(L"Beim Vergr\u00f6\u00dfern gl\u00e4tten"));
     smooth.checked = settings_.viewerSmooth;
     items.push_back(smooth);
     items.push_back(MenuItem::Sep());
     bool marked = IsBookmarked(e.path);
-    items.push_back(item(8, marked ? L"Von Merkliste entfernen" : L"Zur Merkliste hinzuf\u00fcgen", L"", marked ? 0xE735 : 0xE734));
-    items.push_back(item(6, L"In den Papierkorb", L"", 0xE74D));
+    items.push_back(item(8, marked ? T(L"Von Merkliste entfernen") : T(L"Zur Merkliste hinzuf\u00fcgen"), L"", marked ? 0xE735 : 0xE734));
+    items.push_back(item(6, T(L"In den Papierkorb"), L"", 0xE74D));
     items.push_back(MenuItem::Sep());
-    items.push_back(item(14, L"Eigenschaften", L"Alt+Enter"));
+    items.push_back(item(14, T(L"Eigenschaften"), L"Alt+Enter"));
     UINT cmd = ShowPopupMenu(hwnd_, items, screen, accent_);
     switch (cmd) {
     case 2: OpenWithDefaultApp(hwnd_, e.path); break;
     case 3: ShowInExplorer(e.path); break;
-    case 4: if (CopyFilesToClipboard({e.path})) SetStatus(L"In die Zwischenablage kopiert."); break;
-    case 5: CopyTextToClipboard(hwnd_, e.path); SetStatus(L"Pfad kopiert."); break;
+    case 4: if (CopyFilesToClipboard({e.path})) SetStatus(T(L"In die Zwischenablage kopiert.")); break;
+    case 5: CopyTextToClipboard(hwnd_, e.path); SetStatus(T(L"Pfad kopiert.")); break;
     case 6:   // Bild loeschen: Vergleich endet
         if (RecycleFiles(hwnd_, {e.path})) {
             CloseCompare();

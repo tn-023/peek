@@ -1,6 +1,7 @@
 #include "sandbox.h"
 #include "docimaging.h"
 #include "fileinput.h"
+#include "core/lang.h"
 #include "fs.h"
 #include "imaging.h"
 #include "svgimaging.h"
@@ -189,7 +190,7 @@ HANDLE MakeJob(int maxProcs) {
 PSID ContainerSid() {
     PSID sid = nullptr;
     HRESULT hr = CreateAppContainerProfile(kContainerName, L"peek Dekoder",
-                                           L"Abgeschotteter Dekoder fuer Bild-, Video- und Dokumentdateien", nullptr, 0, &sid);
+                                           L"Abgeschotteter Dekoder fuer Bild-, Video- und Dokumentdateien", nullptr, 0, &sid);   // lang:ok
     if (hr == HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS)) hr = DeriveAppContainerSidFromAppContainerName(kContainerName, &sid);
     return SUCCEEDED(hr) ? sid : nullptr;
 }
@@ -619,10 +620,10 @@ SandboxMode DecoderSandboxMode() { return P().mode; }
 
 const wchar_t* DecoderSandboxText() {
     switch (P().mode.load()) {
-    case SandboxMode::AppContainer: return L"Dekoder abgeschottet (AppContainer, ohne Netzwerk- und Dateizugriff)";
-    case SandboxMode::LowIntegrity: return L"Dekoder abgeschottet (niedrige Integritätsstufe)";
-    case SandboxMode::InProcess: return L"Dekoder ohne Abschottung (Sandbox auf diesem PC nicht verfügbar)";
-    default: return L"Dekoder-Sandbox wird gestartet …";
+    case SandboxMode::AppContainer: return T(L"Dekoder abgeschottet (AppContainer, ohne Netzwerk- und Dateizugriff)");
+    case SandboxMode::LowIntegrity: return T(L"Dekoder abgeschottet (niedrige Integritätsstufe)");
+    case SandboxMode::InProcess: return T(L"Dekoder ohne Abschottung (Sandbox auf diesem PC nicht verfügbar)");
+    default: return T(L"Dekoder-Sandbox wird gestartet …");
     }
 }
 
@@ -761,7 +762,7 @@ int RunSandboxTest(const std::wstring& folder, const std::wstring& report) {
     out += std::wstring(L"Modus: ") + DecoderSandboxText() + L"\n";
     SandboxMode expected = ForcedMode() == SandboxMode::Pending ? SandboxMode::AppContainer : ForcedMode();
     if (mode != expected) {
-        out += L"FEHLER: anderer Modus erwartet\n";
+        out += L"FEHLER: anderer Modus erwartet\n";   // lang:ok
         ++failures;
     }
 
@@ -775,7 +776,7 @@ int RunSandboxTest(const std::wstring& folder, const std::wstring& report) {
             // Low Integrity darf lesen (nur nichts veraendern); im AppContainer muss es scheitern
             bool bad = opened && mode == SandboxMode::AppContainer;
             out += std::wstring(L"Pfadzugriff im Worker: ") +
-                   (opened ? (bad ? L"M\u00d6GLICH (Fehler)" : L"m\u00f6glich (Low Integrity darf lesen)") : L"verweigert") + L"\n";
+                   (opened ? (bad ? L"M\u00d6GLICH (Fehler)" : L"m\u00f6glich (Low Integrity darf lesen)") : L"verweigert") + L"\n";   // lang:ok
             if (bad) ++failures;
         }
     }
@@ -833,7 +834,7 @@ int RunSandboxTest(const std::wstring& folder, const std::wstring& report) {
                                             ma.taken == mb.taken && ma.camera == mb.camera && ma.durationMs == mb.durationMs));
         wchar_t line[512];
         swprintf_s(line, L"%-8s %-26s Sandbox %-4s %4ux%-4u kalt %7.1f ms warm %6.1f ms   im Prozess %-4s %4ux%-4u warm %6.1f ms\n",
-                   same ? L"OK" : L"FEHLER", e.name.c_str(), okA ? L"ja" : L"nein", a.w, a.h, tCold, tA,
+                   same ? L"OK" : L"FEHLER", e.name.c_str(), okA ? L"ja" : L"nein", a.w, a.h, tCold, tA,   // lang:ok
                    okB ? L"ja" : L"nein", b.w, b.h, tB);
         out += line;
         if (!same) ++failures;
@@ -855,7 +856,7 @@ int RunSandboxTest(const std::wstring& folder, const std::wstring& report) {
             }
         }
     }
-    out += failures ? L"Ergebnis: " + std::to_wstring(failures) + L" Fehler\n" : L"Ergebnis: alles in Ordnung\n";
+    out += failures ? L"Ergebnis: " + std::to_wstring(failures) + L" Fehler\n" : L"Ergebnis: alles in Ordnung\n";   // lang:ok
     ShutdownDecoderSandbox();
 
     std::string u = WideToUtf8(out);

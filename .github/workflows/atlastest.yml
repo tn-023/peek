@@ -18,22 +18,13 @@ jobs:
 
       - name: vcpkg vorbereiten
         shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DEFAULT_BINARY_CACHE" | Out-Null
-          # vcpkg des Runners auf den festen Stand aus vcpkg.json (builtin-baseline) setzen
-          $b = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
-          git -C "$env:VCPKG_INSTALLATION_ROOT" fetch -q origin $b
-          if ($LASTEXITCODE -ne 0) { throw "vcpkg-Stand $b nicht abrufbar" }
-          git -C "$env:VCPKG_INSTALLATION_ROOT" -c advice.detachedHead=false checkout -q -f $b
-          if ($LASTEXITCODE -ne 0) { throw "vcpkg-Stand $b nicht auscheckbar" }
-          & "$env:VCPKG_INSTALLATION_ROOT\bootstrap-vcpkg.bat" -disableMetrics | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw "vcpkg-Bootstrap fehlgeschlagen" }
+        run: ./tools/prepare-vcpkg.ps1   # fester vcpkg-Stand, Korrektur fuer dav1d, Bootstrap
 
       - name: vcpkg-Cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ github.workspace }}\vcpkg-cache
-          key: vcpkg-x64-windows-static-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-x64-windows-static-${{ hashFiles('vcpkg.json', 'tools/prepare-vcpkg.ps1') }}
           restore-keys: vcpkg-x64-windows-static-
 
       - name: MSVC-Umgebung

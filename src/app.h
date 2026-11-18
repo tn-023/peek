@@ -320,6 +320,13 @@ private:
         float f = 1;                                   // Brennweite in DIP
     } cloud_;
     std::wstring pendingCloudSel_;
+    // --cloud-tour[=<Markerdatei>]: feste Kamerafahrt durch die Wolke (nur fuer die Aufnahme im README)
+    bool cloudTour_ = false;
+    std::wstring cloudTourMark_;
+    float cloudTourWait_ = 0, cloudTourT_ = -1;
+    float cloudTourPose_[3] = {0, 0, 0};
+    bool CloudTourStep(float dt);
+    int CloudTourPick(float zFrom, float zTo) const;
     // SVG im Betrachter: scharfer Ausschnitt in der aktuellen Zoomstufe (gerendert im Hintergrund)
     struct SvgDetail {
         std::wstring path;

@@ -165,6 +165,7 @@ bool App::Init(HINSTANCE inst, int show) {
             if (!value(L"--viewer-zoom=").empty()) { pendingZoom_ = static_cast<float>(_wtof(value(L"--viewer-zoom=").c_str())); continue; }
             if (!value(L"--open-chip=").empty()) { pendingChip_ = value(L"--open-chip=") == L"source" ? static_cast<int>(ChipId::Source) : static_cast<int>(ChipId::Pattern); continue; }
             if (!value(L"--cloud-select=").empty()) { pendingCloudSel_ = value(L"--cloud-select="); continue; }
+            if (a == L"--cloud-tour" || !value(L"--cloud-tour=").empty()) { cloudTour_ = true; cloudTourMark_ = value(L"--cloud-tour="); continue; }
             if (a == L"--no-sidebar") { settings_.sidebar = false; sidebarAnim_ = 0.0f; continue; }
             if (!value(L"--view=").empty()) {
                 std::wstring v = value(L"--view=");

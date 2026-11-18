@@ -71,6 +71,8 @@ jobs:
           path: |
             screenshots/*.png
             screenshots/en/*.png
+            screenshots/**/*.gif
+            screenshots/**/*.mp4
 
       - name: Bildschirmfotos im Zweig "screenshots" ablegen
         shell: pwsh
@@ -80,6 +82,6 @@ jobs:
           git checkout --orphan screenshots
           git rm -rf --cached . | Out-Null
           Get-ChildItem -Force | Where-Object { $_.Name -notin @('.git', 'screenshots') } | Remove-Item -Recurse -Force
-          git add screenshots/*.png screenshots/en/*.png
+          git add -A screenshots
           git commit -m "Bildschirmfotos von $env:GITHUB_SHA"
           git push -f origin screenshots

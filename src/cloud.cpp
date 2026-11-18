@@ -253,9 +253,83 @@ void App::CloudSync() {
 // ---------------------------------------------------------------------------
 // Animation
 
+// ---------------------------------------------------------------------------
+// Vorfuehrung (--cloud-tour): feste Kamerafahrt fuer die Aufnahme im README.
+// Querfahrt (Parallaxe), leichte Fahrt hinein, ein vorderes Bild waehlen und wieder abwaehlen,
+// ein weiter hinten liegendes Bild waehlen und wieder abwaehlen.
+
+int App::CloudTourPick(float zFrom, float zTo) const {
+    const auto& c = cloud_;
+    int best = -1;
+    float bestD = 1e30f;
+    for (int ci : c.order) {
+        const CloudCard& k = c.cards[ci];
+        if (k.leaving || k.tz < c.D * zFrom || k.tz > c.D * zTo) continue;
+        float dx = k.tx - c.tcx, dy = k.ty - c.tcy;
+        float d = dx * dx + dy * dy;
+        if (d < bestD) { bestD = d; best = ci; }
+    }
+    return best;
+}
+
+bool App::CloudTourStep(float dt) {
+    auto& c = cloud_;
+    if (!cloudTour_ || c.order.empty()) return false;
+    if (cloudTourT_ < 0) {
+        // erst warten, bis die Karten eingeflogen und die Vorschaubilder geladen sind
+        cloudTourWait_ += dt;
+        if (cloudTourWait_ < 4000) return true;
+        cloudTourT_ = 0;
+        cloudTourPose_[0] = -0.5f * c.R;
+        cloudTourPose_[1] = 0.04f * c.R;
+        cloudTourPose_[2] = -0.62f * c.fit;
+        c.cx = c.tcx = cloudTourPose_[0];
+        c.cy = c.tcy = cloudTourPose_[1];
+        c.cz = c.tcz = cloudTourPose_[2];
+        c.camUser = true;
+        c.sel = -1;
+        c.haveBefore = false;
+        if (!cloudTourMark_.empty()) {   // Startzeichen fuer die Aufnahme
+            HANDLE h = CreateFileW(cloudTourMark_.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
+        }
+        return true;
+    }
+    const float t0 = cloudTourT_;
+    cloudTourT_ += dt;
+    const float t = cloudTourT_;
+    auto at = [&](float ms) { return t0 < ms && t >= ms; };
+    auto ease = [](float u) { u = std::clamp(u, 0.0f, 1.0f); return u * u * (3 - 2 * u); };
+    const float x0 = cloudTourPose_[0], y0 = cloudTourPose_[1], z0 = cloudTourPose_[2];
+    const float x1 = 0.42f * c.R, z1 = -0.36f * c.fit, x2 = 0.32f * c.R;
+    if (t < 4600) {
+        // Querfahrt: Kamera folgt einer weichen Bahn, nahe Karten ziehen schneller vorbei als ferne
+        float u = ease((t - 1000) / 3600.0f);
+        c.tcx = x0 + (x1 - x0) * u;
+        c.tcy = y0;
+        c.tcz = z0;
+        c.tau = 45;
+    } else if (t < 6400) {
+        // leichte Fahrt hinein
+        float u = ease((t - 4600) / 1800.0f);
+        c.tcx = x1 + (x2 - x1) * u;
+        c.tcz = z0 + (z1 - z0) * u;
+        c.tau = 60;
+    }
+    if (at(6900)) CloudSelect(CloudTourPick(0.0f, 0.22f));
+    if (at(9700)) CloudDeselect();
+    if (at(11400)) CloudSelect(CloudTourPick(0.45f, 0.72f));
+    if (at(14600)) CloudDeselect();
+    if (t > 16800) {
+        cloudTour_ = false;
+        return false;
+    }
+    return true;
+}
+
 bool App::CloudStep(float dt) {
     auto& c = cloud_;
-    bool more = false;
+    bool more = CloudTourStep(dt);
     float kc = 1.0f - std::exp(-dt / c.tau);
     const float tol = 0.0002f;   // fest: tief im Haufen sind nahe Karten gross, jedes Einrasten waere sichtbar
     if (Approach(c.cx, c.tcx, kc, tol)) more = true;

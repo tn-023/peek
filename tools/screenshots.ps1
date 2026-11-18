@@ -128,6 +128,47 @@ for ($i = 0; $i -lt 260; $i++) {
     $b.Dispose()
 }
 Shot 'wolke-nah.png' @("`"$mid`"", $dark, '--view=cloud', '--cloud-zoom=0.55', $size) -wait 14
+
+# Kamerafahrt durch die Wolke als Video und GIF (README): peek startet die Fahrt selbst (--cloud-tour)
+# und legt beim Start eine Markerdatei an; dann nimmt ffmpeg genau das Fenster auf.
+function Record-Tour([string]$folder, [string]$name) {
+    if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { Write-Warning 'ffmpeg fehlt: keine Aufnahme'; return }
+    Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:LOCALAPPDATA 'peek\einstellungen.dat')
+    $mark = Join-Path $env:TEMP 'peek-tour.start'
+    Remove-Item -Force -ErrorAction SilentlyContinue $mark
+    [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(($screen.Bounds.Right - 1), ($screen.Bounds.Bottom - 1))
+    $p = Start-Process -FilePath $Exe -ArgumentList @("`"$folder`"", $dark, '--view=cloud', '--size=1280x760', "`"--cloud-tour=$mark`"", "--lang=$Lang") -PassThru
+    $deadline = (Get-Date).AddSeconds(20)
+    while ($p.MainWindowHandle -eq [IntPtr]::Zero -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200; $p.Refresh() }
+    [Win]::SetForegroundWindow($p.MainWindowHandle) | Out-Null
+    Start-Sleep -Milliseconds 500
+    $r = New-Object Win+RECT
+    if ([Win]::DwmGetWindowAttribute($p.MainWindowHandle, 9, [ref]$r, 16) -ne 0) { [Win]::GetWindowRect($p.MainWindowHandle, [ref]$r) | Out-Null }
+    $w = ($r.Right - $r.Left) - (($r.Right - $r.Left) % 2); $h = ($r.Bottom - $r.Top) - (($r.Bottom - $r.Top) % 2)
+    $deadline = (Get-Date).AddSeconds(40)
+    while (-not (Test-Path $mark) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 40 }
+    if (-not (Test-Path $mark)) { Write-Warning "$name : Fahrt nicht gestartet"; Stop-Process $p -Force; return }
+    $raw = Join-Path $env:TEMP "$name-roh.mp4"
+    & ffmpeg -loglevel error -y -f gdigrab -framerate 30 -draw_mouse 0 -offset_x $r.Left -offset_y $r.Top -video_size "${w}x${h}" -t 16.5 -i desktop `
+        -c:v libx264 -preset veryfast -crf 16 -pix_fmt yuv420p $raw
+    Stop-Process $p -Force
+    Start-Sleep -Seconds 1
+    # Video fuer die Website (H.264) und GIF fuer das README; GIF moeglichst unter 5 MB
+    & ffmpeg -loglevel error -y -i $raw -vf 'scale=1280:-2' -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p -movflags +faststart (Join-Path $Out "$name.mp4")
+    $gif = Join-Path $Out "$name.gif"
+    foreach ($cfg in @(@(800, 15), @(720, 15), @(720, 12), @(640, 12))) {
+        $vf = "fps=$($cfg[1]),scale=$($cfg[0]):-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=192:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle"
+        & ffmpeg -loglevel error -y -i $raw -vf $vf -loop 0 $gif
+        $mb = (Get-Item $gif).Length / 1MB
+        Write-Host ("{0}: {1} px, {2} fps -> {3:N1} MB" -f $name, $cfg[0], $cfg[1], $mb)
+        if ($mb -lt 5) { break }
+    }
+}
+if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue) -and (Get-Command choco -ErrorAction SilentlyContinue)) {
+    choco install ffmpeg -y --no-progress | Out-Null
+    $env:Path += ";$env:ProgramData\chocolatey\bin"
+}
+Record-Tour $mid 'wolke-fahrt'
 Shot 'liste.png' @("`"$Root`"", $dark, '--view=list', $size)
 Shot 'betrachter.png' @("`"--viewer=$sel`"", $dark, $size) -FullScreen
 Shot 'zuschneiden.png' @("`"--viewer=$sel`"", '--crop', $dark, $size) -FullScreen

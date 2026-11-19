@@ -8,6 +8,24 @@ namespace peek {
 
 // Bild mit runden Ecken ohne Zwischenebene zeichnen (hochwertig gefiltert)
 void DrawRoundedBitmap(ID2D1DeviceContext* dc, ID2D1Bitmap1* bmp, const D2D1_RECT_F& rc, float rad);
+// Glyphenlaeufe eines Text-Layouts: einmal aufzeichnen, danach ohne erneuten Durchlauf des Layouts zeichnen
+struct GlyphRuns {
+    struct Run {
+        ComPtr<IDWriteFontFace> face;
+        float em = 0;
+        std::vector<UINT16> idx;
+        std::vector<float> adv;
+        std::vector<DWRITE_GLYPH_OFFSET> off;
+        BOOL sideways = FALSE;
+        UINT32 bidi = 0;
+        float x = 0, y = 0;   // Grundlinie relativ zum Layout (nicht auf Pixel eingerastet)
+        DWRITE_MEASURING_MODE mode = DWRITE_MEASURING_MODE_NATURAL;
+    };
+    std::vector<Run> runs;
+};
+void RecordGlyphRuns(IDWriteTextLayout* layout, GlyphRuns& out);
+// snap: 0 = nicht einrasten, 1 = Grundlinie senkrecht, 2 = waagerecht und senkrecht auf ganze Pixel (Geraeteraum)
+void DrawGlyphRuns(ID2D1DeviceContext* dc, const GlyphRuns& g, ID2D1Brush* brush, int snap);
 // Pruefmodus --render-check: schnelle Zeichenwege mit den bisherigen vergleichen (0 = gleich)
 int RunRenderCheck(const std::wstring& report);
 

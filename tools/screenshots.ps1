@@ -128,8 +128,22 @@ for ($i = 0; $i -lt 260; $i++) {
     $b.Dispose()
 }
 Shot 'wolke-nah.png' @("`"$mid`"", $dark, '--view=cloud', '--cloud-zoom=0.55', $size) -wait 14
-# Gruppen in der Wolke: Streifen mit Titel und Anzahl (Sortierung nach Name)
-Shot 'wolke-gruppen.png' @("`"$mid`"", $dark, '--view=cloud', '--group', $size) -wait 14
+# Gruppen in der Wolke: Streifen mit Titel und Anzahl (Sortierung nach Name). Dieselben Bilder unter Namen mit
+# verschiedenen Anfangsbuchstaben und ungleichen Anzahlen, damit mehrere unterschiedlich breite Streifen entstehen.
+$grp = Join-Path (Split-Path -Parent $Root) (N 'Reisen' 'Journeys')
+New-Item -ItemType Directory -Force -Path $grp | Out-Null
+$places = if ($en) { @('Alps', 'Berlin', 'Coast', 'Dolomites', 'Florence', 'Garden', 'Harbour', 'Iceland', 'Lisbon', 'Madrid', 'Norway', 'Oslo', 'Paris', 'Rome', 'Sicily', 'Tuscany', 'Vienna', 'Zurich') }
+          else { @('Alpen', 'Berlin', 'Dolomiten', 'Florenz', 'Garten', 'Hafen', 'Island', 'Lissabon', 'Madrid', 'Norwegen', 'Oslo', 'Paris', 'Quedlinburg', 'Rom', 'Sizilien', 'Toskana', 'Wien', 'Zuerich') }
+$counts = @(22, 9, 14, 31, 8, 12, 6, 17, 11, 7, 19, 5, 26, 24, 10, 16, 13, 10)
+$src = @(Get-ChildItem -Path $mid -Filter *.jpg | Sort-Object Name)
+$k = 0
+for ($pi = 0; $pi -lt $places.Count; $pi++) {
+    for ($j = 1; $j -le $counts[$pi]; $j++) {
+        Copy-Item $src[$k % $src.Count].FullName (Join-Path $grp ('{0}_{1:D2}.jpg' -f $places[$pi], $j))
+        $k++
+    }
+}
+Shot 'wolke-gruppen.png' @("`"$grp`"", $dark, '--view=cloud', '--group', $size) -wait 22
 
 # Kamerafahrt durch die Wolke als Video und animiertes Bild (README): peek startet die Fahrt selbst
 # (--cloud-tour), legt eine Markerdatei an, sobald alles geladen ist, und faehrt los, wenn "<Marker>.go" existiert.

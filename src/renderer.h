@@ -6,6 +6,11 @@
 
 namespace peek {
 
+// Bild mit runden Ecken ohne Zwischenebene zeichnen (hochwertig gefiltert)
+void DrawRoundedBitmap(ID2D1DeviceContext* dc, ID2D1Bitmap1* bmp, const D2D1_RECT_F& rc, float rad);
+// Pruefmodus --render-check: schnelle Zeichenwege mit den bisherigen vergleichen (0 = gleich)
+int RunRenderCheck(const std::wstring& report);
+
 class Renderer {
 public:
     bool Init(HWND hwnd);
@@ -13,6 +18,10 @@ public:
     void SetDpi(float dpi);
     bool UpdateTextScale();   // Windows-Textskalierung neu lesen; true = geaendert
     bool BeginDraw();
+    // true: der Bildschirm hat das vorige Bild abgenommen (Takt der Bildwiederholung). false: kein Takt verfuegbar
+    // (Fenster verdeckt) oder keine Takt-Abfrage moeglich (dann framePaced() == false)
+    bool frameReady() const { return waited_; }
+    bool framePaced() const { return frameWait_ != nullptr; }
     void EndDraw();
 
     ID2D1DeviceContext* dc() const { return dc_.Get(); }
@@ -40,6 +49,7 @@ public:
     float DrawWrapped(const std::wstring& s, float x, float y, float width, IDWriteTextFormat* fmt,
                       const D2D1_COLOR_F& color);
     // Schneller Zeilenumbruch fuer viele Dateinamen (eigene Zeichenbreiten, ohne Text-Layout)
+    float TextWidthFast(const std::wstring& s, float size);   // dieselbe Summe wie in BreakLines
     void BreakLines(const std::wstring& s, float width, float size, std::vector<std::pair<uint32_t, uint32_t>>& lines);
     // App-Symbol "p" (dunkelgraue abgerundete Flaeche, Windows-11-Blau)
     void DrawSvgResource(int id, const D2D1_RECT_F& rc);   // SVG aus RCDATA, eingepasst
@@ -53,6 +63,10 @@ private:
     ComPtr<IDWriteFontFace> face_;
     UINT16 unitsPerEm_ = 2048;
     std::unordered_map<wchar_t, float> advances_;   // in Einheiten von 1 DIP Schriftgroesse
+    std::vector<float> advFast_;                    // dasselbe als Tabelle fuer haeufige Zeichen (< 0x3000), -1 = unbekannt
+    HANDLE frameWait_ = nullptr;                    // Takt der Swapchain (wartbar), sonst nullptr
+    UINT swapFlags_ = 0;
+    bool waited_ = true;
 
     HWND hwnd_ = nullptr;
     ComPtr<ID3D11Device> d3d_;

@@ -1164,10 +1164,24 @@ void App::OnThumbResults() {
                 b.srcH = res.px.srcH;
             }
             b.failed = !b.bmp;
+            viewCache_ = {};
             continue;
         }
+        thumbBacklog_.push_back(std::move(res));   // Vorschaubilder und Symbole: Hochladen in Paint, begrenzt je Bild
+    }
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+// Fertige Vorschaubilder in die Grafikkarte laden. Kommen beim schnellen Scrollen viele auf einmal an, wuerde das
+// Hochladen aller in einem Bild die Animation stocken lassen: nach budgetMs geht es im naechsten Bild weiter.
+void App::DrainThumbs(double budgetMs) {
+    double t0 = NowMs();
+    while (!thumbBacklog_.empty()) {
+        ThumbResult res = std::move(thumbBacklog_.front());
+        thumbBacklog_.pop_front();
         Bmp& b = bmps_[res.key];
         if (b.bmp) { bmpBytes_ -= b.bytes; b.bmp.Reset(); }
+        if (res.key == viewCache_.path) viewCache_ = {};
         if (res.ok) {
             b.bmp = r_.CreateBitmap(res.px);
             b.srcW = res.px.srcW;
@@ -1185,8 +1199,8 @@ void App::OnThumbResults() {
                 if (!e.width) { e.width = res.meta.width; e.height = res.meta.height; }
             }
         }
+        if (NowMs() - t0 >= budgetMs) break;
     }
-    InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 void App::OnMetaResults() {
@@ -1634,6 +1648,7 @@ void App::TrimCaches() {
 void App::ClearBitmaps() {
     CloudReleaseGpu();
     appIcons_.clear();
+    viewCache_ = {};
     bmps_.clear();
     fullBmps_.clear();
     bmpBytes_ = 0;
@@ -1696,6 +1711,7 @@ void App::CloseViewer() {
     int pos = viewer_.pos;
     bool ownFs = viewer_.ownFullscreen;
     viewer_.open = false;
+    viewCache_ = {};
     infoAnim_ = settings_.infoPanel ? 1.0f : 0.0f;      // Infobereich der Ansicht wiederherstellen (ohne Animation)
     settings_.Save();                                   // Betrachter-Leisten merken
     KillTimer(hwnd_, kTimerViewerClick);

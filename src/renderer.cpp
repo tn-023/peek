@@ -33,6 +33,9 @@ bool Renderer::CreateDevice() {
     svgDocs_.clear();
     dc_.Reset(); target_.Reset(); swap_.Reset(); d2dDevice_.Reset(); visual_.Reset(); dcompTarget_.Reset();
     dcomp_.Reset(); dxgiDevice_.Reset(); d3d_.Reset(); brush_.Reset();
+    if (frameWait_) { CloseHandle(frameWait_); frameWait_ = nullptr; }
+    swapFlags_ = 0;
+    waited_ = true;
 
     const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1,
                                         D3D_FEATURE_LEVEL_10_0};
@@ -72,7 +75,19 @@ bool Renderer::CreateDevice() {
     desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
     desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
     desc.Scaling = DXGI_SCALING_STRETCH;
-    if (FAILED(dxgiFactory->CreateSwapChainForComposition(d3d_.Get(), &desc, nullptr, &swap_))) return false;
+    // Wartbare Swapchain: vor dem Zeichnen auf den Takt des Bildschirms warten statt in Present zu blockieren.
+    // Eingaben und Animationszeit werden so direkt vor dem Zeichnen gelesen (gleichmaessiger, weniger Verzoegerung).
+    desc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+    if (SUCCEEDED(dxgiFactory->CreateSwapChainForComposition(d3d_.Get(), &desc, nullptr, &swap_))) {
+        ComPtr<IDXGISwapChain2> sc2;
+        if (SUCCEEDED(swap_.As(&sc2)) && SUCCEEDED(sc2->SetMaximumFrameLatency(1))) frameWait_ = sc2->GetFrameLatencyWaitableObject();
+        if (frameWait_) swapFlags_ = desc.Flags;
+        else swap_.Reset();
+    }
+    if (!swap_) {   // Rueckfall: Present wartet wie frueher selbst
+        desc.Flags = 0;
+        if (FAILED(dxgiFactory->CreateSwapChainForComposition(d3d_.Get(), &desc, nullptr, &swap_))) return false;
+    }
 
     if (FAILED(DCompositionCreateDevice(dxgiDevice_.Get(), IID_PPV_ARGS(&dcomp_)))) return false;
     if (FAILED(dcomp_->CreateTargetForHwnd(hwnd_, TRUE, &dcompTarget_))) return false;
@@ -110,7 +125,7 @@ void Renderer::Resize() {
     height_ = h;
     dc_->SetTarget(nullptr);
     target_.Reset();
-    HRESULT hr = swap_->ResizeBuffers(0, w, h, DXGI_FORMAT_UNKNOWN, 0);
+    HRESULT hr = swap_->ResizeBuffers(0, w, h, DXGI_FORMAT_UNKNOWN, swapFlags_);
     if (FAILED(hr)) {
         lost_ = true;
         CreateDevice();
@@ -146,6 +161,8 @@ bool Renderer::BeginDraw() {
         if (!CreateDevice()) return false;
         lost_ = true;
     }
+    // hoechstens kurz warten: bleibt der Takt aus (Fenster verdeckt), drosselt der Aufrufer selbst
+    waited_ = frameWait_ ? WaitForSingleObjectEx(frameWait_, 40, FALSE) == WAIT_OBJECT_0 : true;
     dc_->BeginDraw();
     return true;
 }
@@ -222,7 +239,17 @@ float Renderer::DrawWrapped(const std::wstring& s, float x, float y, float width
     return m.height;
 }
 
+float Renderer::TextWidthFast(const std::wstring& s, float size) {
+    float w = 0;
+    for (wchar_t c : s) w += Advance(c, size);
+    return w;
+}
+
 float Renderer::Advance(wchar_t c, float size) {
+    if (c < 0x3000) {
+        if (advFast_.empty()) advFast_.assign(0x3000, -1.0f);
+        if (advFast_[c] >= 0) return advFast_[c] * size;
+    }
     auto it = advances_.find(c);
     if (it != advances_.end()) return it->second * size;
     float adv = 0.55f;   // Rueckfall (Zeichen aus Ersatzschriften)
@@ -255,6 +282,7 @@ float Renderer::Advance(wchar_t c, float size) {
         }
     }
     advances_[c] = adv;
+    if (c < 0x3000) advFast_[c] = adv;
     return adv * size;
 }
 

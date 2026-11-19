@@ -100,6 +100,13 @@ jobs:
         shell: pwsh
         run: ctest --test-dir build --output-on-failure
 
+      - name: Zeichenwege vergleichen (gleiche Pixel)
+        shell: powershell
+        run: |
+          $p = Start-Process -FilePath build\peek.exe -ArgumentList @('--render-check', "`"$pwd\render-bericht.txt`"") -Wait -PassThru
+          Get-Content -Encoding UTF8 render-bericht.txt
+          if ($p.ExitCode -ne 0) { throw "Zeichenwege weichen ab ($($p.ExitCode))" }
+
       - name: Sandbox-Pruefung (Dekoder abgeschottet)
         shell: powershell
         run: |

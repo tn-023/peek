@@ -58,6 +58,7 @@ void App::StartAnimation() {
     // Present wartet auf die vertikale Synchronisation (keine ungleichmaessigen Timer-Ticks)
     if (!animating_) {
         animating_ = true;
+        animFresh_ = true;
         animLast_ = NowMs();
     }
     InvalidateRect(hwnd_, nullptr, FALSE);
@@ -196,13 +197,20 @@ void App::OnMouseMove(float x, float y, WPARAM keys) {
             InvalidateRect(hwnd_, nullptr, FALSE);
             return;
         }
+        // nur neu zeichnen, wenn sich die Anzeige aendert (Pfeile erscheinen, Hervorhebung wechselt):
+        // das Bild muss nicht bei jeder Mausbewegung neu gefiltert werden
+        bool shown = GetTickCount() < viewer_.controlsUntil;
         viewer_.controlsUntil = GetTickCount() + 2000;
         SetTimer(hwnd_, kTimerViewerUi, 2100, nullptr);
-        viewer_.corner = x > W_ - 80 && y < 60;
-        hoverHit_ = -1;
+        bool corner = x > W_ - 80 && y < 60;
+        int hh = -1;
         for (int i = static_cast<int>(hits_.size()) - 1; i >= 0; --i)
-            if (hits_[i].type != HitType::None && Inside(hits_[i].rc, x, y)) { hoverHit_ = i; break; }
-        InvalidateRect(hwnd_, nullptr, FALSE);
+            if (hits_[i].type != HitType::None && Inside(hits_[i].rc, x, y)) { hh = i; break; }
+        if (!shown || corner != viewer_.corner || hh != hoverHit_) {
+            viewer_.corner = corner;
+            hoverHit_ = hh;
+            InvalidateRect(hwnd_, nullptr, FALSE);
+        }
         return;
     }
     if (marquee_) {
@@ -838,6 +846,12 @@ void App::OnWheel(float x, float y, int delta, WPARAM keys) {
 bool App::OnKeyDown(WPARAM vk) {
     bool ctrl = CtrlDown(), shift = ShiftDown(), alt = AltDown();
     if (vk == VK_F11) { ToggleFullscreen(); return true; }
+    if (vk == VK_F12 && ctrl && shift && !alt) {   // Messanzeige fuer Bildzeiten (nicht dokumentiert)
+        perfHud_ = !perfHud_;
+        perfN_ = 0;
+        InvalidateRect(hwnd_, nullptr, FALSE);
+        return true;
+    }
     if (sheet_.open) return SheetKey(vk);
     if (atlas_.open) return AtlasKey(vk);
     if (compare_.open) return CompareKey(vk);

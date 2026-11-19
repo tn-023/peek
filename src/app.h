@@ -13,6 +13,7 @@
 #include "thumbs.h"
 #include "pdfsheet.h"
 #include "atlaswriter.h"
+#include <deque>
 #include <map>
 #include <unordered_map>
 
@@ -141,6 +142,8 @@ private:
     void GoUp();
     void OnLoadResults();
     void OnThumbResults();
+    void DrainThumbs(double budgetMs);   // fertige Vorschaubilder hochladen, begrenzt je Bild
+    std::deque<ThumbResult> thumbBacklog_;
     void OnMetaResults();
     void PrepareEntry(FileEntry& e);
     void RequestMeta(size_t from);
@@ -693,6 +696,32 @@ private:
     WINDOWPLACEMENT prevPlacement_{sizeof(WINDOWPLACEMENT)};
     RECT prevRect_{};   // tatsaechliche Fensterlage (auch bei angedocktem Fenster)
     bool animating_ = false;
+    bool animFresh_ = false;        // Animation gerade gestartet: erster Schritt = eine Bildperiode
+    float FrameDt(double rawMs);    // Zeitschritt am Takt des Bildschirms ausrichten
+    double RefreshPeriodMs();
+    // Messanzeige (Strg+Umschalt+F12): Bildabstaende und Rechenzeit der letzten Bilder
+    bool perfHud_ = false;
+    float perfFrame_[120] = {}, perfCpu_[120] = {};
+    int perfN_ = 0;
+    double perfLast_ = 0;
+    void PaintPerfHud(ID2D1DeviceContext* dc, double paintStart);
+    // Betrachter: fertig verkleinertes Bild der ruhenden Ansicht (gleiche Pixel, kein erneutes Filtern je Bild)
+    struct ViewCache {
+        ComPtr<ID2D1Bitmap1> bmp;
+        std::wstring path;
+        ID2D1Bitmap1* src = nullptr;
+        D2D1_RECT_F dst{};
+        int rotation = 0, x0 = 0, y0 = 0;
+        UINT w = 0, h = 0;
+        float dpi = 0;
+        D2D1_RECT_F seen{};   // Lage im vorigen Bild
+        float seenW = 0;
+    } viewCache_;
+    // Zeilengeometrie: Gruppen und Namensbreiten haengen nicht von der Fensterbreite ab (eigener Zwischenspeicher)
+    std::vector<int> grpStart_;
+    std::vector<float> nameNatural_;
+    uint64_t grpVersion_ = ~0ull, natVersion_ = ~0ull;
+    int grpKey_ = -2;
     D2D1_COLOR_F accent_{0.0f, 0.47f, 0.84f, 1.0f};
     std::wstring status_;
     DWORD statusUntil_ = 0;

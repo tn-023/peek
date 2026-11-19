@@ -162,14 +162,39 @@ void App::RebuildRows() {
     rowTop_.clear();
     rowFirst_.clear();
     rowHeader_.clear();
-    groupLabels_.clear();
-    groupCounts_.clear();
-    if (groupKey >= 0) ComputeDateBounds();
+    // Gruppen und natuerliche Namensbreiten haengen nur vom Inhalt ab, nicht von der Breite: einmal bestimmen.
+    // (Beim Ein- und Ausfahren der Seitenleiste aendert sich die Breite in jedem Bild.)
+    if (grpVersion_ != visibleVersion_ || grpKey_ != groupKey) {
+        grpVersion_ = visibleVersion_;
+        grpKey_ = groupKey;
+        grpStart_.clear();
+        groupLabels_.clear();
+        groupCounts_.clear();
+        if (groupKey >= 0) {
+            ComputeDateBounds();
+            for (int p = 0; p < n;) {
+                std::wstring label = GroupLabel(entries_[visible_[p]]);
+                int end = p + 1;
+                while (end < n && GroupLabel(entries_[visible_[end]]) == label) ++end;
+                grpStart_.push_back(p);
+                groupLabels_.push_back(std::move(label));
+                groupCounts_.push_back(static_cast<uint32_t>(end - p));
+                p = end;
+            }
+        }
+    }
+    if (natVersion_ != visibleVersion_) {
+        natVersion_ = visibleVersion_;
+        nameNatural_.resize(n);
+        for (int p = 0; p < n; ++p) nameNatural_[p] = r_.TextWidthFast(entries_[visible_[p]].name, kNameSize);
+    }
+    const float oneLine = nameW * 0.96f;   // dieselbe Grenze wie in BreakLines
     std::vector<std::pair<uint32_t, uint32_t>> lines;
     float y = 0;
     auto addItemRow = [&](int first, int last) {
         size_t maxLines = 1;
         for (int p = first; p < last; ++p) {
+            if (nameNatural_[p] <= oneLine) continue;   // passt in eine Zeile
             r_.BreakLines(entries_[visible_[p]].name, nameW, kNameSize, lines);
             maxLines = std::max(maxLines, lines.size());
         }
@@ -179,18 +204,16 @@ void App::RebuildRows() {
         y += list ? std::max(34.0f, maxLines * kLineH + 16) : tileS_ + 26 + maxLines * kLineH;
     };
     int p = 0;
+    int gi = 0;
     while (p < n) {
         // naechste Gruppe: alle folgenden Elemente mit gleicher Beschriftung
         int end = n;
         if (groupKey >= 0) {
-            std::wstring label = GroupLabel(entries_[visible_[p]]);
-            end = p + 1;
-            while (end < n && GroupLabel(entries_[visible_[end]]) == label) ++end;
+            end = p + static_cast<int>(groupCounts_[gi]);
             rowTop_.push_back(y);
             rowFirst_.push_back(p);
-            rowHeader_.push_back(static_cast<int>(groupLabels_.size()));
-            groupLabels_.push_back(label);
-            groupCounts_.push_back(static_cast<uint32_t>(end - p));
+            rowHeader_.push_back(gi);
+            ++gi;
             y += kGroupH;
         }
         int step = list ? 1 : cols_;
@@ -611,6 +634,64 @@ ID2D1Bitmap1* App::AppIconFor(const std::wstring& ext) {
     return bmp.Get();
 }
 
+// Bildperiode des Bildschirms, auf dem das Fenster liegt (ms)
+double App::RefreshPeriodMs() {
+    static double period = 1000.0 / 60.0;
+    static DWORD checked = 0;
+    static bool have = false;
+    DWORD now = GetTickCount();
+    if (!have || now - checked > 2000) {
+        have = true;
+        checked = now;
+        MONITORINFOEXW mi{};
+        mi.cbSize = sizeof(mi);
+        DEVMODEW dm{};
+        dm.dmSize = sizeof(dm);
+        if (GetMonitorInfoW(MonitorFromWindow(hwnd_, MONITOR_DEFAULTTONEAREST), &mi) &&
+            EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) && dm.dmDisplayFrequency >= 24 &&
+            dm.dmDisplayFrequency <= 1000)
+            period = 1000.0 / dm.dmDisplayFrequency;
+    }
+    return period;
+}
+
+// Gemessene Zeit seit dem letzten Bild auf ganze Bildperioden runden. Die Uhr des Prozessors schwankt je nach
+// Rechenzeit um einige Millisekunden; gezeigt werden die Bilder aber in festem Abstand. Passt die Messung nicht zum
+// Takt (anderer Bildschirm, variable Bildrate), bleibt sie unveraendert.
+float App::FrameDt(double rawMs) {
+    double p = RefreshPeriodMs();
+    double n = std::round(rawMs / p);
+    if (n >= 1 && n <= 4 && std::fabs(rawMs - n * p) < 0.35 * p) return static_cast<float>(n * p);
+    return static_cast<float>(rawMs);
+}
+
+// Messanzeige: mittlerer und groesster Bildabstand sowie Rechenzeit der letzten Bilder (nur fortlaufende Bilder)
+void App::PaintPerfHud(ID2D1DeviceContext* dc, double paintStart) {
+    double now = NowMs();
+    if (perfLast_ > 0 && paintStart - perfLast_ < 100.0) {
+        perfFrame_[perfN_ % 120] = static_cast<float>(paintStart - perfLast_);
+        perfCpu_[perfN_ % 120] = static_cast<float>(now - paintStart);
+        ++perfN_;
+    }
+    perfLast_ = paintStart;
+    int n = std::min(perfN_, 120);
+    float avg = 0, mx = 0, cpu = 0, cmx = 0;
+    for (int i = 0; i < n; ++i) {
+        avg += perfFrame_[i];
+        mx = std::max(mx, perfFrame_[i]);
+        cpu += perfCpu_[i];
+        cmx = std::max(cmx, perfCpu_[i]);
+    }
+    if (n) { avg /= n; cpu /= n; }
+    wchar_t buf[160];
+    std::swprintf(buf, 160, L"%.1f ms (max %.1f) \u00b7 CPU %.1f ms (max %.1f) \u00b7 %.0f Hz \u00b7 %d",   // lang:ok
+                  avg, mx, cpu, cmx, 1000.0 / RefreshPeriodMs(), n);
+    dc->SetTransform(D2D1::Matrix3x2F::Identity());
+    D2D1_RECT_F rc = D2D1::RectF(8, H_ - 34, 400, H_ - 8);
+    FillRound(dc, rc, 4, D2D1::ColorF(0, 0, 0, 0.8f));
+    DrawText(dc, buf, D2D1::RectF(rc.left + 10, rc.top, rc.right - 6, rc.bottom), r_.Text(12), D2D1::ColorF(1, 1, 1, 0.95f));
+}
+
 void App::Paint() {
     if (!r_.BeginDraw()) return;
     if (r_.deviceLost()) ClearBitmaps();
@@ -619,8 +700,14 @@ void App::Paint() {
     ++frame_;
     hits_.clear();
     double paintStart = NowMs();
+    // fertige Vorschaubilder hochladen: waehrend einer Animation nur wenige Millisekunden je Bild
+    if (!thumbBacklog_.empty()) DrainThumbs(animating_ ? 4.0 : 12.0);
     if (animating_) {
-        float dt = static_cast<float>(std::clamp(paintStart - animLast_, 0.0, 50.0));
+        // Schritt im Takt des Bildschirms (gleichmaessige Bewegung auch bei schwankender Rechenzeit);
+        // der erste Schritt nach dem Start ist genau eine Bildperiode
+        float dt = animFresh_ ? static_cast<float>(RefreshPeriodMs())
+                              : FrameDt(std::clamp(paintStart - animLast_, 0.0, 50.0));
+        animFresh_ = false;
         animLast_ = paintStart;
         if (IsIconic(hwnd_) || !AnimateStep(dt)) animating_ = false;
     }
@@ -678,12 +765,16 @@ void App::Paint() {
             DrawText(dc, dn, D2D1::RectF(a.x - 10, a.y + 2, a.x + 10, a.y + 14), r_.Icon(8), t.text);
         }
     }
+    if (perfHud_) PaintPerfHud(dc, paintStart);
     r_.EndDraw();
     if (animating_) {
-        // naechstes Bild: Present hat auf VSync gewartet; kehrte es sofort zurueck (verdeckt), per Timer drosseln
-        if (NowMs() - paintStart < 2.0) SetTimer(hwnd_, kTimerAnim, 8, nullptr);
-        else InvalidateRect(hwnd_, nullptr, FALSE);
+        // naechstes Bild: BeginDraw wartet auf den Takt des Bildschirms. Blieb er aus (Fenster verdeckt), per Timer
+        // drosseln. Ohne Takt-Abfrage (Rueckfall): Present wartet selbst; kehrte es sofort zurueck, ebenfalls drosseln.
+        bool paced = r_.framePaced() ? r_.frameReady() : NowMs() - paintStart >= 2.0;
+        if (paced) InvalidateRect(hwnd_, nullptr, FALSE);
+        else SetTimer(hwnd_, kTimerAnim, r_.framePaced() ? 100 : 8, nullptr);
     }
+    if (!thumbBacklog_.empty()) InvalidateRect(hwnd_, nullptr, FALSE);   // restliche Vorschaubilder im naechsten Bild
     if (r_.deviceLost()) {
         ClearBitmaps();
         InvalidateRect(hwnd_, nullptr, FALSE);
@@ -1886,6 +1977,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
     // Der Zoom laeuft um einen festen Punkt (Mauszeiger): Mittelpunkt c = A - (A - c0) * s / s0.
     // So bleibt der Punkt unter dem Mauszeiger waehrend der ganzen Animation stehen (keine Bogenbewegung).
     auto& v = viewer_;
+    const bool wasSettled = v.animU >= 1;
     if (v.animS <= 0 || v.dragging) {
         v.animS = v.fromS = v.toS = sTarget;
         v.animPan = v.fromPan = v.toPan = v.pan;
@@ -1905,7 +1997,8 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         }
     }
     if (v.animU < 1) {
-        float dt = static_cast<float>(std::clamp(nowMs - v.animTick, 0.0, 50.0));
+        // im Takt des Bildschirms; der erste Schritt einer neuen Bewegung ist genau eine Bildperiode
+        float dt = wasSettled ? static_cast<float>(RefreshPeriodMs()) : FrameDt(std::clamp(nowMs - v.animTick, 0.0, 50.0));
         v.animU += (1.0f - v.animU) * (1.0f - std::exp(-dt / 55.0f));
         if (v.animU > 0.997f) v.animU = 1;
         if (v.anchored) {
@@ -1940,20 +2033,88 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         if (tit != bmps_.end() && tit->second.bmp) b = &tit->second;
     }
     D2D1_COLOR_F white = D2D1::ColorF(1, 1, 1, 0.95f), dim = D2D1::ColorF(1, 1, 1, 0.6f);
-    dc->PushAxisAlignedClip(D2D1::RectF(0, 0, VW, H_), D2D1_ANTIALIAS_MODE_ALIASED);
     // angezeigte Bildflaeche (gedreht) fuer den Zuschnitt
     viewer_.imgBox = (viewer_.rotation % 2 == 1) ? D2D1::RectF(c.x - dh / 2, c.y - dw / 2, c.x + dh / 2, c.y + dw / 2) : dst;
+    D2D1_INTERPOLATION_MODE im = D2D1_INTERPOLATION_MODE_LINEAR;
+    bool cached = false;
     if (b) {
-        dc->SetTransform(D2D1::Matrix3x2F::Rotation(viewer_.rotation * 90.0f, c));
         D2D1_SIZE_U px = b->bmp->GetPixelSize();
         float screenScale = dw * r_.scale() / std::max(1u, px.width);
         // Vergroessern: wahlweise geglaettet (kubisch) oder Pixel vergroessert (ab 3-fach scharfe Pixelkanten)
-        D2D1_INTERPOLATION_MODE im = screenScale < 1.0f || settings_.viewerSmooth
-                                         ? D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC
-                                         : (screenScale >= 3.0f ? D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR
-                                                                : D2D1_INTERPOLATION_MODE_LINEAR);
-        dc->DrawBitmap(b->bmp.Get(), dst, 1.0f, im);
-        dc->SetTransform(D2D1::Matrix3x2F::Identity());
+        im = screenScale < 1.0f || settings_.viewerSmooth
+                 ? D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC
+                 : (screenScale >= 3.0f ? D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR : D2D1_INTERPOLATION_MODE_LINEAR);
+        // Ruhende Ansicht: das hochwertig gefilterte Bild einmal in Bildschirmaufloesung festhalten und danach nur
+        // noch 1:1 kopieren (gleiche Pixel). Sonst wuerde jedes Neuzeichnen (Maus ueber den Pfeilen, Leisten) das
+        // ganze Foto erneut filtern.
+        auto& vc = viewCache_;
+        bool settled = v.animU >= 1 && !v.dragging && !animating_;
+        // erst festhalten, wenn die Lage zwei Bilder lang gleich war (nicht waehrend der Infobereich einfaehrt)
+        bool stable = settled && vc.seen.left == dst.left && vc.seen.top == dst.top && vc.seen.right == dst.right &&
+                      vc.seen.bottom == dst.bottom && vc.seenW == VW;
+        vc.seen = dst;
+        vc.seenW = VW;
+        if (!stable) {
+            if (vc.bmp) { vc.bmp.Reset(); vc.path.clear(); }
+        } else if (im == D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC) {
+            const float sc = r_.scale();
+            const D2D1_RECT_F& ib = viewer_.imgBox;
+            int x0 = static_cast<int>(std::floor(std::max(ib.left, 0.0f) * sc));
+            int y0 = static_cast<int>(std::floor(std::max(ib.top, 0.0f) * sc));
+            int x1 = static_cast<int>(std::ceil(std::min(ib.right, VW) * sc));
+            int y1 = static_cast<int>(std::ceil(std::min(ib.bottom, H_) * sc));
+            if (x1 > x0 && y1 > y0 && static_cast<uint32_t>(x1 - x0) <= r_.maxBitmapSize() &&
+                static_cast<uint32_t>(y1 - y0) <= r_.maxBitmapSize()) {
+                UINT cw = static_cast<UINT>(x1 - x0), ch = static_cast<UINT>(y1 - y0);
+                bool same = vc.bmp && vc.path == e.path && vc.src == b->bmp.Get() && vc.rotation == viewer_.rotation &&
+                            vc.x0 == x0 && vc.y0 == y0 && vc.w == cw && vc.h == ch && vc.dpi == r_.dpi() &&
+                            vc.dst.left == dst.left && vc.dst.top == dst.top && vc.dst.right == dst.right &&
+                            vc.dst.bottom == dst.bottom;
+                if (!same) {
+                    if (!vc.bmp || vc.w != cw || vc.h != ch || vc.dpi != r_.dpi()) {
+                        vc.bmp.Reset();
+                        D2D1_BITMAP_PROPERTIES1 bp = D2D1::BitmapProperties1(
+                            D2D1_BITMAP_OPTIONS_TARGET,
+                            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), r_.dpi(), r_.dpi());
+                        dc->CreateBitmap(D2D1::SizeU(cw, ch), nullptr, 0, bp, &vc.bmp);
+                    }
+                    if (vc.bmp) {
+                        ComPtr<ID2D1Image> oldTarget;
+                        dc->GetTarget(&oldTarget);
+                        dc->SetTarget(vc.bmp.Get());
+                        dc->Clear(D2D1::ColorF(0, 0, 0, 0));
+                        dc->SetTransform(D2D1::Matrix3x2F::Rotation(viewer_.rotation * 90.0f, c) *
+                                         D2D1::Matrix3x2F::Translation(-x0 / sc, -y0 / sc));
+                        dc->DrawBitmap(b->bmp.Get(), dst, 1.0f, im);
+                        dc->SetTransform(D2D1::Matrix3x2F::Identity());
+                        dc->SetTarget(oldTarget.Get());
+                        vc.path = e.path;
+                        vc.src = b->bmp.Get();
+                        vc.rotation = viewer_.rotation;
+                        vc.x0 = x0;
+                        vc.y0 = y0;
+                        vc.w = cw;
+                        vc.h = ch;
+                        vc.dpi = r_.dpi();
+                        vc.dst = dst;
+                    }
+                }
+                cached = vc.bmp != nullptr;
+            }
+        }
+    }
+    dc->PushAxisAlignedClip(D2D1::RectF(0, 0, VW, H_), D2D1_ANTIALIAS_MODE_ALIASED);
+    if (b) {
+        if (cached) {
+            const float sc = r_.scale();
+            const auto& vc = viewCache_;
+            dc->DrawBitmap(vc.bmp.Get(), D2D1::RectF(vc.x0 / sc, vc.y0 / sc, (vc.x0 + vc.w) / sc, (vc.y0 + vc.h) / sc), 1.0f,
+                           D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
+        } else {
+            dc->SetTransform(D2D1::Matrix3x2F::Rotation(viewer_.rotation * 90.0f, c));
+            dc->DrawBitmap(b->bmp.Get(), dst, 1.0f, im);
+            dc->SetTransform(D2D1::Matrix3x2F::Identity());
+        }
         if (e.ext == L"svg" && viewer_.rotation % 4 == 0) {
             // SVG: Vektorgrafik bleibt in jeder Zoomstufe scharf. Ist das Grundbild groeber als der Bildschirm,
             // rendert resvg den sichtbaren Ausschnitt in Bildschirmaufloesung nach (sobald die Ansicht ruht).

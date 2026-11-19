@@ -62,6 +62,14 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
         OleUninitialize();
         return code;
     }
+    //   peek.exe --render-check <bericht.txt>
+    if (argv && argc >= 3 && wcscmp(argv[1], L"--render-check") == 0) {
+        code = peek::RunRenderCheck(argv[2]);
+        LocalFree(argv);
+        MFShutdown();
+        OleUninitialize();
+        return code;
+    }
     //   peek.exe --sandbox-test <ordner> <bericht.txt>
     if (argv && argc >= 4 && wcscmp(argv[1], L"--sandbox-test") == 0) {
         code = peek::RunSandboxTest(argv[2], argv[3]);

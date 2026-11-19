@@ -66,6 +66,7 @@ add_executable(peek WIN32
   src/atlaswriter.cpp
   src/atlas.cpp
   src/cloud.cpp
+  src/rendercheck.cpp
   src/renderer.cpp
   src/fs.cpp
   src/db.cpp

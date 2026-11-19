@@ -962,6 +962,23 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
             CloudCard& k = c.cards[sg.direct];
             dc->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
             float rad = std::min(5.0f, kRound * std::min(sg.rc.right - sg.rc.left, sg.rc.bottom - sg.rc.top));
+            // Haeufigster Fall (Bild, voll deckend, nicht abgedunkelt): direkt mit runden Ecken fuellen. Eine
+            // Zwischenebene je Karte unterbricht das gebuendelte Zeichnen und kostet eine eigene Zeichenflaeche.
+            if (sg.fog <= 0.01f && sg.alpha >= 0.999f) {
+                auto it = byPath_.find(k.path);
+                auto bi = bmps_.find(k.path);
+                if (it != byPath_.end() && bi != bmps_.end() && bi->second.bmp) {
+                    const FileEntry& e = entries_[it->second];
+                    if (e.HasThumb() && !e.offline && e.kind != Kind::Video) {
+                        bi->second.lastUse = frame_;
+                        ID2D1Bitmap1* bmp = bi->second.bmp.Get();
+                        auto fi = fullBmps_.find(k.path);
+                        if (fi != fullBmps_.end() && fi->second.bmp) bmp = fi->second.bmp.Get();
+                        DrawRoundedBitmap(dc, bmp, sg.rc, rad);
+                        continue;
+                    }
+                }
+            }
             ComPtr<ID2D1RoundedRectangleGeometry> geo;
             if (fac) fac->CreateRoundedRectangleGeometry(D2D1::RoundedRect(sg.rc, rad, rad), &geo);
             dc->PushLayer(D2D1::LayerParameters1(sg.rc, geo.Get(), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), sg.alpha),

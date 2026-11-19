@@ -147,6 +147,7 @@ void Settings::Load() {
     sheetQuality = std::clamp(ReadInt(L"Sheet", L"Quality", 1), 0, 2);
     group = ReadInt(L"View", L"Group", 0) != 0;
     viewerSmall = std::clamp(ReadInt(L"View", L"ViewerSmall", 0), 0, 1);
+    viewerFullscreen = ReadInt(L"View", L"ViewerFullscreen", 1) != 0;
     for (int i = 0; i < 5; ++i) {
         std::wstring key = L"Col" + std::to_wstring(i);
         colW[i] = std::clamp(ReadInt(L"View", key.c_str(), colW[i]), 60, 1200);
@@ -217,6 +218,7 @@ void Settings::Save() const {
     WriteInt(L"Sheet", L"Quality", sheetQuality);
     WriteInt(L"View", L"Group", group ? 1 : 0);
     WriteInt(L"View", L"ViewerSmall", viewerSmall);
+    WriteInt(L"View", L"ViewerFullscreen", viewerFullscreen ? 1 : 0);
     for (int i = 0; i < 5; ++i) {
         std::wstring key = L"Col" + std::to_wstring(i);
         WriteInt(L"View", key.c_str(), colW[i]);

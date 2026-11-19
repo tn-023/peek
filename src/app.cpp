@@ -15,6 +15,7 @@ namespace peek {
 
 // Auswahllisten der Einstellungen
 const wchar_t* const kThemeNames[3] = {N_(L"System (Standard)"), N_(L"Hell"), N_(L"Dunkel")};
+const wchar_t* const kViewerFullscreenNames[2] = {N_(L"Ein (Standard)"), N_(L"Aus \u2013 Taskleiste bleibt sichtbar")};
 const wchar_t* const kViewerSmallNames[2] = {N_(L"Originalgr\u00f6\u00dfe (100 %)"), N_(L"An die Ansicht anpassen")};
 
 const wchar_t* LanguageName(int setting) {
@@ -227,7 +228,7 @@ bool App::Init(HINSTANCE inst, int show) {
     ShowWindow(hwnd_, settings_.maximized ? SW_SHOWMAXIMIZED : show);
     if (viewerStart_) {
         // gleich im Vollbild (dunkel), bis das Bild bereit ist: kein kurzes Aufblitzen des Ordners
-        if (!fullscreen_) ToggleFullscreen();
+        if (!fullscreen_) ToggleFullscreen(!settings_.viewerFullscreen);
         SetTimer(hwnd_, kTimerViewerStart, 6000, nullptr);
     }
     UpdateWindow(hwnd_);
@@ -765,6 +766,28 @@ void App::ShowAllCollections(bool history) {
     loader_.LoadCollections(&db_, settings_.collections, gen_);
 }
 
+void App::CreateNewFolder() {
+    if (path_.empty() || collectionsView_ || bookmarksView_ || !IsLocalDrivePath(path_)) return;
+    std::wstring base = T(L"Neuer Ordner"), name = base, full;
+    DWORD err = 0;
+    for (int n = 1; n < 1000; ++n) {
+        if (n > 1) name = base + L" (" + std::to_wstring(n) + L")";
+        full = JoinPath(path_, name);
+        if (CreateDirectoryW(LongPath(full).c_str(), nullptr)) { err = 0; break; }
+        err = GetLastError();
+        if (err != ERROR_ALREADY_EXISTS) break;
+    }
+    if (err) {
+        SetStatus(T(L"Ordner konnte nicht erstellt werden."));
+        return;
+    }
+    Reload(true);
+    keepSelection_.clear();
+    selected_.clear();
+    pendingSelect_ = full;
+    renameAfterLoad_ = true;
+}
+
 void App::Reload(bool keepState) {
     if (keepState) {
         keepSelection_ = SelectedPaths();
@@ -1044,16 +1067,23 @@ void App::OnLoadResults() {
     }
     if (!pendingSelect_.empty()) {
         auto it = byPath_.find(pendingSelect_);
+        bool found = false;
         if (it != byPath_.end()) {
             for (size_t i = 0; i < visible_.size(); ++i)
                 if (visible_[i] == it->second) {
                     focus_ = anchor_ = static_cast<int>(i);
                     if (selected_.empty()) selected_.insert(it->second);
                     ScrollToPos(focus_);
+                    found = true;
                     break;
                 }
         }
         pendingSelect_.clear();
+        if (renameAfterLoad_) {   // neuer Ordner: gleich umbenennen (sofern er nicht weggefiltert ist)
+            renameAfterLoad_ = false;
+            if (found) BeginRename(focus_);
+            else SetStatus(T(L"Ordner erstellt."));
+        }
     }
     if (!pendingCompare_.empty()) {   // Dokumentation: Vergleich oeffnen
         size_t semi = pendingCompare_.find(L';');
@@ -1117,6 +1147,11 @@ void App::OnThumbResults() {
                 svgDetail_ = svgPending_;
                 if (res.ok) svgDetail_.bmp = r_.CreateBitmap(res.px);
             }
+            continue;
+        }
+        if (res.job == ThumbJob::Details) {   // Aufnahmedaten fuer den Info-Bereich
+            if (photoDetails_.size() > 4000) { photoDetails_.clear(); photoDetailsAsked_.clear(); }
+            photoDetails_[res.key] = res.ok ? std::move(res.details) : std::wstring();
             continue;
         }
         if (res.job == ThumbJob::Full) {
@@ -1631,7 +1666,7 @@ void App::OpenViewer(int pos) {
     if (settingsOpen_) settingsOpen_ = false;
     // Betrachter ohne Titelleiste: randloses Vollbild auf dem aktuellen Bildschirm
     if (!fullscreen_) {
-        ToggleFullscreen();
+        ToggleFullscreen(!settings_.viewerFullscreen);
         viewer_.ownFullscreen = fullscreen_;
     }
     viewer_.controlsUntil = GetTickCount() + 2000;
@@ -1888,7 +1923,7 @@ void App::DeleteSelection() {
     if (RecycleFiles(hwnd_, paths)) Reload(false);
 }
 
-void App::ToggleFullscreen() {
+void App::ToggleFullscreen(bool workArea) {
     if (viewer_.open) viewer_.ownFullscreen = false;   // Benutzer hat selbst umgeschaltet
     DWORD style = static_cast<DWORD>(GetWindowLongW(hwnd_, GWL_STYLE));
     if (!fullscreen_) {
@@ -1899,8 +1934,8 @@ void App::ToggleFullscreen() {
             settings_.hasWindow = true;
             GetWindowRect(hwnd_, &prevRect_);
             SetWindowLongW(hwnd_, GWL_STYLE, static_cast<LONG>(style & ~WS_OVERLAPPEDWINDOW));
-            SetWindowPos(hwnd_, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
-                         mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+            const RECT& r = workArea ? mi.rcWork : mi.rcMonitor;
+            SetWindowPos(hwnd_, HWND_TOP, r.left, r.top, r.right - r.left, r.bottom - r.top, SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
             fullscreen_ = true;
         }
     } else {

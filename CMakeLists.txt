@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.24)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 set(VCPKG_TARGET_TRIPLET "x64-windows-static" CACHE STRING "")
 
-project(peek VERSION 1.6.1 LANGUAGES CXX)
+project(peek VERSION 1.6.2 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

@@ -1134,6 +1134,53 @@ void App::PaintTile(ID2D1DeviceContext* dc, int pos, const D2D1_RECT_F& cell) {
     }
 }
 
+// Aufnahmedaten im Info-Bereich: beim ersten Anzeigen im Hintergrund aus dem Dateikopf lesen (Sandbox), dann zeigen
+void App::PhotoDetailRows(const FileEntry& e, const std::function<void(const std::wstring&, const std::wstring&)>& row) {
+    if (e.kind != Kind::Image || e.offline) return;
+    auto it = photoDetails_.find(e.path);
+    if (it == photoDetails_.end()) {
+        if (photoDetailsAsked_.insert(e.path).second) {
+            ThumbRequest r;
+            r.key = e.path;
+            r.path = e.path;
+            r.kind = e.kind;
+            r.job = ThumbJob::Details;
+            r.prio = 0;
+            thumbs_.Request(std::move(r));
+        }
+        return;
+    }
+    // Objektiv \x1f Blende \x1f Belichtung (s) \x1f ISO
+    std::wstring parts[4];
+    size_t start = 0;
+    for (int i = 0; i < 4; ++i) {
+        size_t sep = it->second.find(L'\x1f', start);
+        parts[i] = it->second.substr(start, sep == std::wstring::npos ? std::wstring::npos : sep - start);
+        if (sep == std::wstring::npos) break;
+        start = sep + 1;
+    }
+    auto number = [](const std::wstring& s, double& d) { return !s.empty() && (d = _wtof(s.c_str())) > 0; };
+    auto decimal = [](double d) {   // eine Nachkommastelle, ",0" weglassen; Dezimalzeichen je Sprache
+        wchar_t b[32];
+        swprintf_s(b, L"%.1f", d);
+        std::wstring s = b;
+        if (s.size() > 2 && s.compare(s.size() - 2, 2, L".0") == 0) s.resize(s.size() - 2);
+        if (!LangEn())
+            for (auto& c : s) if (c == L'.') c = L',';
+        return s;
+    };
+    double d = 0;
+    row(T(L"Objektiv"), parts[0]);
+    if (number(parts[1], d)) row(T(L"Blende"), L"f/" + decimal(d));
+    if (number(parts[2], d)) {
+        std::wstring v;
+        if (d < 0.5) v = L"1/" + std::to_wstring(static_cast<long long>(std::llround(1.0 / d))) + L" s";
+        else v = decimal(d) + L" s";
+        row(T(L"Belichtung"), v);
+    }
+    if (number(parts[3], d)) row(L"ISO", std::to_wstring(static_cast<long long>(std::llround(d))));
+}
+
 // Namensspalte: der Platz, den die uebrigen Spalten am rechten Rand frei lassen (mindestens 200)
 float App::ListNameW() const {
     float rest = 0;
@@ -1441,6 +1488,7 @@ void App::PaintInfoPanel(ID2D1DeviceContext* dc, const D2D1_RECT_F& rc, const st
         row(T(L"Geändert"), FormatDate(e.mtime));
         row(T(L"Erstellt"), FormatDate(e.ctime));
         row(T(L"Kamera"), e.camera);
+        PhotoDetailRows(e, row);
         if (!e.source.empty()) row(T(L"Quelle"), T(e.source));
         if (e.templateId != UINT32_MAX) row(T(L"Namensmuster"), TPattern(templDict_.Word(e.templateId)));
         row(T(L"Ordner"), ParentPath(e.path));
@@ -1837,7 +1885,7 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
     DrawText(dc, T(L"Darstellung"), D2D1::RectF(x0, y, x1, y + 28), fh, t.text);
     y += 34;
     {
-        D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 8 + 3 * 56);
+        D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 8 + 4 * 56);
         FillRound(dc, rc, 8, t.chip);
         auto dropRow = [&](float ry, const wchar_t* label, HitType type, const std::wstring& cur) {
             DrawText(dc, label, D2D1::RectF(x0 + 20, ry, x1 - 260, ry + 56), r_.Text(13), t.text);
@@ -1855,7 +1903,10 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
         dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 60), D2D1::Point2F(x1 - 16, rc.top + 60), r_.Brush(t.stroke), 1.0f);
         dropRow(rc.top + 60, T(L"Farbmodus"), HitType::SettingsTheme, T(kThemeNames[std::clamp(settings_.theme, 0, 2)]));
         dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 116), D2D1::Point2F(x1 - 16, rc.top + 116), r_.Brush(t.stroke), 1.0f);
-        dropRow(rc.top + 116, T(L"Kleine Bilder im Betrachter"), HitType::SettingsViewerSmall,
+        dropRow(rc.top + 116, T(L"Bildbetrachter im Vollbild"), HitType::SettingsViewerFullscreen,
+                T(kViewerFullscreenNames[settings_.viewerFullscreen ? 0 : 1]));
+        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 172), D2D1::Point2F(x1 - 16, rc.top + 172), r_.Brush(t.stroke), 1.0f);
+        dropRow(rc.top + 172, T(L"Kleine Bilder im Betrachter"), HitType::SettingsViewerSmall,
                 T(kViewerSmallNames[std::clamp(settings_.viewerSmall, 0, 1)]));
         y = rc.bottom + 28;
     }
@@ -1954,6 +2005,7 @@ void App::PaintShortcuts(ID2D1DeviceContext* dc) {
           {N_(L"Strg+Umschalt+C"), N_(L"Pfad kopieren")},
           {N_(L"Strg+V"), N_(L"Einfügen")},
           {L"F2", N_(L"Umbenennen")},
+          {N_(L"Strg+Umschalt+N"), N_(L"Neuer Ordner")},
           {N_(L"Entf"), N_(L"In den Papierkorb")},
           {N_(L"Strg+E"), N_(L"Im Explorer zeigen")},
           {L"Alt+Enter", N_(L"Eigenschaften")}}},

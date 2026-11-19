@@ -21,6 +21,7 @@ namespace peek {
 // Auswahllisten der Einstellungen (deutsche Schluessel, Anzeige mit T())
 extern const wchar_t* const kThemeNames[3];
 extern const wchar_t* const kViewerSmallNames[2];
+extern const wchar_t* const kViewerFullscreenNames[2];   // 0 = Vollbild, 1 = Taskleiste sichtbar
 const wchar_t* LanguageName(int setting);   // 0 wie Windows, 1 Deutsch, 2 English
 
 enum class HitType {
@@ -30,7 +31,7 @@ enum class HitType {
     ViewerClose, ViewerPrev, ViewerNext, ViewerInfo, ViewerCrop, CropSave, CropCancel,
     ClearBookmarks, SearchHistItem, SearchHistDel, SearchHistClear, SearchParam,
     ViewCloud,
-    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage,
+    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen,
     SheetCancel, SheetCreate, SheetOrient, SheetColsMinus, SheetColsPlus, SheetRowsMinus, SheetRowsPlus, SheetNames,
     SheetExts, SheetQuality, SheetPrev, SheetNext, SheetHeadline, SheetCheck, SheetCell, SheetStripCheck, SheetStrip,
     SheetOpenPdf, BookmarkSheet,
@@ -172,10 +173,11 @@ private:
     void UpdateTitle();
     std::vector<std::wstring> SelectedPaths() const;
     void DeleteSelection();
-    void ToggleFullscreen();
+    void ToggleFullscreen(bool workArea = false);   // workArea: rahmenlos ueber dem Arbeitsbereich (Taskleiste bleibt sichtbar)
     void ApplyTheme();
     void ApplyLanguage();   // Sprache aus Einstellung bzw. --lang= setzen und Oberflaeche neu aufbauen
     void EndViewerStart();
+    void CreateNewFolder();   // "Neuer Ordner" im aktuellen Ordner, danach gleich umbenennen
     DWORD OnDragOver(const std::vector<std::wstring>& paths, POINT screen, DWORD keys, DWORD allowed, bool leave);
     DWORD OnDrop(const std::vector<std::wstring>& paths, POINT screen, DWORD keys, DWORD allowed);
     DWORD CrumbDropEffect(const std::vector<std::wstring>& paths, const std::wstring& target, DWORD keys,
@@ -530,6 +532,11 @@ private:
     int pendingChip_ = -1;
     float pendingZoom_ = 0;
     bool pendingRename_ = false;
+    bool renameAfterLoad_ = false;
+    // Aufnahmedaten (Objektiv, Blende, Belichtung, ISO) fuer den Info-Bereich, bei Bedarf gelesen; leer = keine
+    std::unordered_map<std::wstring, std::wstring> photoDetails_;
+    std::unordered_set<std::wstring> photoDetailsAsked_;
+    void PhotoDetailRows(const FileEntry& e, const std::function<void(const std::wstring&, const std::wstring&)>& row);   // neuer Ordner: nach dem Neuladen markieren und umbenennen
     std::wstring pendingCompare_;   // Dokumentation: "pfadA;pfadB"
     int pendingCompareMode_ = 0;
     std::wstring pendingDateRange_;   // Dokumentation: "JJJJ-MM-TT..JJJJ-MM-TT"
@@ -653,6 +660,7 @@ private:
     void ShowThemeMenu(const D2D1_RECT_F& rc);
     void ShowViewerSmallMenu(const D2D1_RECT_F& rc);
     void ShowLanguageMenu(const D2D1_RECT_F& rc);
+    void ShowViewerFullscreenMenu(const D2D1_RECT_F& rc);
     int settingsPage_ = 0;          // 0 Einstellungen, 1 Tastenkombinationen
     float settingsScroll_ = 0, settingsContentH_ = 0;
     void PaintShortcuts(ID2D1DeviceContext* dc);

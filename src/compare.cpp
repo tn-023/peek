@@ -46,8 +46,8 @@ void App::OpenCompare(const std::vector<std::wstring>& paths) {
     c.mode = 0;
     searchFocus_ = false;
     c.ownFullscreen = false;
-    if (!fullscreen_) {   // wie der Bildbetrachter: Vollbild
-        ToggleFullscreen();
+    if (!fullscreen_) {   // wie der Bildbetrachter: Vollbild (bzw. Taskleiste sichtbar, je nach Einstellung)
+        ToggleFullscreen(!settings_.viewerFullscreen);
         c.ownFullscreen = fullscreen_;
     }
     InvalidateRect(hwnd_, nullptr, FALSE);

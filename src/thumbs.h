@@ -8,7 +8,7 @@
 
 namespace peek {
 
-enum class ThumbJob : uint8_t { Thumb, Full, Icon, SvgView };   // SvgView: scharfer SVG-Ausschnitt fuer den Betrachter
+enum class ThumbJob : uint8_t { Thumb, Full, Icon, SvgView, Details };   // SvgView: scharfer SVG-Ausschnitt fuer den Betrachter; Details: Aufnahmedaten
 
 struct ThumbRequest {
     std::wstring key;
@@ -35,6 +35,7 @@ struct ThumbResult {
     std::wstring path;
     MetaRow meta;
     bool quick = false;   // erste Stufe (eingebettetes Vorschaubild), die scharfe Fassung folgt
+    std::wstring details; // Details: Objektiv, Blende, Belichtung, ISO (siehe ReadPhotoDetails)
 };
 
 class ThumbService {

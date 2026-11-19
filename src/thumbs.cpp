@@ -7,7 +7,7 @@
 namespace peek {
 
 static std::wstring JobKey(ThumbJob job, const std::wstring& key) {
-    wchar_t p = job == ThumbJob::Thumb ? L'T' : (job == ThumbJob::Full ? L'F' : L'I');
+    wchar_t p = job == ThumbJob::Thumb ? L'T' : job == ThumbJob::Full ? L'F' : job == ThumbJob::Details ? L'D' : L'I';
     return std::wstring(1, p) + key;
 }
 
@@ -103,6 +103,8 @@ bool ThumbService::Process(const ThumbRequest& r, ThumbResult& res) {
         return SbDecodeImage(r.path, kFullEdge, res.px);
     case ThumbJob::SvgView:
         return SbSvgRegion(r.path, r.vk, r.vx, r.vy, r.vw, r.vh, res.px);
+    case ThumbJob::Details:
+        return SbPhotoDetails(r.path, res.details);
     case ThumbJob::Thumb: {
         std::vector<uint8_t> blob;
         if (db_ && db_->GetThumb(r.path, r.size, r.mtime, blob) && DecodeImageMemory(blob.data(), blob.size(), res.px))

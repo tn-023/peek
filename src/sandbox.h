@@ -27,6 +27,7 @@ const wchar_t* DecoderSandboxText();   // fuer "Ueber peek"
 // Wie die gleichnamigen Funktionen in imaging.h, docimaging.h und svgimaging.h - nur abgeschottet
 bool SbDecodeImage(const std::wstring& path, uint32_t maxEdge, Pixels& out);
 bool SbEmbeddedThumb(const std::wstring& path, uint32_t maxEdge, Pixels& out);   // nur eingebettetes Vorschaubild (Dateikopf)
+bool SbPhotoDetails(const std::wstring& path, std::wstring& out);   // Objektiv, Blende, Belichtung, ISO (siehe ReadPhotoDetails)
 bool SbSvgRegion(const std::wstring& path, float k, float tx, float ty, uint32_t w, uint32_t h, Pixels& out);
 bool SbVideoThumbnail(const std::wstring& path, uint32_t maxEdge, Pixels& out, MetaRow* meta);
 bool SbDocThumb(const std::wstring& path, uint32_t edge, Pixels& out, MetaRow* meta);

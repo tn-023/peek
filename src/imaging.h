@@ -17,6 +17,9 @@ bool SaveCroppedImage(const std::wstring& src, int viewRot, double x0, double y0
 bool DecodeImageMemory(const uint8_t* data, size_t size, Pixels& out);
 // Eingebettetes Vorschaubild (EXIF bei JPEG/TIFF): liest nur den Dateikopf. Fuer Netzlaufwerke als erste, schnelle Stufe.
 bool DecodeEmbeddedThumb(const std::wstring& path, uint32_t maxEdge, Pixels& out);
+// Aufnahmedaten fuer den Info-Bereich (EXIF): Objektiv, Blende, Belichtungszeit (s), ISO als Text mit
+// Trennzeichen U+001F, Zahlen unformatiert ("2.8", "0.004", "400"); fehlende Angaben leer
+bool ReadPhotoDetails(const std::wstring& path, std::wstring& out);
 
 // JPEG fuer PDF: Transparenz auf Weiss, Qualitaet 0..1
 bool EncodeJpegOnWhite(const Pixels& px, float quality, std::vector<uint8_t>& out);

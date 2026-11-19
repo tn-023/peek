@@ -348,6 +348,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         case HitType::SettingsDeleteIndex: DeleteIndex(); break;
         case HitType::SettingsTheme: ShowThemeMenu(h->rc); break;
         case HitType::SettingsLanguage: ShowLanguageMenu(h->rc); break;
+        case HitType::SettingsViewerFullscreen: ShowViewerFullscreenMenu(h->rc); break;
         case HitType::SettingsViewerSmall: ShowViewerSmallMenu(h->rc); break;
         case HitType::SettingsShortcuts:
             settingsPage_ = 1;
@@ -750,6 +751,11 @@ void App::OnRButtonUp(float x, float y) {
         m.right = T(L"Strg+V");
         m.glyph = 0xE77F;
         m.disabled = !FilesFromClipboard(hwnd_, clip, mv);
+        MenuItem nf;
+        nf.id = 5;
+        nf.text = T(L"Neuer Ordner");
+        nf.right = T(L"Strg+Umschalt+N");
+        nf.glyph = 0xE8F4;
         MenuItem r;
         r.id = 2;
         r.text = T(L"Aktualisieren");
@@ -762,8 +768,9 @@ void App::OnRButtonUp(float x, float y) {
         kt.id = 4;
         kt.text = T(L"Kacheltextur aus diesem Ordner \u2026");
         kt.glyph = 0xE8A9;
-        UINT cmd = ShowPopupMenu(hwnd_, {m, MenuItem::Sep(), r, MenuItem::Sep(), ks, kt}, screen, accent_);
+        UINT cmd = ShowPopupMenu(hwnd_, {m, nf, MenuItem::Sep(), r, MenuItem::Sep(), ks, kt}, screen, accent_);
         if (cmd == 1) PasteFiles(path_);
+        else if (cmd == 5) CreateNewFolder();
         else if (cmd == 2) Reload(true);
         else if (cmd == 3) OpenContactSheet({path_});
         else if (cmd == 4) OpenAtlas(path_);
@@ -960,6 +967,11 @@ bool App::OnKeyDown(WPARAM vk) {
         return true;
     }
 
+    // Neuer Ordner (Strg+Umschalt+N wie im Explorer)
+    if (vk == 'N' && ctrl && shift && !alt) {
+        CreateNewFolder();
+        return true;
+    }
     // Umbenennen (F2) und Eigenschaften (Alt+Enter)
     if (vk == VK_F2 && !ctrl && !alt && focus_ >= 0) {
         BeginRename(focus_);
@@ -1507,6 +1519,22 @@ void App::ShowLanguageMenu(const D2D1_RECT_F& rc) {
     langOverride_ = -1;
     settings_.Save();
     ApplyLanguage();
+}
+
+void App::ShowViewerFullscreenMenu(const D2D1_RECT_F& rc) {
+    std::vector<MenuItem> items;
+    for (int i = 0; i < 2; ++i) {
+        MenuItem m;
+        m.id = 100 + i;
+        m.text = T(kViewerFullscreenNames[i]);
+        m.checked = (settings_.viewerFullscreen ? 0 : 1) == i;
+        items.push_back(m);
+    }
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
+    if (cmd < 100 || cmd > 101) return;
+    settings_.viewerFullscreen = cmd == 100;
+    settings_.Save();
+    InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 void App::ShowViewerSmallMenu(const D2D1_RECT_F& rc) {

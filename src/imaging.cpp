@@ -473,6 +473,92 @@ bool DecodeEmbeddedThumb(const std::wstring& path, uint32_t maxEdge, Pixels& out
     return true;
 }
 
+namespace {
+// EXIF-Werte als Zahl: Gleitkomma, (vorzeichenbehafteter) Bruch als VT_UI8/VT_I8 (Zaehler unten, Nenner oben), Ganzzahl
+bool PropNumber(const PROPVARIANT& v, double& out) {
+    switch (v.vt) {
+    case VT_R8: out = v.dblVal; return true;
+    case VT_R4: out = v.fltVal; return true;
+    case VT_UI2: out = v.uiVal; return true;
+    case VT_UI4: out = v.ulVal; return true;
+    case VT_I4: out = v.lVal; return true;
+    case VT_UI8: {
+        uint32_t num = v.uhVal.LowPart, den = v.uhVal.HighPart;
+        if (!den) return false;
+        out = double(num) / den;
+        return true;
+    }
+    case VT_I8: {
+        int32_t num = static_cast<int32_t>(v.hVal.LowPart), den = static_cast<int32_t>(v.hVal.HighPart);
+        if (!den) return false;
+        out = double(num) / den;
+        return true;
+    }
+    case VT_VECTOR | VT_UI2: if (v.caui.cElems) { out = v.caui.pElems[0]; return true; } return false;
+    default: return false;
+    }
+}
+
+bool PropText(const PROPVARIANT& v, std::wstring& out) {
+    if (v.vt == VT_LPWSTR && v.pwszVal) { out = v.pwszVal; return !out.empty(); }
+    if (v.vt == VT_LPSTR && v.pszVal) {
+        int n = MultiByteToWideChar(CP_UTF8, 0, v.pszVal, -1, nullptr, 0);
+        UINT cp = CP_UTF8;
+        if (n <= 0) { cp = CP_ACP; n = MultiByteToWideChar(cp, 0, v.pszVal, -1, nullptr, 0); }
+        if (n <= 1) return false;
+        out.resize(static_cast<size_t>(n));
+        MultiByteToWideChar(cp, 0, v.pszVal, -1, out.data(), n);
+        out.resize(static_cast<size_t>(n - 1));
+        return !out.empty();
+    }
+    return false;
+}
+
+template <typename F>
+bool QueryFirst(IWICMetadataQueryReader* q, std::initializer_list<const wchar_t*> names, F&& take) {
+    for (const wchar_t* n : names) {
+        PROPVARIANT v;
+        PropVariantInit(&v);
+        bool ok = SUCCEEDED(q->GetMetadataByName(n, &v)) && take(v);
+        PropVariantClear(&v);
+        if (ok) return true;
+    }
+    return false;
+}
+}  // namespace
+
+bool ReadPhotoDetails(const std::wstring& path, std::wstring& out) {
+    out.clear();
+    if (IsSvgPath(path) || IsTgaPath(path)) return false;
+    auto f = Wic();
+    if (!f) return false;
+    ComPtr<IStream> in = OpenInputStream(path);
+    if (!in) return false;
+    ComPtr<IWICBitmapDecoder> dec;
+    if (FAILED(f->CreateDecoderFromStream(in.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &dec))) return false;
+    ComPtr<IWICBitmapFrameDecode> frame;
+    if (FAILED(dec->GetFrame(0, &frame))) return false;
+    ComPtr<IWICMetadataQueryReader> q;
+    if (FAILED(frame->GetMetadataQueryReader(&q))) return false;
+    std::wstring lens;
+    double fnum = 0, expo = 0, iso = 0;
+    QueryFirst(q.Get(), {L"System.Photo.LensModel", L"/app1/ifd/exif/{ushort=42036}", L"/ifd/exif/{ushort=42036}"},
+               [&](const PROPVARIANT& v) { return PropText(v, lens); });
+    QueryFirst(q.Get(), {L"System.Photo.FNumber", L"/app1/ifd/exif/{ushort=33437}", L"/ifd/exif/{ushort=33437}"},
+               [&](const PROPVARIANT& v) { return PropNumber(v, fnum) && fnum > 0; });
+    QueryFirst(q.Get(), {L"System.Photo.ExposureTime", L"/app1/ifd/exif/{ushort=33434}", L"/ifd/exif/{ushort=33434}"},
+               [&](const PROPVARIANT& v) { return PropNumber(v, expo) && expo > 0; });
+    QueryFirst(q.Get(), {L"System.Photo.ISOSpeed", L"/app1/ifd/exif/{ushort=34855}", L"/ifd/exif/{ushort=34855}"},
+               [&](const PROPVARIANT& v) { return PropNumber(v, iso) && iso > 0; });
+    while (!lens.empty() && (lens.back() == L' ' || lens.back() == L'\0')) lens.pop_back();
+    if (lens.size() > 120) lens.resize(120);
+    for (auto& c : lens) if (c == 0x1f || c < 0x20) c = L' ';
+    auto num = [](double d) { wchar_t b[32]; std::swprintf(b, 32, L"%.6g", d); return std::wstring(b); };
+    out = lens + L'\x1f' + (fnum > 0 ? num(fnum) : L"") + L'\x1f' + (expo > 0 ? num(expo) : L"") + L'\x1f' +
+          (iso > 0 ? num(iso) : L"");
+    return !lens.empty() || fnum > 0 || expo > 0 || iso > 0;
+}
+
 bool DecodeImageMemory(const uint8_t* data, size_t size, Pixels& out) {
     auto f = Wic();
     if (!f || !data || !size) return false;

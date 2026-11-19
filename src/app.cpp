@@ -16,6 +16,7 @@ namespace peek {
 // Auswahllisten der Einstellungen
 const wchar_t* const kThemeNames[3] = {N_(L"System (Standard)"), N_(L"Hell"), N_(L"Dunkel")};
 const wchar_t* const kViewerFullscreenNames[2] = {N_(L"Ein (Standard)"), N_(L"Aus \u2013 Taskleiste bleibt sichtbar")};
+const wchar_t* const kCloudGroupsNames[2] = {N_(L"Als Streifen (Standard)"), N_(L"Aus \u2013 Wolke ohne Gruppen")};
 const wchar_t* const kViewerSmallNames[2] = {N_(L"Originalgr\u00f6\u00dfe (100 %)"), N_(L"An die Ansicht anpassen")};
 
 const wchar_t* LanguageName(int setting) {

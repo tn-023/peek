@@ -27,6 +27,7 @@ struct Settings {
     int sortKey = 0;        // 0 Name, 1 Datum, 2 Groesse, 3 Aufloesung, 4 Typ
     bool sortDesc = false;
     bool group = false;          // Ansicht nach dem Sortierkriterium gruppieren
+    bool cloudGroups = true;        // Wolke: bei Gruppierung in Streifen aufteilen (aus: Wolke wie bisher)
     bool viewerFullscreen = true;   // Bildbetrachter/Vergleich: Vollbild (aus: rahmenlos, Taskleiste bleibt sichtbar)
     int viewerSmall = 0;         // kleine Bilder im Betrachter: 0 = 100 %, 1 = eingepasst (vergroessert)
     std::vector<std::wstring> collections;

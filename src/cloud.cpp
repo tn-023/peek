@@ -116,6 +116,63 @@ void App::CloudTargets() {
     c.va = vw / vh;
     c.R = 0.38f * std::sqrt(static_cast<float>(std::max(1, n)));
     c.D = 0.3f + 0.5f * c.R;
+    c.strips.clear();
+    if (c.groupKey >= 0 && n > 0) {
+        // Gruppiert: nebeneinander liegende senkrechte Streifen, Breite nach Anzahl (gleiche Dichte wie die runde
+        // Wolke). Jeder Streifen beginnt vorne mit dem ersten Element seiner Gruppe.
+        std::vector<CloudGroup> groups = CloudGroups();
+        const float kA = 0.4536f;   // Flaeche je Karte wie in der runden Wolke (pi * 0.38^2)
+        const float gap = 0.6f, wMin = 1.8f;
+        const int g = static_cast<int>(groups.size());
+        const float A = kA * n, G = gap * (g - 1);
+        const float sa = std::clamp(vw / vh, 1.0f, 3.0f);
+        float H = std::max(1.8f, (G + std::sqrt(G * G + 4 * sa * A)) / (2 * sa));
+        std::vector<float> ws(g);
+        float W = G;
+        for (int j = 0; j < g; ++j) {
+            ws[j] = std::max(wMin, kA * groups[j].count / H);
+            W += ws[j];
+        }
+        float x = -W / 2;
+        c.D = 0.3f;
+        for (int j = 0; j < g; ++j) {
+            CloudStrip st;
+            st.label = groups[j].label;
+            st.count = groups[j].count;
+            st.x0 = x;
+            st.x1 = x + ws[j];
+            x = st.x1 + gap;
+            const int m = groups[j].count;
+            const float Dg = 0.3f + 0.19f * std::sqrt(static_cast<float>(m));
+            c.D = std::max(c.D, Dg);
+            for (int q = 0; q < m; ++q) {
+                int i = groups[j].start + q;
+                if (i < 0 || i >= n) break;
+                CloudCard& k = c.cards[c.order[i]];
+                uint64_t h = Hash(k.path);
+                float u1 = static_cast<float>(h & 0xFFFFFF) / 16777216.0f;
+                float u2 = static_cast<float>((h >> 24) & 0xFFFFFF) / 16777216.0f;
+                float u3 = static_cast<float>((h >> 48) & 0xFFFF) / 65536.0f;
+                auto it = byPath_.find(k.path);
+                const FileEntry* e = it != byPath_.end() ? &entries_[it->second] : nullptr;
+                auto bi = bmps_.find(k.path);
+                float a = CardAspect(e, bi != bmps_.end() ? &bi->second : nullptr);
+                k.tw = std::sqrt(a);
+                k.th = 1.0f / std::sqrt(a);
+                float mx = std::min(k.tw / 2, ws[j] / 2), my = std::min(k.th / 2, H / 2);
+                k.tx = st.x0 + mx + u1 * (ws[j] - 2 * mx);
+                k.ty = -H / 2 + my + u2 * (H - 2 * my);
+                float step = m > 1 ? Dg / (m - 1) : 0;
+                k.tz = m > 1 ? Dg * q / (m - 1) + (u3 - 0.5f) * step * 0.6f : 0;
+            }
+            c.strips.push_back(std::move(st));
+        }
+        c.stripH = H;
+        c.R = std::max(W, H) / 2;
+        float f = (vh / 2) / kTanHalfFov;
+        c.fit = std::max((H / 2 + 0.7f) * f / (vh / 2 * 0.94f), (W / 2 + 0.7f) * f / (vw / 2 * 0.94f));
+        return;
+    }
     float sva = std::sqrt(va);
     for (int i = 0; i < n; ++i) {
         CloudCard& k = c.cards[c.order[i]];
@@ -160,6 +217,8 @@ void App::CloudFit(bool immediate) {
 void App::CloudSync() {
     auto& c = cloud_;
     c.view = gridRc_;
+    const int gk = CloudGroupKey();
+    if (gk >= 0) c.view.top += 8 + kGroupH;   // oben: Leiste mit den Gruppentiteln (Abstand wie im Raster)
     std::wstring key = path_ + (bookmarksView_ ? L"|b" : L"") + (collectionsView_ ? L"|c" : L"");
     if (key != c.folder) {
         // anderer Ordner: neu aufbauen (die Karten fliegen von hinten herein)
@@ -178,8 +237,10 @@ void App::CloudSync() {
     }
     float vw = c.view.right - c.view.left, vh = std::max(1.0f, c.view.bottom - c.view.top);
     bool resized = c.va > 0 && std::fabs(vw / vh - c.va) > 0.04f;
-    if (c.version == visibleVersion_ && !resized) return;
+    const bool regroup = gk != c.groupKey;
+    if (c.version == visibleVersion_ && !resized && !regroup) return;
     c.version = visibleVersion_;
+    c.groupKey = gk;
 
     std::vector<char> seen(c.cards.size(), 0);
     std::vector<int> fresh;
@@ -237,7 +298,7 @@ void App::CloudSync() {
         c.camInit = true;
         c.camUser = false;
         c.focusZ = 0;
-    } else if (visible_.size() != prevCount) {
+    } else if (visible_.size() != prevCount || regroup) {
         // Filter oder Suche haben die Anzahl geaendert: Kamera wieder auf den ganzen Haufen
         c.sel = -1;
         c.haveBefore = false;
@@ -677,6 +738,8 @@ void App::CloudRepack(ID2D1DeviceContext* dc) {
     auto& c = cloud_;
     c.lastRepack = GetTickCount();
     std::vector<int> seq = c.order;
+    if (!c.strips.empty())   // Streifen: in Zeichenreihenfolge (nach Tiefe), damit wenige Texturwechsel noetig sind
+        std::stable_sort(seq.begin(), seq.end(), [&](int a, int b) { return c.cards[a].tz > c.cards[b].tz; });
     for (size_t i = 0; i < c.cards.size(); ++i)
         if (c.cards[i].leaving) seq.push_back(static_cast<int>(i));
     bool sorted = true;
@@ -853,7 +916,14 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
     // hinten zuerst: ausblendende Karten, dann vom untersten Rang nach oben
     for (size_t i = 0; i < c.cards.size(); ++i)
         if (c.cards[i].leaving) drawCard(static_cast<int>(i));
-    for (auto it = c.order.rbegin(); it != c.order.rend(); ++it) drawCard(*it);
+    if (c.strips.empty()) {
+        for (auto it = c.order.rbegin(); it != c.order.rend(); ++it) drawCard(*it);
+    } else {
+        // Streifen: Rang und Tiefe laufen je Gruppe neu, deshalb nach der aktuellen Tiefe zeichnen (hinten zuerst)
+        std::vector<int> seq = c.order;
+        std::stable_sort(seq.begin(), seq.end(), [&](int a, int b) { return c.cards[a].z > c.cards[b].z; });
+        for (int ci : seq) drawCard(ci);
+    }
 
     ComPtr<ID2D1DeviceContext3> dc3;
     dc->QueryInterface(IID_PPV_ARGS(&dc3));
@@ -864,6 +934,7 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
             c.batch->AddSprites(static_cast<UINT32>(dst.size()), dst.data(), src.data(), col.data(), nullptr,
                                 sizeof(D2D1_RECT_F), sizeof(D2D1_RECT_U), sizeof(D2D1_COLOR_F), 0);
     }
+    if (!c.strips.empty()) PaintCloudHeaders(dc, false);   // feine Trennlinien hinter den Karten
     ComPtr<ID2D1Factory> fac;
     dc->GetFactory(&fac);
     int runs = 0;
@@ -961,6 +1032,7 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
         }
     }
     dc->PopAxisAlignedClip();
+    if (!c.strips.empty()) PaintCloudHeaders(dc, true);   // Gruppentitel: immer oben, nur waagerecht mitbewegt
 }
 
 // ---------------------------------------------------------------------------
@@ -1034,6 +1106,24 @@ void App::CloudDeselect() {
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
+void App::CloudFocusStrip(int i) {
+    auto& c = cloud_;
+    if (i < 0 || i >= static_cast<int>(c.strips.size())) return;
+    const CloudStrip& st = c.strips[i];
+    float vw = std::max(50.0f, c.view.right - c.view.left), vh = std::max(50.0f, c.view.bottom - c.view.top);
+    float f = (vh / 2) / kTanHalfFov;
+    float fit = std::max((c.stripH / 2 + 0.7f) * f / (vh / 2 * 0.94f), ((st.x1 - st.x0) / 2 + 0.7f) * f / (vw / 2 * 0.94f));
+    c.sel = -1;
+    c.haveBefore = false;
+    c.tcx = (st.x0 + st.x1) / 2;
+    c.tcy = 0;
+    c.tcz = -fit;
+    c.tau = 170;
+    c.camUser = true;
+    StartAnimation();
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
 void App::CloudMouseDown(float x, float y) {
     auto& c = cloud_;
     c.down = true;
@@ -1077,6 +1167,11 @@ void App::CloudMouseUp(float x, float y) {
     c.down = false;
     c.dragging = false;
     if (!click) return;
+    if (!c.strips.empty() && y >= gridRc_.top && y < c.view.top) {   // Gruppentitel: Kamera auf diesen Streifen
+        for (int i = 0; i < static_cast<int>(c.strips.size()); ++i)
+            if (x >= c.strips[i].sl && x < c.strips[i].sr) { CloudFocusStrip(i); break; }
+        return;
+    }
     int card = CloudPick(x, y);
     if (c.sel >= 0) {
         if (card == c.sel) {

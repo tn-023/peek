@@ -22,6 +22,7 @@ namespace peek {
 extern const wchar_t* const kThemeNames[3];
 extern const wchar_t* const kViewerSmallNames[2];
 extern const wchar_t* const kViewerFullscreenNames[2];   // 0 = Vollbild, 1 = Taskleiste sichtbar
+extern const wchar_t* const kCloudGroupsNames[2];        // 0 = Streifen, 1 = aus (Wolke wie bisher)
 const wchar_t* LanguageName(int setting);   // 0 wie Windows, 1 Deutsch, 2 English
 
 enum class HitType {
@@ -31,7 +32,7 @@ enum class HitType {
     ViewerClose, ViewerPrev, ViewerNext, ViewerInfo, ViewerCrop, CropSave, CropCancel,
     ClearBookmarks, SearchHistItem, SearchHistDel, SearchHistClear, SearchParam,
     ViewCloud,
-    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen,
+    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen, SettingsCloudGroups,
     SheetCancel, SheetCreate, SheetOrient, SheetColsMinus, SheetColsPlus, SheetRowsMinus, SheetRowsPlus, SheetNames,
     SheetExts, SheetQuality, SheetPrev, SheetNext, SheetHeadline, SheetCheck, SheetCell, SheetStripCheck, SheetStrip,
     SheetOpenPdf, BookmarkSheet,
@@ -290,6 +291,9 @@ private:
         bool leaving = false;
     };
     struct CloudDrawn { D2D1_RECT_F rc; int card; };
+    // Gruppierte Wolke: hoechstens 6 senkrechte Streifen (benachbarte Gruppen zusammengefasst)
+    struct CloudGroup { std::wstring label; int start = 0, count = 0; };
+    struct CloudStrip { std::wstring label; int count = 0; float x0 = 0, x1 = 0; float sl = 0, sr = 0; };   // sl/sr: Bildschirm
     struct CloudState {
         std::vector<CloudCard> cards;
         std::unordered_map<std::wstring, int> index;   // Pfad -> Karte
@@ -324,7 +328,14 @@ private:
         std::vector<CloudDrawn> drawn;
         D2D1_RECT_F view{};
         float f = 1;                                   // Brennweite in DIP
+        int groupKey = -1;                             // Gruppierung beim letzten Anordnen (-1 = keine Streifen)
+        std::vector<CloudStrip> strips;                // leer = Wolke ohne Gruppen (wie bisher)
+        float stripH = 0;                              // Hoehe der Streifen (Welt)
     } cloud_;
+    int CloudGroupKey() const;
+    std::vector<CloudGroup> CloudGroups();
+    void CloudFocusStrip(int i);
+    void PaintCloudHeaders(ID2D1DeviceContext* dc, bool titles);   // app_paint.cpp
     std::wstring pendingCloudSel_;
     // --cloud-tour[=<Markerdatei>]: feste Kamerafahrt durch die Wolke (nur fuer die Aufnahme im README)
     bool cloudTour_ = false;
@@ -661,6 +672,7 @@ private:
     void ShowViewerSmallMenu(const D2D1_RECT_F& rc);
     void ShowLanguageMenu(const D2D1_RECT_F& rc);
     void ShowViewerFullscreenMenu(const D2D1_RECT_F& rc);
+    void ShowCloudGroupsMenu(const D2D1_RECT_F& rc);
     int settingsPage_ = 0;          // 0 Einstellungen, 1 Tastenkombinationen
     float settingsScroll_ = 0, settingsContentH_ = 0;
     void PaintShortcuts(ID2D1DeviceContext* dc);

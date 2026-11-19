@@ -256,6 +256,181 @@ std::wstring App::GroupLabel(const FileEntry& e) const {
     }
 }
 
+// Gruppierung fuer die Wolke (-1 = keine Streifen: Wolke wie bisher)
+int App::CloudGroupKey() const {
+    if (!settings_.group || !settings_.cloudGroups) return -1;
+    return (settings_.sortKey * 2 + (settings_.sortDesc ? 1 : 0)) * 4 + std::clamp(settings_.language, 0, 3);
+}
+
+// Gruppen der Wolke: dieselben Gruppen wie im Raster, benachbarte zu hoechstens 6 Streifen zusammengefasst.
+// Die Grenzen gleichen die Anzahl aus; Sondergruppen (Ordner, ohne Datum ...) bleiben eigene Streifen.
+std::vector<App::CloudGroup> App::CloudGroups() {
+    std::vector<CloudGroup> out;
+    const int n = static_cast<int>(visible_.size());
+    if (n == 0) return out;
+    ComputeDateBounds();
+    const int key = settings_.sortKey;
+    struct Run { std::wstring label; int start, count; bool special; int64_t t; };
+    std::vector<Run> rs;
+    const std::wstring special[] = {T(L"Ordner"), T(L"Ohne Datum"), T(L"Ohne Aufnahmedatum"), T(L"In der Zukunft"),
+                                    T(L"Leer"), T(L"Ohne Auflösung")};
+    for (int p = 0; p < n; ++p) {
+        const FileEntry& e = entries_[visible_[p]];
+        std::wstring label = GroupLabel(e);
+        if (!rs.empty() && label == rs.back().label) { ++rs.back().count; continue; }
+        bool sp = std::find(std::begin(special), std::end(special), label) != std::end(special);
+        rs.push_back({std::move(label), p, 1, sp, key == 5 ? e.taken : e.Time()});
+    }
+    constexpr int kMax = 6;
+    std::vector<std::pair<int, int>> buckets;   // Bereiche von Gruppen [a, b)
+    const int nr = static_cast<int>(rs.size());
+    if (nr <= kMax) {
+        for (int i = 0; i < nr; ++i) buckets.push_back({i, i + 1});
+    } else {
+        struct Seg { int a, b; int64_t cnt; int k; };
+        std::vector<Seg> segs;
+        int nSpecial = 0;
+        for (int i = 0; i < nr;) {
+            if (rs[i].special) { ++nSpecial; ++i; continue; }
+            int j = i;
+            int64_t cnt = 0;
+            while (j < nr && !rs[j].special) cnt += rs[j++].count;
+            segs.push_back({i, j, cnt, 1});
+            i = j;
+        }
+        int slots = kMax - nSpecial;
+        if (slots < static_cast<int>(segs.size()) || slots <= 0) {   // zu viele Sondergruppen: alles gleich behandeln
+            for (auto& r : rs) r.special = false;
+            segs.assign(1, Seg{0, nr, n, 1});
+            slots = kMax;
+        }
+        int used = static_cast<int>(segs.size());
+        while (used < slots) {   // freie Streifen an die groessten Abschnitte verteilen
+            int best = -1;
+            double bv = 0;
+            for (int s = 0; s < static_cast<int>(segs.size()); ++s) {
+                if (segs[s].k >= segs[s].b - segs[s].a) continue;
+                double v = double(segs[s].cnt) / (segs[s].k + 1);
+                if (v > bv) { bv = v; best = s; }
+            }
+            if (best < 0) break;
+            ++segs[best].k;
+            ++used;
+        }
+        size_t si = 0;
+        for (int i = 0; i < nr;) {
+            if (rs[i].special) { buckets.push_back({i, i + 1}); ++i; continue; }
+            const Seg& sg = segs[si++];
+            int a = sg.a;
+            int64_t done = 0;
+            for (int part = 0; part < sg.k; ++part) {
+                int left = sg.k - part;
+                if (left == 1) { buckets.push_back({a, sg.b}); break; }
+                double target = double(sg.cnt) * (part + 1) / sg.k;
+                int b = a + 1;
+                int64_t cum = done + rs[a].count;
+                while (b < sg.b - (left - 1)) {   // genug Gruppen fuer die restlichen Streifen lassen
+                    int64_t next = cum + rs[b].count;
+                    if (std::fabs(double(next) - target) > std::fabs(double(cum) - target)) break;
+                    cum = next;
+                    ++b;
+                }
+                buckets.push_back({a, b});
+                done = cum;
+                a = b;
+            }
+            i = sg.b;
+        }
+    }
+    int ny;
+    unsigned nm, nd;
+    CivilFromDays((now_ + tzOffset_) / 86400, ny, nm, nd);
+    for (auto [a, b] : buckets) {
+        CloudGroup g;
+        g.start = rs[a].start;
+        g.count = rs[b - 1].start + rs[b - 1].count - rs[a].start;
+        const std::wstring& la = rs[a].label;
+        const std::wstring& lb = rs[b - 1].label;
+        if (b - a == 1) {
+            g.label = la;
+        } else if (key == 0) {   // Name: "A–C" (aus "0–9" wird je nach Seite "0" bzw. "9")
+            size_t pa = la.find(L'–'), pb = lb.find(L'–');
+            g.label = (pa == std::wstring::npos ? la : la.substr(0, pa)) + L"–" +
+                      (pb == std::wstring::npos ? lb : lb.substr(pb + 1));
+        } else if ((key == 1 || key == 5) && rs[a].t > 0 && rs[b - 1].t > 0) {
+            int ya, yb;
+            unsigned ma, mb, d;
+            CivilFromDays((rs[a].t + tzOffset_) / 86400, ya, ma, d);
+            CivilFromDays((rs[b - 1].t + tzOffset_) / 86400, yb, mb, d);
+            if (ya != yb) g.label = std::to_wstring(ya) + L" – " + std::to_wstring(yb);
+            else if (ya == ny) g.label = la + L" – " + lb;
+            else g.label = std::wstring(MonthName(ma)) + L" – " + MonthName(mb) + L" " + std::to_wstring(ya);
+        } else {
+            g.label = la + L" – " + lb;
+        }
+        out.push_back(std::move(g));
+    }
+    return out;
+}
+
+// Wolke mit Streifen: Trennlinien (hinter den Karten) bzw. Gruppentitel in der Leiste oben, gestaltet wie die
+// Gruppenkoepfe im Raster. Waagerecht folgen beide der Kamera (Ebene der vordersten bzw. ausgewaehlten Karten).
+void App::PaintCloudHeaders(ID2D1DeviceContext* dc, bool titles) {
+    auto& c = cloud_;
+    const int ns = static_cast<int>(c.strips.size());
+    if (ns == 0) return;
+    Theme t = MakeTheme(dark_, backdrop_);
+    const D2D1_RECT_F& v = c.view;
+    const D2D1_RECT_F band = D2D1::RectF(gridRc_.left, gridRc_.top, gridRc_.right, v.top);
+    const float vcx = (v.left + v.right) / 2;
+    const float sc = r_.scale();
+    const float k = c.f / std::max(0.15f, c.focusZ - c.cz);
+    auto sx = [&](float X) { return vcx + (X - c.cx) * k; };
+    const float top = band.top + 8;   // wie der erste Gruppenkopf im Raster
+    const float ly = std::round((top + kGroupH / 2 + 3) * sc) / sc + 0.5f;
+    if (!titles) {
+        const float half = 0.3f;   // halber Abstand zwischen zwei Streifen (Welt)
+        for (int i = 0; i < ns; ++i) {
+            CloudStrip& st = c.strips[i];
+            st.sl = sx(i == 0 ? st.x0 - half : (c.strips[i - 1].x1 + st.x0) / 2);
+            st.sr = sx(i == ns - 1 ? st.x1 + half : (st.x1 + c.strips[i + 1].x0) / 2);
+        }
+        dc->PushAxisAlignedClip(D2D1::RectF(gridRc_.left, gridRc_.top, gridRc_.right, gridRc_.bottom), D2D1_ANTIALIAS_MODE_ALIASED);
+        for (int i = 1; i < ns; ++i) {
+            float x = std::round(c.strips[i].sl * sc) / sc + 0.5f;
+            if (x < v.left || x > v.right) continue;
+            dc->DrawLine(D2D1::Point2F(x, ly), D2D1::Point2F(x, v.bottom), r_.Brush(t.stroke), 1.0f);
+        }
+        dc->PopAxisAlignedClip();
+        return;
+    }
+    IDWriteTextFormat* gf = r_.Text(14, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    IDWriteTextFormat* cf = r_.Text(12);
+    for (int i = 1; i < ns; ++i) {   // Trennlinien in der Leiste: treffen die Linie des Gruppenkopfs
+        float x = std::round(c.strips[i].sl * sc) / sc + 0.5f;
+        if (x < band.left || x > band.right) continue;
+        dc->DrawLine(D2D1::Point2F(x, ly), D2D1::Point2F(x, band.bottom), r_.Brush(t.stroke), 1.0f);
+    }
+    for (int i = 0; i < ns; ++i) {
+        const CloudStrip& st = c.strips[i];
+        float l = std::max(st.sl, band.left), r = std::min(st.sr, band.right);
+        if (r - l < 24) continue;
+        std::wstring cnt = Thousands(static_cast<uint64_t>(st.count));
+        float gw = r_.MeasureText(st.label, gf), cw = r_.MeasureText(cnt, cf);
+        float need = gw + 10 + cw;
+        // Titel bleibt sichtbar, solange ein Teil des Streifens zu sehen ist
+        float lx = std::max(st.sl + 16, band.left + 16);
+        if (lx + need > st.sr - 16) lx = std::max(st.sl + 16, st.sr - 16 - need);
+        dc->PushAxisAlignedClip(D2D1::RectF(l, band.top, r, band.bottom), D2D1_ANTIALIAS_MODE_ALIASED);
+        DrawText(dc, st.label, D2D1::RectF(lx, top + 10, lx + gw + 4, top + kGroupH - 4), gf, t.text);
+        DrawText(dc, cnt, D2D1::RectF(lx + gw + 10, top + 10, lx + gw + 14 + cw, top + kGroupH - 4), cf, t.text3);
+        float l0 = lx + gw + cw + 26;
+        float l1 = i == ns - 1 ? std::min(st.sr, band.right) - 24 : std::min(st.sr, band.right - 24);
+        if (l0 < l1) dc->DrawLine(D2D1::Point2F(l0, ly), D2D1::Point2F(l1, ly), r_.Brush(t.stroke), 1.0f);
+        dc->PopAxisAlignedClip();
+    }
+}
+
 int App::RowOfPos(int pos) const {
     if (rowFirst_.size() < 2) return 0;
     auto it = std::upper_bound(rowFirst_.begin(), rowFirst_.end() - 1, pos);
@@ -1885,7 +2060,7 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
     DrawText(dc, T(L"Darstellung"), D2D1::RectF(x0, y, x1, y + 28), fh, t.text);
     y += 34;
     {
-        D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 8 + 4 * 56);
+        D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 8 + 5 * 56);
         FillRound(dc, rc, 8, t.chip);
         auto dropRow = [&](float ry, const wchar_t* label, HitType type, const std::wstring& cur) {
             DrawText(dc, label, D2D1::RectF(x0 + 20, ry, x1 - 260, ry + 56), r_.Text(13), t.text);
@@ -1908,6 +2083,9 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
         dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 172), D2D1::Point2F(x1 - 16, rc.top + 172), r_.Brush(t.stroke), 1.0f);
         dropRow(rc.top + 172, T(L"Kleine Bilder im Betrachter"), HitType::SettingsViewerSmall,
                 T(kViewerSmallNames[std::clamp(settings_.viewerSmall, 0, 1)]));
+        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 228), D2D1::Point2F(x1 - 16, rc.top + 228), r_.Brush(t.stroke), 1.0f);
+        dropRow(rc.top + 228, T(L"Gruppen in der Wolke"), HitType::SettingsCloudGroups,
+                T(kCloudGroupsNames[settings_.cloudGroups ? 0 : 1]));
         y = rc.bottom + 28;
     }
 

@@ -349,6 +349,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         case HitType::SettingsTheme: ShowThemeMenu(h->rc); break;
         case HitType::SettingsLanguage: ShowLanguageMenu(h->rc); break;
         case HitType::SettingsViewerFullscreen: ShowViewerFullscreenMenu(h->rc); break;
+        case HitType::SettingsCloudGroups: ShowCloudGroupsMenu(h->rc); break;
         case HitType::SettingsViewerSmall: ShowViewerSmallMenu(h->rc); break;
         case HitType::SettingsShortcuts:
             settingsPage_ = 1;
@@ -1533,6 +1534,22 @@ void App::ShowViewerFullscreenMenu(const D2D1_RECT_F& rc) {
     UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
     if (cmd < 100 || cmd > 101) return;
     settings_.viewerFullscreen = cmd == 100;
+    settings_.Save();
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void App::ShowCloudGroupsMenu(const D2D1_RECT_F& rc) {
+    std::vector<MenuItem> items;
+    for (int i = 0; i < 2; ++i) {
+        MenuItem m;
+        m.id = 100 + i;
+        m.text = T(kCloudGroupsNames[i]);
+        m.checked = (settings_.cloudGroups ? 0 : 1) == i;
+        items.push_back(m);
+    }
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
+    if (cmd < 100 || cmd > 101) return;
+    settings_.cloudGroups = cmd == 100;
     settings_.Save();
     InvalidateRect(hwnd_, nullptr, FALSE);
 }

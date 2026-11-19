@@ -107,6 +107,11 @@ Der Ordner als Wolke im Raum. Die Sortierung bestimmt, was oben liegt. Mausrad f
   </tr>
 </table>
 
+<p align="center">
+  <img src="docs/screenshots/en/wolke-gruppen.png" alt="Bilderwolke in Streifen gruppiert" width="800"><br>
+  <sub>Gruppieren teilt die Wolke in bis zu sechs Streifen mit Titel und Anzahl (Abbildung der englischen Oberfläche)</sub>
+</p>
+
 ## Weitere Funktionen
 
 <table>

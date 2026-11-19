@@ -109,6 +109,11 @@ The folder as a cloud in space. The sort order decides what is on top. The mouse
   </tr>
 </table>
 
+<p align="center">
+  <img src="docs/screenshots/en/wolke-gruppen.png" alt="Image cloud grouped into strips" width="800"><br>
+  <sub>Grouping splits the cloud into up to six strips with title and count</sub>
+</p>
+
 ## More features
 
 <table>

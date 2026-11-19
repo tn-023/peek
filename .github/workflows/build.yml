@@ -139,6 +139,19 @@ jobs:
           Remove-SmbShare -Name peektest -Force
           if ($p.ExitCode -ne 0) { throw "Netzlaufwerk-Pruefung fehlgeschlagen ($($p.ExitCode))" }
 
+      - name: Startprobe (Fenster zeichnet und animiert)
+        shell: powershell
+        run: |
+          # Wolke mit Kamerafahrt: ueber 10 Sekunden fortlaufende Bilder im Takt der Swapchain
+          $p = Start-Process -FilePath build\peek.exe -ArgumentList @("`"$env:USERPROFILE\Pictures\peek-Sandbox`"", '--view=cloud', '--cloud-tour') -PassThru
+          Start-Sleep -Seconds 10
+          $p.Refresh()
+          if ($p.HasExited) { throw "peek wurde beendet ($($p.ExitCode))" }
+          if (-not $p.Responding) { throw "peek reagiert nicht" }
+          Write-Host "peek laeuft und reagiert (Fenster: $($p.MainWindowHandle))"
+          $null = $p.CloseMainWindow()
+          if (-not $p.WaitForExit(15000)) { $p.Kill(); throw "peek liess sich nicht schliessen" }
+
       - name: Index-Pruefung (verschluesselt)
         shell: pwsh
         run: |

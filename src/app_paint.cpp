@@ -379,6 +379,26 @@ std::vector<App::CloudGroup> App::CloudGroups() {
     // Verfeinern: zu wenige Streifen -> grosse Gruppen weiter teilen (nicht nach Dateityp: keine Reihenfolge darin)
     if (key == 4 || static_cast<int>(out.size()) >= kMax) return out;
     const int minPart = std::max(4, n / 24);
+    // Namen: nur am ersten Zeichen teilen (Titel wie "A" oder "A–C"), also hoechstens so viele Teile wie Anfangszeichen
+    auto firstChar = [&](int p) -> wchar_t {
+        const std::wstring& nm = entries_[visible_[p]].name;
+        wchar_t up[2] = {nm.empty() ? L'#' : nm[0], 0};
+        CharUpperBuffW(up, 1);
+        wchar_t ch = up[0];
+        if (ch == L'\u00c4') return L'A';
+        if (ch == L'\u00d6') return L'O';
+        if (ch == L'\u00dc') return L'U';
+        return (ch >= L'0' && ch <= L'9') || IsCharAlphaW(ch) ? ch : L'#';
+    };
+    struct CharRun { wchar_t ch; int start, count; };
+    std::vector<std::vector<CharRun>> charRuns(out.size());
+    if (key == 0)
+        for (size_t i = 0; i < out.size(); ++i)
+            for (int p = out[i].start; p < out[i].start + out[i].count; ++p) {
+                wchar_t ch = firstChar(p);
+                if (!charRuns[i].empty() && charRuns[i].back().ch == ch) ++charRuns[i].back().count;
+                else charRuns[i].push_back({ch, p, 1});
+            }
     std::vector<int> parts(out.size(), 1);
     int used = static_cast<int>(out.size());
     while (used < kMax) {
@@ -386,6 +406,7 @@ std::vector<App::CloudGroup> App::CloudGroups() {
         double bv = 0;
         for (size_t i = 0; i < out.size(); ++i) {
             if (isSpecial[i]) continue;
+            if (key == 0 && parts[i] >= static_cast<int>(charRuns[i].size())) continue;
             double v = double(out[i].count) / (parts[i] + 1);
             if (v >= minPart && v > bv) { bv = v; best = static_cast<int>(i); }
         }
@@ -395,20 +416,6 @@ std::vector<App::CloudGroup> App::CloudGroups() {
     }
     if (used == static_cast<int>(out.size())) return out;
 
-    auto stem = [&](int p) {
-        const FileEntry& e = entries_[visible_[p]];
-        std::wstring s = e.name;
-        if (e.kind != Kind::Folder) {
-            size_t dot = s.find_last_of(L'.');
-            if (dot != std::wstring::npos && dot > 0) s.resize(dot);
-        }
-        return s;
-    };
-    auto common = [](const std::wstring& x, const std::wstring& y) {
-        size_t i = 0;
-        while (i < x.size() && i < y.size() && towupper(x[i]) == towupper(y[i])) ++i;
-        return i;
-    };
     auto decimal = [](double v) {
         wchar_t buf[32];
         std::swprintf(buf, 32, v < 10 ? L"%.1f" : L"%.0f", v);
@@ -420,14 +427,6 @@ std::vector<App::CloudGroup> App::CloudGroups() {
         const FileEntry& e0 = entries_[visible_[a]];
         const FileEntry& e1 = entries_[visible_[b - 1]];
         switch (key) {
-        case 0: {   // wie im Woerterbuch: kuerzeste Anfaenge, die sich von den Nachbarn unterscheiden
-            std::wstring f = stem(a), l = stem(b - 1);
-            size_t inner = common(f, l) + 1;
-            size_t lf = std::max(inner, a > 0 ? common(f, stem(a - 1)) + 1 : 1);
-            size_t ll = std::max(inner, b < n ? common(l, stem(b)) + 1 : 1);
-            size_t len = std::min<size_t>(std::max(lf, ll), 16);   // beide Enden gleich lang: besser vergleichbar
-            return f.substr(0, std::min(len, f.size())) + L" – " + l.substr(0, std::min(len, l.size()));
-        }
         case 1:
         case 5: {
             int64_t t0 = timeOf(e0), t1 = timeOf(e1);
@@ -460,6 +459,35 @@ std::vector<App::CloudGroup> App::CloudGroups() {
     std::vector<CloudGroup> ref;
     for (size_t i = 0; i < out.size(); ++i) {
         if (parts[i] == 1) { ref.push_back(out[i]); continue; }
+        if (key == 0) {   // Anfangszeichen ausgeglichen nach Anzahl zu parts[i] Streifen zusammenfassen
+            const auto& cr = charRuns[i];
+            const int m = static_cast<int>(cr.size()), k = parts[i];
+            int a = 0;
+            int64_t done = 0;
+            for (int part = 0; part < k && a < m; ++part) {
+                int b = m;
+                if (k - part > 1) {
+                    double target = double(out[i].count) * (part + 1) / k;
+                    b = a + 1;
+                    int64_t cum = done + cr[a].count;
+                    while (b < m - (k - part - 1)) {
+                        int64_t next = cum + cr[b].count;
+                        if (std::fabs(double(next) - target) > std::fabs(double(cum) - target)) break;
+                        cum = next;
+                        ++b;
+                    }
+                    done = cum;
+                }
+                CloudGroup g;
+                g.start = cr[a].start;
+                g.count = cr[b - 1].start + cr[b - 1].count - cr[a].start;
+                g.label = std::wstring(1, cr[a].ch);
+                if (b - a > 1) g.label += L"\u2013" + std::wstring(1, cr[b - 1].ch);
+                ref.push_back(std::move(g));
+                a = b;
+            }
+            continue;
+        }
         for (int j = 0; j < parts[i]; ++j) {
             int a = out[i].start + static_cast<int>(int64_t(out[i].count) * j / parts[i]);
             int b = out[i].start + static_cast<int>(int64_t(out[i].count) * (j + 1) / parts[i]);

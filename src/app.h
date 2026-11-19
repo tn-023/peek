@@ -291,6 +291,10 @@ private:
         int face = 0;            // Inhalt im Atlas: 0 leer, 1 Symbol/Platzhalter, 2 Vorschaubild
         bool xs = false;         // kleine Stufe gefuellt
         bool leaving = false;
+        // Dateiname auf der Karte: Text-Layout der aktuellen Breitenstufe (je Karte, ohne Suche ueber den Pfad)
+        mutable ComPtr<IDWriteTextLayout> nameLay;
+        mutable int nameBucket = -1;
+        mutable float nameH = 0;
     };
     struct CloudDrawn { D2D1_RECT_F rc; int card; };
     // Gruppierte Wolke: hoechstens 6 senkrechte Streifen (benachbarte Gruppen zusammengefasst)
@@ -312,7 +316,6 @@ private:
         int block = -1;                                // Karte in der Bildmitte: weicht nie aus, die Kamera stoesst dagegen
         float selAnim = 0;                             // Info-Feld unter dem ausgewaehlten Bild (0..1)
         std::unordered_set<std::wstring> full;         // Bilder, die in voller Aufloesung geladen wurden
-        std::unordered_map<std::wstring, ComPtr<IDWriteTextLayout>> names;   // Dateinamen auf Karten (Text-Layout)
         int sel = -1, hover = -1;
         float before[3] = {0, 0, -5};
         bool haveBefore = false;
@@ -327,6 +330,7 @@ private:
         bool needRepack = false;
         DWORD lastRepack = 0;
         ComPtr<ID2D1SpriteBatch> batch;
+        ComPtr<IDWriteInlineObject> ellipsis;          // Auslassungszeichen fuer gekuerzte Dateinamen
         std::vector<CloudDrawn> drawn;
         D2D1_RECT_F view{};
         float f = 1;                                   // Brennweite in DIP
@@ -366,7 +370,8 @@ private:
     void CloudFillAtlas(ID2D1DeviceContext* dc);
     void CloudRepack(ID2D1DeviceContext* dc);
     bool CloudEnsurePage(ID2D1DeviceContext* dc, int slot);
-    void CloudDrawFace(ID2D1DeviceContext* dc, const CloudCard& c, const D2D1_RECT_F& rc, bool large);
+    // rad > 0: Karte selbst mit runden Ecken fuellen (ohne Zwischenebene), sonst liefert die Ebene die Ecken
+    void CloudDrawFace(ID2D1DeviceContext* dc, const CloudCard& c, const D2D1_RECT_F& rc, bool large, float rad = 0);
     void CloudReleaseGpu();
     int CloudPick(float x, float y) const;
     int CloudPosOf(int card) const;

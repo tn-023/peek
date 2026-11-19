@@ -561,7 +561,7 @@ bool App::CloudEnsurePage(ID2D1DeviceContext* dc, int slot) {
 
 // Inhalt einer Karte in ein Rechteck zeichnen (Atlaszelle oder direkt auf den Bildschirm). Die Zelle wird spaeter
 // auf das Seitenverhaeltnis der Karte gestreckt; Symbole werden deshalb entsprechend vorverzerrt.
-void App::CloudDrawFace(ID2D1DeviceContext* dc, const CloudCard& k, const D2D1_RECT_F& rc, bool large) {
+void App::CloudDrawFace(ID2D1DeviceContext* dc, const CloudCard& k, const D2D1_RECT_F& rc, bool large, float rad) {
     auto it = byPath_.find(k.path);
     const FileEntry* e = it != byPath_.end() ? &entries_[it->second] : nullptr;
     D2D1_COLOR_F cardBg = dark_ ? D2D1::ColorF(0.24f, 0.24f, 0.25f, 1) : D2D1::ColorF(0.93f, 0.93f, 0.94f, 1);
@@ -583,11 +583,19 @@ void App::CloudDrawFace(ID2D1DeviceContext* dc, const CloudCard& k, const D2D1_R
         }
         return;
     }
-    dc->FillRectangle(rc, r_.Brush(cardBg));
+    if (rad > 0) dc->FillRoundedRectangle(D2D1::RoundedRect(rc, rad, rad), r_.Brush(cardBg));
+    else dc->FillRectangle(rc, r_.Brush(cardBg));
     if (!e) return;
     auto ii = bmps_.find(IconKey(*e));
     if (ii == bmps_.end() || !ii->second.bmp) return;
     ii->second.lastUse = frame_;
+    // ohne Zwischenebene: Symbol und Name auf die Karte begrenzen (sie reichen nie bis in die runden Ecken)
+    struct Clip {
+        ID2D1DeviceContext* dc;
+        bool on;
+        ~Clip() { if (on) dc->PopAxisAlignedClip(); }
+    } clip{dc, rad > 0};
+    if (clip.on) dc->PushAxisAlignedClip(rc, D2D1_ANTIALIAS_MODE_ALIASED);
     // Symbol quadratisch auf der Karte (Karte: k.tw x k.th)
     float rw = rc.right - rc.left, rh = rc.bottom - rc.top;
     float side = 0.55f * std::min(k.tw, k.th);
@@ -612,27 +620,25 @@ void App::CloudDrawFace(ID2D1DeviceContext* dc, const CloudCard& k, const D2D1_R
         float scale = fs / fsRef;
         int bucket = std::max(5, static_cast<int>(rw * 0.86f / scale / 4));
         float wRef = bucket * 4.0f;
-        std::wstring key = e->path + L"|" + std::to_wstring(bucket);
-        auto& c = cloud_;
-        auto li = c.names.find(key);
-        if (li == c.names.end()) {
-            if (c.names.size() > 6000) c.names.clear();
-            ComPtr<IDWriteTextLayout> lay;
+        // Layout je Karte merken; neu nur, wenn sich die Breitenstufe aendert (beim Verschieben nie, beim Zoomen selten)
+        if (k.nameBucket != bucket) {
+            k.nameBucket = bucket;
+            k.nameLay.Reset();
+            k.nameH = 0;
             IDWriteTextFormat* tf = r_.TextWrap(fsRef, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
             if (tf && SUCCEEDED(r_.dwrite()->CreateTextLayout(e->name.c_str(), static_cast<UINT32>(e->name.size()), tf, wRef,
-                                                              fsRef * 2.75f, &lay))) {
-                lay->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);   // lange Namen ohne Leerzeichen brechen
+                                                              fsRef * 2.75f, &k.nameLay))) {
+                k.nameLay->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);   // lange Namen ohne Leerzeichen brechen
                 DWRITE_TRIMMING trim = {DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
-                ComPtr<IDWriteInlineObject> sign;
-                r_.dwrite()->CreateEllipsisTrimmingSign(tf, &sign);
-                lay->SetTrimming(&trim, sign.Get());
+                if (!cloud_.ellipsis) r_.dwrite()->CreateEllipsisTrimmingSign(tf, &cloud_.ellipsis);
+                k.nameLay->SetTrimming(&trim, cloud_.ellipsis.Get());
+                DWRITE_TEXT_METRICS tm{};
+                k.nameLay->GetMetrics(&tm);
+                k.nameH = tm.height;
             }
-            li = c.names.emplace(key, lay).first;
         }
-        if (IDWriteTextLayout* lay = li->second.Get()) {
-            DWRITE_TEXT_METRICS tm{};
-            lay->GetMetrics(&tm);
-            float th = std::min(tm.height, fsRef * 2.75f) * scale;
+        if (IDWriteTextLayout* lay = k.nameLay.Get()) {
+            float th = std::min(k.nameH, fsRef * 2.75f) * scale;
             cyr -= th * 0.55f;
             float ty = cyr + sy / 2 + fs * 0.45f;
             D2D1_MATRIX_3X2_F old;
@@ -982,6 +988,20 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
                                                      r_.Brush(D2D1::ColorF(fogC.r, fogC.g, fogC.b, sg.fog)));
                         continue;
                     }
+                }
+                // Karte ohne Vorschaubild (Symbol und Dateiname): ebenfalls ohne Zwischenebene. Bei vielen
+                // solchen Karten war eine Ebene je Karte der groesste Posten.
+                bool thumb = false;
+                if (it != byPath_.end() && bi != bmps_.end() && bi->second.bmp) {
+                    const FileEntry& e = entries_[it->second];
+                    thumb = e.HasThumb() && !e.offline;
+                }
+                if (!thumb) {
+                    CloudDrawFace(dc, k, sg.rc, true, rad);
+                    if (sg.fog > 0.01f)
+                        dc->FillRoundedRectangle(D2D1::RoundedRect(sg.rc, rad, rad),
+                                                 r_.Brush(D2D1::ColorF(fogC.r, fogC.g, fogC.b, sg.fog)));
+                    continue;
                 }
             }
             ComPtr<ID2D1RoundedRectangleGeometry> geo;

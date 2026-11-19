@@ -714,10 +714,12 @@ void App::ApplyViewState(const std::wstring& loc) {
 void App::Navigate(const std::wstring& raw, bool history, const std::wstring& select) {
     std::wstring p = NormalizeDir(raw);
     if (!IsLocalDrivePath(p)) {
-        SetStatus(T(L"Nur lokale Laufwerke werden unterstützt – Netzlaufwerke sind ausgeschlossen."));
+        SetStatus(T(L"Nur Ordner auf Laufwerken mit Buchstaben werden unterstützt."));
         return;
     }
-    if (!DirectoryExists(p)) {
+    // Netzlaufwerke nicht im UI-Thread pruefen: ein nicht erreichbarer Server blockiert bis zu einer Minute.
+    // Die Auflistung im Hintergrund meldet dann "Ordner nicht erreichbar".
+    if (!IsNetworkPath(p) && !DirectoryExists(p)) {
         SetStatus(T(L"Ordner nicht gefunden: ") + p);
         return;
     }
@@ -981,7 +983,7 @@ void App::RequestMeta(size_t from) {
 }
 
 void App::OnLoadResults() {
-    bool done = false;
+    bool done = false, failed = false;
     if (quietLoad_) {
         for (auto& b : loader_.Take()) {
             if (b.gen != gen_) continue;
@@ -991,8 +993,17 @@ void App::OnLoadResults() {
                 stage_.push_back(std::move(e));
             }
             if (b.done) done = true;
+            if (b.failed) failed = true;
         }
-        if (done) FinishQuietReload();
+        if (done && failed) {
+            // stilles Neuladen fehlgeschlagen (z. B. Netzlaufwerk kurz weg): bisherige Ansicht behalten
+            quietLoad_ = false;
+            stage_.clear();
+            stageIdx_.clear();
+            SetStatus(TF(L"Ordner nicht erreichbar: {0}", {path_}));
+        } else if (done) {
+            FinishQuietReload();
+        }
         return;
     }
     for (auto& b : loader_.Take()) {
@@ -1009,7 +1020,9 @@ void App::OnLoadResults() {
             RequestMeta(from);
         }
         if (b.done) done = true;
+        if (b.failed) failed = true;
     }
+    if (failed && entries_.empty()) SetStatus(TF(L"Ordner nicht erreichbar: {0}", {path_}));
     if (!done) {
         ScheduleRefilter(entries_.size() < 5000 ? 40 : 400);
         return;
@@ -1723,9 +1736,10 @@ void App::ViewerPrefetch() {
     if (viewer_.pos < 0 || viewer_.pos >= n) return;
     std::vector<std::pair<int, int>> wanted;   // (pos, prio)
     wanted.push_back({viewer_.pos, 0});
+    const int ahead = IsNetworkPath(entries_[visible_[viewer_.pos]].path) ? 1 : 2;   // Netzlaufwerk: sparsamer
     for (int dir : {1, -1}) {
         int found = 0;
-        for (int p = viewer_.pos + dir; p >= 0 && p < n && found < 2; p += dir) {
+        for (int p = viewer_.pos + dir; p >= 0 && p < n && found < ahead; p += dir) {
             const FileEntry& e = entries_[visible_[p]];
             if (e.kind == Kind::Image && !e.offline) {   // Nachbarn nur, wenn sie schon auf dem PC liegen (kein Download)
                 wanted.push_back({p, 1});
@@ -1762,8 +1776,8 @@ void App::ViewerPrefetch() {
 
 void App::AddCollection(const std::wstring& raw) {
     std::wstring p = NormalizeDir(raw);
-    if (!IsLocalDrivePath(p) || !DirectoryExists(p)) {
-        SetStatus(T(L"Nur lokale Ordner können Sammlungen sein."));
+    if (!IsLocalDrivePath(p) || (!IsNetworkPath(p) && !DirectoryExists(p))) {
+        SetStatus(T(L"Nur Ordner auf Laufwerken mit Buchstaben können Sammlungen sein."));
         return;
     }
     for (auto& c : settings_.collections)
@@ -1838,12 +1852,20 @@ void App::BuildSidebar() {
     }
     sidebar_.push_back({SidebarItem::Header, T(L"Laufwerke"), L"", 0});
     for (auto& d : LocalDrives()) {
-        wchar_t label[MAX_PATH + 1] = {};
-        GetVolumeInformationW(d.c_str(), label, MAX_PATH, nullptr, nullptr, nullptr, nullptr, 0);
-        std::wstring name = label[0] ? std::wstring(label) : std::wstring(T(L"Lokaler Datenträger"));
+        UINT type = GetDriveTypeW(d.c_str());
+        std::wstring name;
+        if (type == DRIVE_REMOTE) {
+            // Netzlaufwerk: Name aus der Zuordnung, ohne den Server zu fragen (der koennte nicht erreichbar sein)
+            name = NetworkDriveLabel(d);
+            if (name.empty()) name = T(L"Netzlaufwerk");
+        } else {
+            wchar_t label[MAX_PATH + 1] = {};
+            GetVolumeInformationW(d.c_str(), label, MAX_PATH, nullptr, nullptr, nullptr, nullptr, 0);
+            name = label[0] ? std::wstring(label) : std::wstring(T(L"Lokaler Datenträger"));
+        }
         name += L" (" + d.substr(0, 2) + L")";
-        bool removable = GetDriveTypeW(d.c_str()) == DRIVE_REMOVABLE;
-        sidebar_.push_back({SidebarItem::Drive, name, d, static_cast<wchar_t>(removable ? 0xE88E : 0xEDA2)});
+        wchar_t glyph = type == DRIVE_REMOVABLE ? 0xE88E : type == DRIVE_REMOTE ? 0xE8CE : 0xEDA2;
+        sidebar_.push_back({SidebarItem::Drive, name, d, glyph});
     }
 }
 
@@ -2018,7 +2040,7 @@ DWORD App::OnDrop(const std::vector<std::wstring>& paths, POINT screen, DWORD ke
     }
     const std::wstring& first = paths.front();
     if (!IsLocalDrivePath(first)) {
-        SetStatus(T(L"Nur lokale Dateien werden unterst\u00fctzt \u2013 Netzlaufwerke sind ausgeschlossen."));
+        SetStatus(T(L"Nur Dateien auf Laufwerken mit Buchstaben werden unterstützt."));
         return DROPEFFECT_NONE;
     }
     if (DirectoryExists(first)) Navigate(first);
@@ -2066,7 +2088,7 @@ void App::PasteFiles(const std::wstring& target) {
     for (auto& p : paths)
         if (IsLocalDrivePath(p)) ok.push_back(p);
     if (ok.empty()) {
-        SetStatus(T(L"Nur lokale Dateien werden unterst\u00fctzt \u2013 Netzlaufwerke sind ausgeschlossen."));
+        SetStatus(T(L"Nur Dateien auf Laufwerken mit Buchstaben werden unterstützt."));
         return;
     }
     // Ordner nicht in sich selbst einfuegen

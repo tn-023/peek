@@ -20,7 +20,7 @@ Ordner sofort sehen, Dateien schnell finden. peek erkennt Begriffe und Muster in
 
 - **Ruhige Oberfläche:** Keine Menüleiste, keine Werkzeugkästen.
 - **Schnell:** C++20, GPU-beschleunigt. Vorschaubilder entstehen im Hintergrund.
-- **Portabel und privat:** läuft vom USB-Stick, nur lokale Laufwerke, keine Netzwerkfunktionen.
+- **Portabel und privat:** läuft vom USB-Stick, keine Netzwerkfunktionen. peek enthält keinen eigenen Netzwerkcode; eingebundene Netzlaufwerke liest Windows.
 - **Abgeschottet:** Bilder, Videos und Dokumente werden in einer Sandbox dekodiert. Ohne Netzwerk, ohne Zugriff auf andere Dateien.
 - **Kein Hintergrunddienst:** indexiert nur, solange peek läuft. Kein Dienst, kein Autostart.
 - **Finden:** Begriffe als Pillen, Filter für Typ, Datum, Größe, Auflösung, Ausrichtung. Suche mit `Breite:>3000 Datum:2024-08`.
@@ -153,7 +153,7 @@ Daten liegen in `%LOCALAPPDATA%\peek`. Mit einer leeren Datei `peek.portable` ne
 - **Kontaktabzug:** A4 hoch/quer, Raster frei wählbar, Bilder per Ziehen sortieren. PDF mit eingebetteter Schrift.
 - **Kacheltextur:** PNG-Sequenz zu einer PNG, pixelgenau. 8 und 16 Bit, Transparenz bleibt.
 - **Dateien:** Umbenennen, Eigenschaften, Öffnen mit, Kopieren, Einfügen, Ziehen auf Ordner, Papierkorb.
-- **Nur lokal:** keine Netzlaufwerke, keine Cloud-Platzhalter.
+- **Laufwerke:** lokale Laufwerke und eingebundene Netzlaufwerke (mit Laufwerksbuchstaben); nur online verfügbare Cloud-Dateien bekommen kein Vorschaubild.
 - **Sandbox:** Dekoder laufen in AppContainer-Prozessen. Eine präparierte Datei kann weder ins Netz noch an andere Dateien.
 - **Index verschlüsselt:** Pfade und Vorschaubilder nur verschlüsselt gespeichert, an das Windows-Konto gebunden. Gelöschtes verschwindet auch aus dem Index.
 

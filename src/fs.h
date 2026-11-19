@@ -54,8 +54,12 @@ struct FileEntry {
 Kind ClassifyExt(std::wstring_view extLower);
 bool IsViewerFormat(std::wstring_view extLower);   // JPEG/JPG, PNG, GIF, BMP, WebP, AVIF, TIFF, ICO, SVG
 
-bool IsLocalDrivePath(const std::wstring& path);   // nur DRIVE_FIXED / DRIVE_REMOVABLE, kein UNC
-std::vector<std::wstring> LocalDrives();
+// Laufwerke mit Buchstaben: lokal (DRIVE_FIXED / DRIVE_REMOVABLE) und eingebundene Netzlaufwerke (DRIVE_REMOTE).
+// Netzwerkpfade ohne Buchstaben (\\server\...) nicht. peek hat keinen eigenen Netzwerkcode: Netzlaufwerke liest Windows.
+bool IsLocalDrivePath(const std::wstring& path);
+bool IsNetworkPath(const std::wstring& path);        // Laufwerk ist ein eingebundenes Netzlaufwerk
+std::vector<std::wstring> LocalDrives();             // alle unterstuetzten Laufwerke (auch Netzlaufwerke)
+std::wstring NetworkDriveLabel(const std::wstring& root);   // "freigabe (\\server)" ohne Netzwerkzugriff, sonst leer
 std::wstring KnownFolderPath(REFKNOWNFOLDERID id);
 
 std::wstring ParentPath(const std::wstring& path);
@@ -68,7 +72,9 @@ std::wstring NormalizeDir(std::wstring path);
 FileEntry MakeEntry(const std::wstring& dir, const WIN32_FIND_DATAW& fd);
 
 // Zaehlt einen Ordner auf (optional rekursiv). sink erhaelt Teilmengen; Abbruch, wenn cancel() true liefert.
-void EnumerateFolder(const std::wstring& dir, bool recursive, bool showHidden,
+// Ergebnis: true, wenn alle Ordner gelesen werden konnten (fehlende Rechte zaehlen nicht als Fehler). false z. B.,
+// wenn ein Netzlaufwerk nicht erreichbar war: dann darf nichts aus dem Index entfernt werden.
+bool EnumerateFolder(const std::wstring& dir, bool recursive, bool showHidden,
                      const std::function<bool()>& cancel,
                      const std::function<void(std::vector<FileEntry>&&)>& sink,
                      size_t batch = 2000);

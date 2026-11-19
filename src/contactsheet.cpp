@@ -464,7 +464,7 @@ void App::SheetCreatePdf() {
     }
     if (out.empty()) return;
     if (!IsLocalDrivePath(out)) {
-        SetStatus(T(L"Nur lokale Laufwerke werden unterstützt – Netzlaufwerke sind ausgeschlossen."));
+        SetStatus(T(L"Nur Ordner auf Laufwerken mit Buchstaben werden unterstützt."));
         return;
     }
 

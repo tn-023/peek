@@ -26,7 +26,7 @@ constexpr uint32_t kMaxPathChars = 32768;
 constexpr uint32_t kMaxCameraChars = 256;
 constexpr wchar_t kContainerName[] = L"peek.dekoder";
 
-enum class Op : uint32_t { DecodeImage = 1, SvgRegion, VideoThumb, DocThumb, ImageMeta, VideoMeta, DocMeta, ProbeOpen, TakePixels };
+enum class Op : uint32_t { DecodeImage = 1, SvgRegion, VideoThumb, DocThumb, ImageMeta, VideoMeta, DocMeta, ProbeOpen, TakePixels, EmbeddedThumb };
 
 struct Request {
     uint32_t magic = kMagic;
@@ -63,6 +63,7 @@ bool RunLocal(Op op, const std::wstring& path, const Params& p, Pixels& px, Meta
     case Op::ImageMeta: return ReadImageMeta(path, meta);
     case Op::VideoMeta: return ReadVideoMeta(path, meta);
     case Op::DocMeta: return ReadDocMeta(path, meta);
+    case Op::EmbeddedThumb: return DecodeEmbeddedThumb(path, p.edge, px);
     default: return false;
     }
 }
@@ -461,7 +462,7 @@ void Release(Worker* w, bool broken) {
 
 DWORD TimeoutFor(Op op, uint32_t edge) {
     switch (op) {
-    case Op::ImageMeta: case Op::VideoMeta: case Op::DocMeta: case Op::ProbeOpen: return 15000;
+    case Op::ImageMeta: case Op::VideoMeta: case Op::DocMeta: case Op::ProbeOpen: case Op::EmbeddedThumb: return 15000;
     case Op::DecodeImage: return edge >= 4096 || edge == 0 ? 60000 : 20000;
     case Op::VideoThumb: return 30000;
     case Op::DocThumb: return 40000;
@@ -631,6 +632,12 @@ bool SbDecodeImage(const std::wstring& path, uint32_t maxEdge, Pixels& out) {
     Params p;
     p.edge = maxEdge;
     return Run(Op::DecodeImage, path, p, &out, nullptr);
+}
+
+bool SbEmbeddedThumb(const std::wstring& path, uint32_t maxEdge, Pixels& out) {
+    Params p;
+    p.edge = maxEdge;
+    return Run(Op::EmbeddedThumb, path, p, &out, nullptr);
 }
 
 bool SbSvgRegion(const std::wstring& path, float k, float tx, float ty, uint32_t w, uint32_t h, Pixels& out) {

@@ -23,6 +23,7 @@ struct ThumbRequest {
     uint32_t gen = 0;   // Generation der Ansicht; 0 = nie verwerfen
     float vk = 1, vx = 0, vy = 0;   // SvgView: Massstab und Versatz
     uint32_t vw = 0, vh = 0;        // SvgView: Groesse in Pixeln
+    bool sharp = false;             // Netzlaufwerk: zweite Stufe (ganze Datei) nach dem eingebetteten Vorschaubild
 };
 
 struct ThumbResult {
@@ -33,6 +34,7 @@ struct ThumbResult {
     bool hasMeta = false;
     std::wstring path;
     MetaRow meta;
+    bool quick = false;   // erste Stufe (eingebettetes Vorschaubild), die scharfe Fassung folgt
 };
 
 class ThumbService {

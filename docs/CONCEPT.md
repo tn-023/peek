@@ -12,7 +12,7 @@ peek is built as a single, statically linked C++20 Win32 application (`peek.exe`
 | Portable, no installation | One EXE, static CRT (`/MT`), data next to the EXE or in `%LOCALAPPDATA%` |
 | No admin rights | Manifest `asInvoker`, no services, no registry writes, no USN journal |
 | Hardware acceleration | D3D11 device, DirectComposition swap chain, GPU texture atlas, DXVA video decoding for thumbnails |
-| No network/internet features | No network libraries linked, build check of the import table; local drives only – network drives and UNC paths are excluded with no option to enable them |
+| No network/internet features | No network libraries linked, build check of the import table. peek contains no network code of its own; mapped network drives (with a drive letter) are read by Windows like local drives |
 | Minimal interface | One window: header with path bar and search, filter pills, grid, status bar; sidebar and info panel can be shown/hidden with animation; everything operable by keyboard |
 | Filter by date, size, name, resolution etc. | In-memory column store, filters in milliseconds |
 | Metadata capture while the app is active | Background indexer with low I/O priority, only while peek is running |
@@ -427,7 +427,7 @@ Freedom from networking is not just promised but technically checked in every bu
 - Dependencies are built with options free of network features (e.g. SQLite without extension loading).
 - **SVG:** before parsing, peek checks all `href` references: only `data:` and internal references (`#id`) remain; references to other files, internet addresses, UNC and network paths are removed. DTD entities containing markup or references are rejected so that no reference can hide in them. Compressed `.svgz` files are not supported (references could not be checked in advance).
 - **License notices:** `THIRD-PARTY.txt` is generated in every build from the copyright files of the vcpkg packages and the licenses of all linked Rust crates (identical texts only once) and is included in the release.
-- Network drives and UNC paths (`GetDriveTypeW == DRIVE_REMOTE`, `\\server\…`) are excluded in principle: they do not appear in the tree, cannot be added as a collection, and drops from there are rejected. There is no option for them. Cloud placeholders (e.g. OneDrive "online only", attribute FILE\_ATTRIBUTE\_RECALL\_ON\_DATA\_ACCESS) are shown only with name and icon; peek reads them for no thumbnail, metadata or index, so browsing triggers no download. Only when the user explicitly opens such an image (double-click, viewer, "Open with peek", since 1.6.1) is it read – the sync client (OneDrive, Google Drive) then downloads that one file; neighboring images are only preloaded if they are already on the PC.
+- peek contains no network code of its own. Mapped network drives (`DRIVE_REMOTE` with a drive letter, since 1.6.1) are read by Windows like local drives; paths without a drive letter (`\\server\…`) are not supported. Cloud placeholders (e.g. OneDrive "online only", attribute FILE\_ATTRIBUTE\_RECALL\_ON\_DATA\_ACCESS) are shown only with name and icon; peek reads them for no thumbnail, metadata or index, so browsing triggers no download. Only when the user explicitly opens such an image (double-click, viewer, "Open with peek", since 1.6.1) is it read – the sync client (OneDrive, Google Drive) then downloads that one file; neighboring images are only preloaded if they are already on the PC.
 - GPS coordinates are used only as numbers and filters, never passed to a map service.
 
 **Hardening**
@@ -494,7 +494,7 @@ The targets below are acceptance criteria for a reference PC (8 cores, NVMe SSD,
 - Unit tests for tokenizer, template detection, query parser and column filters (GoogleTest).
 - Test corpus of 1,000 odd files (broken JPEGs, huge PNGs, 0-byte files, Unicode/long paths > 260 characters, locked files).
 - Synthetic large collection (1 million files) for load tests; measurement via ETW traces (`WPR`/`WPA`) in CI.
-- Fuzzing of the decoder paths; runs as a standard user without admin, on x64, with and without the WebP system codec; rejection of network drives, UNC paths and cloud placeholders.
+- Fuzzing of the decoder paths; runs as a standard user without admin, on x64, with and without the WebP system codec; rejection of UNC paths and handling of cloud placeholders.
 - Test of the offline gate (import table) and of a run with the network adapter disabled.
 
 **Project plan (milestones)**
@@ -520,4 +520,4 @@ The targets below are acceptance criteria for a reference PC (8 cores, NVMe SSD,
 
 **Open decisions**
 
-- None at present – network drives, image formats, video playback and thumbnails are decided.
+- None at present – image formats, video playback and thumbnails are decided.

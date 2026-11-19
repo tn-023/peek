@@ -20,7 +20,7 @@ See a folder instantly, find files quickly. peek recognizes terms and patterns i
 
 - **Calm interface:** no menu bar, no toolboxes.
 - **Fast:** C++20, GPU-accelerated. Thumbnails are created in the background.
-- **Portable and private:** runs from a USB stick, local drives only, no network features.
+- **Portable and private:** runs from a USB stick, no network features. peek contains no network code of its own; mapped network drives are read by Windows.
 - **Isolated:** images, videos and documents are decoded in a sandbox, with no network and no access to other files.
 - **No background service:** indexes only while peek is running. No service, no autostart.
 - **Find:** terms as pills, filters for type, date, size, resolution, orientation. Search with `width:>3000 date:2024-08`.
@@ -155,7 +155,7 @@ Data is stored in `%LOCALAPPDATA%\peek`. With an empty file `peek.portable` next
 - **Contact sheet:** A4 portrait/landscape, freely chosen grid, reorder images by dragging. PDF with embedded font.
 - **Tile texture:** PNG sequence to a single PNG, pixel-exact. 8 and 16 bit, transparency preserved.
 - **Files:** rename, properties, open with, copy, paste, drag onto folders, recycle bin.
-- **Local only:** no network drives, no cloud placeholders.
+- **Drives:** local drives and mapped network drives (with a drive letter); online-only cloud files get no thumbnail.
 - **Sandbox:** decoders run in AppContainer processes. A crafted file can reach neither the network nor other files.
 - **Encrypted index:** paths and thumbnails are stored only in encrypted form, bound to the Windows account. Deleted files also disappear from the index.
 

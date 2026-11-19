@@ -104,8 +104,9 @@ void Loader::Worker() {
             }
         }
         std::vector<std::wstring> seenPaths;   // fuer das Aufraeumen des Index (nur direkte Inhalte)
+        bool complete = true;
         if (!job.fromDb) {
-            EnumerateFolder(job.path, job.recursive, job.showHidden, cancel, [&](std::vector<FileEntry>&& part) {
+            complete = EnumerateFolder(job.path, job.recursive, job.showHidden, cancel, [&](std::vector<FileEntry>&& part) {
                 if (!job.recursive)
                     for (auto& e : part) seenPaths.push_back(e.path);
                 LoadBatch b;
@@ -118,11 +119,13 @@ void Loader::Worker() {
         LoadBatch done;
         done.gen = gen;
         done.done = true;
+        done.failed = !job.fromDb && !complete;
         Push(std::move(done));
 
         // Index: Eintraege und Vorschaubilder von Dateien entfernen, die es in diesem Ordner nicht mehr gibt
         // (geloescht, verschoben oder umbenannt, auch ausserhalb von peek)
-        if (!job.fromDb && !job.recursive && db_ && IsLocalDrivePath(job.path)) db_->PruneFolder(job.path, seenPaths);
+        // nur nach vollstaendiger Auflistung (ein nicht erreichbares Netzlaufwerk darf den Index nicht leeren)
+        if (!job.fromDb && !job.recursive && complete && db_ && IsLocalDrivePath(job.path)) db_->PruneFolder(job.path, seenPaths);
 
         if (!job.fromDb && IsLocalDrivePath(job.path)) {
             change = FindFirstChangeNotificationW(

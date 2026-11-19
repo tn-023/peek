@@ -55,13 +55,16 @@ bool Indexer::IndexRoot(const std::wstring& root, int64_t stamp) {
         std::lock_guard<std::mutex> lock(mutex_);
         hidden = showHidden_;
     }
-    // 1) Struktur-Scan: alle Dateien erfassen
+    // 1) Struktur-Scan: alle Dateien erfassen (Name, Groesse, Datum; daraus Begriffe, Quelle, Muster)
+    // Netzlaufwerk: nur diese Stufe. Inhalte (Metadaten, Vorschaubilder) liest peek erst, wenn ein Ordner geoeffnet
+    // wird, und nur fuer diesen Ordner: kein Hintergrund-Scan, der den Server dauerhaft belastet.
+    const bool network = IsNetworkPath(root);
     std::vector<FileEntry> media;
-    EnumerateFolder(root, true, hidden, [&] { return ShouldAbort(); }, [&](std::vector<FileEntry>&& part) {
+    bool complete = EnumerateFolder(root, true, hidden, [&] { return ShouldAbort(); }, [&](std::vector<FileEntry>&& part) {
         WaitWhilePaused();
         db_->PutFiles(part, stamp);
         for (auto& e : part)
-            if (e.HasThumb() && !e.offline) {
+            if (!network && e.HasThumb() && !e.offline) {
                 media.push_back(std::move(e));
                 ++total_;
             }
@@ -115,8 +118,9 @@ bool Indexer::IndexRoot(const std::wstring& root, int64_t stamp) {
     db_->PutMetaBatch(batch, stamp);
     if (ShouldAbort()) return false;
 
-    // 3) Entfernte Dateien aus dem Index loeschen
-    db_->DeleteUnseenUnder(root, stamp);
+    // 3) Entfernte Dateien aus dem Index loeschen, nur nach vollstaendigem Scan
+    // (ein zwischendurch nicht erreichbares Netzlaufwerk darf den Index nicht leeren)
+    if (complete) db_->DeleteUnseenUnder(root, stamp);
     return true;
 }
 

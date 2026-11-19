@@ -10,6 +10,7 @@ struct LoadBatch {
     uint32_t gen = 0;
     std::vector<FileEntry> entries;
     bool done = false;
+    bool failed = false;   // Ordner nicht (vollstaendig) lesbar, z. B. Netzlaufwerk nicht erreichbar
 };
 
 class Loader {

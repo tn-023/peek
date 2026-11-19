@@ -63,7 +63,33 @@ bool IsLocalDrivePath(const std::wstring& path) {
     if (path[1] != L':') return false;
     wchar_t root[4] = {path[0], L':', L'\\', 0};
     UINT t = GetDriveTypeW(root);
-    return t == DRIVE_FIXED || t == DRIVE_REMOVABLE;
+    return t == DRIVE_FIXED || t == DRIVE_REMOVABLE || t == DRIVE_REMOTE;
+}
+
+bool IsNetworkPath(const std::wstring& path) {
+    std::wstring p = path;
+    if (p.size() >= 7 && p.compare(0, 4, L"\\\\?\\") == 0 && p[5] == L':') p = p.substr(4);
+    if (p.size() < 2 || p[1] != L':') return false;
+    wchar_t root[4] = {p[0], L':', L'\\', 0};
+    return GetDriveTypeW(root) == DRIVE_REMOTE;
+}
+
+// Name wie im Explorer, ohne den Server zu fragen: aus der Zuordnung des Laufwerksbuchstabens
+// (z. B. "\\Device\\LanmanRedirector\\;Z:0000...\\server\\freigabe")
+std::wstring NetworkDriveLabel(const std::wstring& root) {
+    if (root.size() < 2) return {};
+    wchar_t dev[3] = {root[0], L':', 0};
+    wchar_t target[1024] = {};
+    if (!QueryDosDeviceW(dev, target, 1024)) return {};
+    std::wstring t = target;
+    size_t semi = t.find(L';');                       // ";Z:000...\server\freigabe[\unterordner]"
+    if (semi == std::wstring::npos) return {};
+    size_t a = t.find(L'\\', semi);
+    if (a == std::wstring::npos) return {};
+    std::wstring rest = t.substr(a + 1);
+    size_t b = rest.find(L'\\');
+    if (b == std::wstring::npos || b == 0 || b + 1 >= rest.size()) return {};
+    return rest.substr(b + 1) + L" (\\\\" + rest.substr(0, b) + L")";
 }
 
 std::vector<std::wstring> LocalDrives() {
@@ -73,7 +99,7 @@ std::vector<std::wstring> LocalDrives() {
         if (!(mask & (1u << i))) continue;
         wchar_t root[4] = {static_cast<wchar_t>(L'A' + i), L':', L'\\', 0};
         UINT t = GetDriveTypeW(root);
-        if (t == DRIVE_FIXED || t == DRIVE_REMOVABLE) out.emplace_back(root);
+        if (t == DRIVE_FIXED || t == DRIVE_REMOVABLE || t == DRIVE_REMOTE) out.emplace_back(root);
     }
     return out;
 }
@@ -147,23 +173,29 @@ FileEntry MakeEntry(const std::wstring& dir, const WIN32_FIND_DATAW& fd) {
     return e;
 }
 
-void EnumerateFolder(const std::wstring& root, bool recursive, bool showHidden,
+bool EnumerateFolder(const std::wstring& root, bool recursive, bool showHidden,
                      const std::function<bool()>& cancel,
                      const std::function<void(std::vector<FileEntry>&&)>& sink, size_t batch) {
     std::vector<std::wstring> stack{root};
     std::vector<FileEntry> out;
     out.reserve(std::min<size_t>(batch, 4096));
+    bool complete = true;
     while (!stack.empty()) {
-        if (cancel && cancel()) return;
+        if (cancel && cancel()) return false;
         std::wstring dir = std::move(stack.back());
         stack.pop_back();
-        if (!IsLocalDrivePath(dir)) continue;
+        if (!IsLocalDrivePath(dir)) { complete = false; continue; }
 
         WIN32_FIND_DATAW fd;
         std::wstring pattern = LongPath(JoinPath(dir, L"*"));
         HANDLE h = FindFirstFileExW(pattern.c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr,
                                     FIND_FIRST_EX_LARGE_FETCH);
-        if (h == INVALID_HANDLE_VALUE) continue;
+        if (h == INVALID_HANDLE_VALUE) {
+            DWORD err = GetLastError();
+            if (dir == root || (err != ERROR_ACCESS_DENIED && err != ERROR_FILE_NOT_FOUND && err != ERROR_PATH_NOT_FOUND))
+                complete = false;
+            continue;
+        }
         std::vector<std::wstring> subdirs;
         do {
             if (fd.cFileName[0] == L'.' && (fd.cFileName[1] == 0 || (fd.cFileName[1] == L'.' && fd.cFileName[2] == 0)))
@@ -183,14 +215,16 @@ void EnumerateFolder(const std::wstring& root, bool recursive, bool showHidden,
                 sink(std::move(out));
                 out = {};
                 out.reserve(batch);
-                if (cancel && cancel()) { FindClose(h); return; }
+                if (cancel && cancel()) { FindClose(h); return false; }
             }
         } while (FindNextFileW(h, &fd));
+        if (GetLastError() != ERROR_NO_MORE_FILES) complete = false;   // z. B. Verbindung unterbrochen
         FindClose(h);
         // in umgekehrter Reihenfolge auf den Stapel, damit alphabetisch abgearbeitet wird
         for (auto it = subdirs.rbegin(); it != subdirs.rend(); ++it) stack.push_back(std::move(*it));
     }
     if (!out.empty()) sink(std::move(out));
+    return complete;
 }
 
 std::wstring ExeDir() {

@@ -1,6 +1,9 @@
 #include "fileinput.h"
 #include "fs.h"
 
+#include <algorithm>
+#include <cstring>
+
 namespace peek {
 
 namespace {
@@ -47,17 +50,32 @@ public:
     }
 
     // ISequentialStream
+    // Dekoder lesen Dateikoepfe in vielen kleinen Stuecken. Lokal ist das egal, ueber ein Netzlaufwerk kostet jedes
+    // Stueck eine Rundreise zum Server. Deshalb: kleine Lesezugriffe aus Bloecken zu 256 KB, die je in einem Zugriff
+    // geholt werden (wenige Bloecke werden behalten); grosse Lesezugriffe direkt.
     HRESULT STDMETHODCALLTYPE Read(void* pv, ULONG cb, ULONG* pcbRead) override {
         if (!pv) return STG_E_INVALIDPOINTER;
         std::lock_guard<std::mutex> lock(mutex_);
         ULONG total = 0;
         auto* dst = static_cast<uint8_t*>(pv);
-        while (total < cb && pos_ < size_) {
-            DWORD want = static_cast<DWORD>(std::min<uint64_t>({cb - total, size_ - pos_, 1u << 24}));
-            DWORD got = ReadAt(h_, pos_, dst + total, want);
-            if (got == 0) break;
-            total += got;
-            pos_ += got;
+        if (cb >= kDirect) {
+            while (total < cb && pos_ < size_) {
+                DWORD want = static_cast<DWORD>(std::min<uint64_t>({cb - total, size_ - pos_, 1u << 24}));
+                DWORD got = ReadAt(h_, pos_, dst + total, want);
+                if (got == 0) break;
+                total += got;
+                pos_ += got;
+            }
+        } else {
+            while (total < cb && pos_ < size_) {
+                const Block* b = GetBlock(pos_ / kBlock);
+                uint64_t off = pos_ % kBlock;
+                if (!b || off >= b->data.size()) break;
+                ULONG n = static_cast<ULONG>(std::min<uint64_t>(cb - total, b->data.size() - off));
+                memcpy(dst + total, b->data.data() + off, n);
+                total += n;
+                pos_ += n;
+            }
         }
         if (pcbRead) *pcbRead = total;
         return total < cb ? S_FALSE : S_OK;
@@ -125,6 +143,39 @@ public:
     }
 
 private:
+    static constexpr uint64_t kBlock = 256 * 1024;
+    static constexpr ULONG kDirect = 1024 * 1024;
+    static constexpr size_t kMaxBlocks = 6;
+    struct Block {
+        uint64_t index = 0;
+        std::vector<uint8_t> data;
+    };
+
+    // Block aus dem Zwischenspeicher oder in einem Zugriff von der Datei; zuletzt benutzte Bloecke bleiben
+    const Block* GetBlock(uint64_t index) {
+        for (size_t i = 0; i < blocks_.size(); ++i) {
+            if (blocks_[i].index != index) continue;
+            if (i + 1 != blocks_.size()) std::rotate(blocks_.begin() + i, blocks_.begin() + i + 1, blocks_.end());
+            return &blocks_.back();
+        }
+        uint64_t start = index * kBlock;
+        if (start >= size_) return nullptr;
+        Block b;
+        b.index = index;
+        b.data.resize(static_cast<size_t>(std::min<uint64_t>(kBlock, size_ - start)));
+        size_t got = 0;
+        while (got < b.data.size()) {
+            DWORD n = ReadAt(h_, start + got, b.data.data() + got, static_cast<DWORD>(b.data.size() - got));
+            if (n == 0) break;
+            got += n;
+        }
+        if (got == 0) return nullptr;
+        b.data.resize(got);
+        if (blocks_.size() >= kMaxBlocks) blocks_.erase(blocks_.begin());
+        blocks_.push_back(std::move(b));
+        return &blocks_.back();
+    }
+
     ~InputStream() { if (h_ && h_ != INVALID_HANDLE_VALUE) CloseHandle(h_); }
     std::atomic<ULONG> refs_{1};
     ComPtr<IUnknown> ftm_;   // Free-Threaded Marshaler
@@ -132,6 +183,7 @@ private:
     HANDLE h_;
     uint64_t size_;
     uint64_t pos_ = 0;
+    std::vector<Block> blocks_;
 };
 
 }  // namespace

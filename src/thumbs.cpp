@@ -107,6 +107,12 @@ bool ThumbService::Process(const ThumbRequest& r, ThumbResult& res) {
         std::vector<uint8_t> blob;
         if (db_ && db_->GetThumb(r.path, r.size, r.mtime, blob) && DecodeImageMemory(blob.data(), blob.size(), res.px))
             return true;
+        // Netzlaufwerk: zuerst das eingebettete Vorschaubild (nur der Dateikopf wird gelesen); die scharfe Fassung
+        // aus der ganzen Datei folgt danach mit niedrigerer Prioritaet (siehe Worker) und landet in thumbs.db
+        if (r.kind == Kind::Image && !r.sharp && IsNetworkPath(r.path) && SbEmbeddedThumb(r.path, kThumbEdge, res.px)) {
+            res.quick = true;
+            return true;
+        }
         bool ok = false;
         if (r.kind == Kind::Video) {
             ok = SbVideoThumbnail(r.path, kThumbEdge, res.px, &res.meta);
@@ -150,11 +156,18 @@ void ThumbService::Worker() {
             std::lock_guard<std::mutex> lock(mutex_);
             inflight_.erase(JobKey(r.job, r.key));
         }
-        {
+        bool quick = res.ok && res.quick;
+        if (!(r.sharp && !res.ok)) {   // scharfe Stufe fehlgeschlagen: das eingebettete Vorschaubild behalten
             std::lock_guard<std::mutex> lock(resultMutex_);
             results_.push_back(std::move(res));
         }
         if (!posted_.exchange(true)) PostMessageW(hwnd_, WM_APP_THUMB, 0, 0);
+        if (quick) {
+            ThumbRequest s = r;
+            s.sharp = true;
+            s.prio = std::max(r.prio, 1);
+            Request(std::move(s));
+        }
     }
 }
 

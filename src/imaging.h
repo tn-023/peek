@@ -15,6 +15,8 @@ bool DecodeImageFile(const std::wstring& path, uint32_t maxEdge, Pixels& out);
 bool SaveCroppedImage(const std::wstring& src, int viewRot, double x0, double y0, double x1, double y1,
                       const std::wstring& dst, const GUID& container, uint32_t* outW = nullptr, uint32_t* outH = nullptr);
 bool DecodeImageMemory(const uint8_t* data, size_t size, Pixels& out);
+// Eingebettetes Vorschaubild (EXIF bei JPEG/TIFF): liest nur den Dateikopf. Fuer Netzlaufwerke als erste, schnelle Stufe.
+bool DecodeEmbeddedThumb(const std::wstring& path, uint32_t maxEdge, Pixels& out);
 
 // JPEG fuer PDF: Transparenz auf Weiss, Qualitaet 0..1
 bool EncodeJpegOnWhite(const Pixels& px, float quality, std::vector<uint8_t>& out);

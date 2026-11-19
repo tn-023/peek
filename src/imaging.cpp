@@ -430,6 +430,49 @@ bool DecodeImageFile(const std::wstring& path, uint32_t maxEdge, Pixels& out) {
     return false;
 }
 
+bool DecodeEmbeddedThumb(const std::wstring& path, uint32_t maxEdge, Pixels& out) {
+    if (IsSvgPath(path) || IsTgaPath(path)) return false;
+    auto f = Wic();
+    if (!f) return false;
+    ComPtr<IStream> in = OpenInputStream(path);
+    if (!in) return false;
+    ComPtr<IWICBitmapDecoder> dec;
+    if (FAILED(f->CreateDecoderFromStream(in.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &dec))) return false;
+    ComPtr<IWICBitmapFrameDecode> frame;
+    if (FAILED(dec->GetFrame(0, &frame))) return false;
+    UINT w = 0, h = 0;
+    if (FAILED(frame->GetSize(&w, &h)) || w == 0 || h == 0) return false;
+    ComPtr<IWICBitmapSource> src;
+    if (FAILED(frame->GetThumbnail(&src)) || !src) return false;
+    UINT tw = 0, th = 0;
+    if (FAILED(src->GetSize(&tw, &th)) || tw < 32 || th < 32) return false;
+    uint32_t fw, fh;
+    FitSize(tw, th, maxEdge, fw, fh);
+    if (fw < tw) {
+        ComPtr<IWICBitmapScaler> scaler;
+        if (SUCCEEDED(f->CreateBitmapScaler(&scaler)) &&
+            SUCCEEDED(scaler->Initialize(src.Get(), fw, fh, WICBitmapInterpolationModeFant)))
+            src = scaler;
+    }
+    UINT orientation = ReadOrientation(frame.Get());   // das Vorschaubild ist wie das Bild selbst gespeichert
+    if (orientation != 1) {
+        ComPtr<IWICBitmap> cached;
+        if (SUCCEEDED(f->CreateBitmapFromSource(src.Get(), WICBitmapCacheOnLoad, &cached))) {
+            ComPtr<IWICBitmapFlipRotator> rot;
+            if (SUCCEEDED(f->CreateBitmapFlipRotator(&rot)) &&
+                SUCCEEDED(rot->Initialize(cached.Get(), OrientationTransform(orientation))))
+                src = rot;
+            else
+                src = cached;
+        }
+    }
+    if (!CopyToPixels(src.Get(), out)) return false;
+    bool swap = orientation >= 5;
+    out.srcW = swap ? h : w;
+    out.srcH = swap ? w : h;
+    return true;
+}
+
 bool DecodeImageMemory(const uint8_t* data, size_t size, Pixels& out) {
     auto f = Wic();
     if (!f || !data || !size) return false;

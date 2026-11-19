@@ -181,6 +181,16 @@ void App::OnMouseMove(float x, float y, WPARAM keys) {
         autoMouseY_ = y;
         return;
     }
+    if (settingsScrollDrag_) {
+        const float trackTop = settingsPage_ == 1 ? 66.0f : 4.0f;
+        float trackH = settingsPage_ == 1 ? H_ - 70 : H_ - 8;
+        float thumbH = std::max(32.0f, trackH * H_ / std::max(1.0f, settingsContentH_));
+        float maxS = std::max(0.0f, settingsContentH_ - H_);
+        float rel = (y - settingsDragOffset_ - trackTop) / std::max(1.0f, trackH - thumbH);
+        settingsScroll_ = std::clamp(rel, 0.0f, 1.0f) * maxS;
+        InvalidateRect(hwnd_, nullptr, FALSE);
+        return;
+    }
     if (viewer_.open && viewer_.cropDrag) {
         CropMouseMove(x, y);
         return;
@@ -345,6 +355,19 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
 
     const Hit* h = HitAt(x, y);
     if (settingsOpen_) {
+        // Bildlaufleiste am rechten Rand: Griff ziehen oder in die Leiste klicken
+        // (Seite "Tastenkombinationen": Leiste beginnt unter der Ueberschrift)
+        const float trackTop = settingsPage_ == 1 ? 66.0f : 4.0f;
+        if (settingsContentH_ > H_ && x > W_ - 16 && y >= trackTop) {
+            float trackH = settingsPage_ == 1 ? H_ - 70 : H_ - 8;
+            float thumbH = std::max(32.0f, trackH * H_ / settingsContentH_);
+            float maxS = settingsContentH_ - H_;
+            float ty = trackTop + (trackH - thumbH) * (maxS > 0 ? settingsScroll_ / maxS : 0);
+            settingsScrollDrag_ = true;
+            settingsDragOffset_ = (y >= ty && y <= ty + thumbH) ? y - ty : thumbH / 2;
+            OnMouseMove(x, y, keys);
+            return;
+        }
         if (!h) return;
         switch (h->type) {
         case HitType::SettingsBack: CloseSettings(); break;
@@ -576,7 +599,10 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
     downPt_ = pt;
     downPos_ = pos;
     selectOnUp_ = false;
-    rowMarquee_ = settings_.viewMode == 1 && !OverListLabel(pos, x);
+    // Detailansicht neben dem Namen: Auswahlrechteck. Auf einer bereits ausgewaehlten Zeile (ohne Strg/Umschalt)
+    // dagegen ueberall die Auswahl ziehen, nicht nur am Dateinamen.
+    rowMarquee_ = settings_.viewMode == 1 && !OverListLabel(pos, x) &&
+                  !(selected_.count(visible_[pos]) && !(keys & (MK_CONTROL | MK_SHIFT)));
     if (rowMarquee_) {
         rowMarqueeStart_ = D2D1::Point2F(x, y - gridRc_.top + scroll_);
         rowMarqueeBase_ = (keys & MK_CONTROL) ? selected_ : std::unordered_set<uint32_t>{};
@@ -603,6 +629,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
 }
 
 void App::OnLButtonUp(float x, float y) {
+    settingsScrollDrag_ = false;
     if (sheet_.open) { SheetMouseUp(); return; }
     if (atlas_.open) return;
     if (compare_.open) { CompareMouseUp(); return; }
@@ -660,6 +687,7 @@ void App::OnLButtonUp(float x, float y) {
     }
     sliderDrag_ = false;
     scrollDrag_ = false;
+    settingsScrollDrag_ = false;
     if (lDown_ && selectOnUp_ && downPos_ >= 0 && downPos_ < static_cast<int>(visible_.size())) {
         selected_.clear();
         selected_.insert(visible_[downPos_]);
@@ -835,7 +863,9 @@ void App::OnWheel(float x, float y, int delta, WPARAM keys) {
     }
     float gh = gridRc_.bottom - gridRc_.top;
     float maxScroll = std::max(0.0f, contentH_ - gh);
-    scrollTarget_ = std::clamp(scrollTarget_ - delta / 120.0f * cellH_ * 0.8f, 0.0f, maxScroll);
+    // Kacheln: knapp eine Zeile je Raste; Detailansicht: zweieinhalb Zeilen (die Zeilen sind niedrig)
+    float stepPx = settings_.viewMode == 1 ? cellH_ * 2.5f : cellH_ * 0.8f;
+    scrollTarget_ = std::clamp(scrollTarget_ - delta / 120.0f * stepPx, 0.0f, maxScroll);
     StartAnimation();
 }
 

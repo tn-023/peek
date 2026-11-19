@@ -641,7 +641,16 @@ void App::CloudDrawFace(ID2D1DeviceContext* dc, const CloudCard& k, const D2D1_R
             RecordGlyphRuns(k.nameLay.Get(), k.nameRuns);
         }
         if (IDWriteTextLayout* lay = k.nameLay.Get()) {
-            float th = std::min(k.nameH, fsRef * 2.75f) * scale;
+            // Texthoehe weich angleichen: wechselt der Name beim Zoomen zwischen ein und zwei Zeilen, gleitet das
+            // Symbol an seine neue Hoehe statt zu springen
+            float target = std::min(k.nameH, fsRef * 2.75f);
+            if (k.nameHs < 0 || std::fabs(target - k.nameHs) < 0.05f) {
+                k.nameHs = target;
+            } else {
+                k.nameHs += (target - k.nameHs) * cloud_.nameK;
+                cloud_.nameMoving = true;
+            }
+            float th = k.nameHs * scale;
             cyr -= th * 0.55f;
             float ty = cyr + sy / 2 + fs * 0.45f;
             D2D1_MATRIX_3X2_F old;
@@ -892,6 +901,8 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
         pendingCloudSel_.clear();
     }
     const double pt0 = perfHud_ ? NowMs() : 0;
+    c.nameMoving = false;
+    c.nameK = 1.0f - std::exp(-static_cast<float>(RefreshPeriodMs()) / 60.0f);
     CloudFillAtlas(dc);
     CloudFillIcons(dc);
     const double pt1 = perfHud_ ? NowMs() : 0;
@@ -1118,6 +1129,7 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
         perfCount_[3] = pLayer;
         perfCount_[4] = static_cast<int>(dst.size());
     }
+    if (c.nameMoving) StartAnimation();   // Symbole gleiten noch an ihre Hoehe
     if (runs > 48) c.needRepack = true;
 
     // nicht mehr benoetigte Bilder in voller Aufloesung freigeben (der Betrachter verwaltet seine eigenen)

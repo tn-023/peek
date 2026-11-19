@@ -296,6 +296,7 @@ private:
         mutable ComPtr<IDWriteTextLayout> nameLay;
         mutable int nameBucket = -1;
         mutable float nameH = 0;
+        mutable float nameHs = -1;   // angezeigte Texthoehe: laeuft nameH weich nach (kein Sprung beim Zeilenwechsel)
         mutable GlyphRuns nameRuns;   // aufgezeichnete Glyphenlaeufe des Layouts (guenstiger als das Layout je Bild)
     };
     struct CloudDrawn { D2D1_RECT_F rc; int card; };
@@ -332,6 +333,8 @@ private:
         bool needRepack = false;
         DWORD lastRepack = 0;
         ComPtr<ID2D1SpriteBatch> batch;
+        bool nameMoving = false;                       // eine Karte gleicht ihre Texthoehe noch an
+        float nameK = 1;                               // Annaeherung je Bild
         ComPtr<IDWriteInlineObject> ellipsis;          // Auslassungszeichen fuer gekuerzte Dateinamen
         // Dateisymbole in Zielgroesse: einmal hochwertig verkleinert, danach guenstig gezeichnet. Viele Karten teilen
         // sich Symbol und Groesse; je Karte und Bild neu zu filtern war der groesste Posten bei Karten ohne Vorschau.
@@ -690,6 +693,8 @@ private:
     void ShowViewerFullscreenMenu(const D2D1_RECT_F& rc);
     int settingsPage_ = 0;          // 0 Einstellungen, 1 Tastenkombinationen
     float settingsScroll_ = 0, settingsContentH_ = 0;
+    bool settingsScrollDrag_ = false;   // Bildlaufleiste der Einstellungen wird gezogen
+    float settingsDragOffset_ = 0;
     void PaintShortcuts(ID2D1DeviceContext* dc);
     MenuItem OpenWithMenuItem(const FileEntry& e, std::shared_ptr<std::vector<OpenWithApp>> apps);
     void RunOpenWith(const FileEntry& e, const std::vector<OpenWithApp>& apps, UINT cmd, bool onlyThis = false);

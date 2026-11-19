@@ -128,6 +128,8 @@ for ($i = 0; $i -lt 260; $i++) {
     $b.Dispose()
 }
 Shot 'wolke-nah.png' @("`"$mid`"", $dark, '--view=cloud', '--cloud-zoom=0.55', $size) -wait 14
+# Gruppen in der Wolke: Streifen mit Titel und Anzahl (Sortierung nach Name)
+Shot 'wolke-gruppen.png' @("`"$mid`"", $dark, '--view=cloud', '--group', $size) -wait 14
 
 # Kamerafahrt durch die Wolke als Video und animiertes Bild (README): peek startet die Fahrt selbst
 # (--cloud-tour), legt eine Markerdatei an, sobald alles geladen ist, und faehrt los, wenn "<Marker>.go" existiert.

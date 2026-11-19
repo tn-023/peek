@@ -130,9 +130,9 @@ int RunRenderCheck(const std::wstring& report) {
     fprintf(f, "Zeichenwege vergleichen (%s)\n", driver);
 
     const UINT TW = 720, TH = 540;
-    ComPtr<ID2D1Bitmap1> big = MakeSource(dc.Get(), 640, 480), small = MakeSource(dc.Get(), 200, 150);
+    ComPtr<ID2D1Bitmap1> big = MakeSource(dc.Get(), 640, 480), tiny = MakeSource(dc.Get(), 200, 150);
     ComPtr<ID2D1Bitmap1> ta = MakeTarget(dc.Get(), TW, TH), tb = MakeTarget(dc.Get(), TW, TH);
-    if (!big || !small || !ta || !tb) return fail("Testbilder");
+    if (!big || !tiny || !ta || !tb) return fail("Testbilder");
     ComPtr<ID2D1SolidColorBrush> solid;
     dc->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1), &solid);
     const D2D1_COLOR_F bg = D2D1::ColorF(0.17f, 0.17f, 0.17f, 1);
@@ -144,7 +144,7 @@ int RunRenderCheck(const std::wstring& report) {
         {"Karte verkleinert (0,62)", big.Get(), D2D1::RectF(5.5f, 5.25f, 5.5f + 400, 5.25f + 300)},
         {"Karte fast 1:1 (0,95)", big.Get(), D2D1::RectF(3.2f, 4.7f, 3.2f + 608, 4.7f + 456)},
         {"Karte 1:1", big.Get(), D2D1::RectF(20, 20, 660, 500)},
-        {"Karte vergroessert (2,6)", small.Get(), D2D1::RectF(12.4f, 9.1f, 12.4f + 520, 9.1f + 390)},
+        {"Karte vergroessert (2,6)", tiny.Get(), D2D1::RectF(12.4f, 9.1f, 12.4f + 520, 9.1f + 390)},
     };
     for (const Case& cs : cases) {
         float rad = std::min(5.0f, 0.05f * std::min(cs.rc.right - cs.rc.left, cs.rc.bottom - cs.rc.top));

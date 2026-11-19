@@ -669,27 +669,35 @@ float App::FrameDt(double rawMs) {
 void App::PaintPerfHud(ID2D1DeviceContext* dc, double paintStart) {
     double now = NowMs();
     if (perfLast_ > 0 && paintStart - perfLast_ < 100.0) {
-        perfFrame_[perfN_ % 120] = static_cast<float>(paintStart - perfLast_);
-        perfCpu_[perfN_ % 120] = static_cast<float>(now - paintStart);
+        int i = perfN_ % 120;
+        perfFrame_[i] = static_cast<float>(paintStart - perfLast_);
+        perfCpu_[i] = static_cast<float>(now - paintStart);
+        for (int k = 0; k < 4; ++k) perfPart_[k][i] = perfNow_[k];
         ++perfN_;
     }
     perfLast_ = paintStart;
     int n = std::min(perfN_, 120);
-    float avg = 0, mx = 0, cpu = 0, cmx = 0;
-    for (int i = 0; i < n; ++i) {
-        avg += perfFrame_[i];
-        mx = std::max(mx, perfFrame_[i]);
-        cpu += perfCpu_[i];
-        cmx = std::max(cmx, perfCpu_[i]);
-    }
-    if (n) { avg /= n; cpu /= n; }
-    wchar_t buf[160];
-    std::swprintf(buf, 160, L"%.1f ms (max %.1f) \u00b7 CPU %.1f ms (max %.1f) \u00b7 %.0f Hz \u00b7 %d",   // lang:ok
-                  avg, mx, cpu, cmx, 1000.0 / RefreshPeriodMs(), n);
+    auto stat = [&](const float* v, float& avg, float& mx) {
+        avg = mx = 0;
+        for (int i = 0; i < n; ++i) { avg += v[i]; mx = std::max(mx, v[i]); }
+        if (n) avg /= n;
+    };
+    float avg, mx, cpu, cmx, pa[4], pm[4];
+    stat(perfFrame_, avg, mx);
+    stat(perfCpu_, cpu, cmx);
+    for (int k = 0; k < 4; ++k) stat(perfPart_[k], pa[k], pm[k]);
+    const bool cloud = settings_.viewMode == 2 && !viewer_.open && !settingsOpen_;
+    wchar_t buf[200], buf2[240];
+    std::swprintf(buf, 200, L"Bild %.1f ms (max %.1f) · CPU %.1f ms (max %.1f) · Abschluss %.1f (max %.1f) · %.0f Hz",   // lang:ok
+                  avg, mx, cpu, cmx, pa[3], pm[3], 1000.0 / RefreshPeriodMs());
+    std::swprintf(buf2, 240, L"Wolke: %d Karten · nah %d Bild / %d Name / %d Ebene · %d Sprites · Atlas %.1f (max %.1f) · Rechnen %.1f (max %.1f) · Nah %.1f (max %.1f)",   // lang:ok
+                  perfCount_[0], perfCount_[1], perfCount_[2], perfCount_[3], perfCount_[4], pa[0], pm[0], pa[1], pm[1], pa[2], pm[2]);
     dc->SetTransform(D2D1::Matrix3x2F::Identity());
-    D2D1_RECT_F rc = D2D1::RectF(8, H_ - 34, 400, H_ - 8);
+    D2D1_RECT_F rc = D2D1::RectF(8, H_ - (cloud ? 56.0f : 34.0f), std::min(W_ - 8, 760.0f), H_ - 8);
     FillRound(dc, rc, 4, D2D1::ColorF(0, 0, 0, 0.8f));
-    DrawText(dc, buf, D2D1::RectF(rc.left + 10, rc.top, rc.right - 6, rc.bottom), r_.Text(12), D2D1::ColorF(1, 1, 1, 0.95f));
+    DrawText(dc, buf, D2D1::RectF(rc.left + 10, rc.top, rc.right - 6, rc.top + 26), r_.Text(12), D2D1::ColorF(1, 1, 1, 0.95f));
+    if (cloud)
+        DrawText(dc, buf2, D2D1::RectF(rc.left + 10, rc.top + 22, rc.right - 6, rc.bottom), r_.Text(12), D2D1::ColorF(1, 1, 1, 0.95f));
 }
 
 void App::Paint() {
@@ -766,7 +774,9 @@ void App::Paint() {
         }
     }
     if (perfHud_) PaintPerfHud(dc, paintStart);
+    const double endStart = perfHud_ ? NowMs() : 0;
     r_.EndDraw();
+    if (perfHud_) perfNow_[3] = static_cast<float>(NowMs() - endStart);
     if (animating_) {
         // naechstes Bild: BeginDraw wartet auf den Takt des Bildschirms. Blieb er aus (Fenster verdeckt), per Timer
         // drosseln. Ohne Takt-Abfrage (Rueckfall): Present wartet selbst; kehrte es sofort zurueck, ebenfalls drosseln.

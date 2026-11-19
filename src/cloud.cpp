@@ -819,7 +819,10 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
         if (it != c.index.end()) CloudSelect(it->second);
         pendingCloudSel_.clear();
     }
+    const double pt0 = perfHud_ ? NowMs() : 0;
     CloudFillAtlas(dc);
+    const double pt1 = perfHud_ ? NowMs() : 0;
+    int pImg = 0, pText = 0, pLayer = 0;
 
     const D2D1_RECT_F v = c.view;
     const float vw = v.right - v.left, vh = v.bottom - v.top;
@@ -953,6 +956,7 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
     ComPtr<ID2D1DeviceContext3> dc3;
     dc->QueryInterface(IID_PPV_ARGS(&dc3));
     if (dc3 && !c.batch) dc3->CreateSpriteBatch(&c.batch);
+    const double pt2 = perfHud_ ? NowMs() : 0;
     if (c.batch) {
         c.batch->Clear();
         if (!dst.empty())
@@ -982,6 +986,7 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
                         ID2D1Bitmap1* bmp = bi->second.bmp.Get();
                         auto fi = fullBmps_.find(k.path);
                         if (fi != fullBmps_.end() && fi->second.bmp) bmp = fi->second.bmp.Get();
+                        ++pImg;
                         DrawRoundedBitmap(dc, bmp, sg.rc, rad);
                         if (sg.fog > 0.01f)
                             dc->FillRoundedRectangle(D2D1::RoundedRect(sg.rc, rad, rad),
@@ -997,6 +1002,7 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
                     thumb = e.HasThumb() && !e.offline;
                 }
                 if (!thumb) {
+                    ++pText;
                     CloudDrawFace(dc, k, sg.rc, true, rad);
                     if (sg.fog > 0.01f)
                         dc->FillRoundedRectangle(D2D1::RoundedRect(sg.rc, rad, rad),
@@ -1004,6 +1010,7 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
                     continue;
                 }
             }
+            ++pLayer;
             ComPtr<ID2D1RoundedRectangleGeometry> geo;
             if (fac) fac->CreateRoundedRectangleGeometry(D2D1::RoundedRect(sg.rc, rad, rad), &geo);
             dc->PushLayer(D2D1::LayerParameters1(sg.rc, geo.Get(), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), sg.alpha),
@@ -1027,6 +1034,17 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
         }
     }
     dc->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    if (perfHud_) {
+        double pt3 = NowMs();
+        perfNow_[0] = static_cast<float>(pt1 - pt0);
+        perfNow_[1] = static_cast<float>(pt2 - pt1);
+        perfNow_[2] = static_cast<float>(pt3 - pt2);
+        perfCount_[0] = static_cast<int>(c.drawn.size());
+        perfCount_[1] = pImg;
+        perfCount_[2] = pText;
+        perfCount_[3] = pLayer;
+        perfCount_[4] = static_cast<int>(dst.size());
+    }
     if (runs > 48) c.needRepack = true;
 
     // nicht mehr benoetigte Bilder in voller Aufloesung freigeben (der Betrachter verwaltet seine eigenen)

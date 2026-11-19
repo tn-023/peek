@@ -707,6 +707,10 @@ private:
     // Messanzeige (Strg+Umschalt+F12): Bildabstaende und Rechenzeit der letzten Bilder
     bool perfHud_ = false;
     float perfFrame_[120] = {}, perfCpu_[120] = {};
+    // Aufschluesselung: 0 = Wolke Atlas, 1 = Wolke Karten berechnen, 2 = Wolke nahe Karten zeichnen, 3 = Abschluss (EndDraw)
+    float perfPart_[4][120] = {};
+    float perfNow_[4] = {};
+    int perfCount_[5] = {};   // Wolke: sichtbare Karten, nahe Bilder, nahe Namenskarten, Ebenen, Sprites
     int perfN_ = 0;
     double perfLast_ = 0;
     void PaintPerfHud(ID2D1DeviceContext* dc, double paintStart);

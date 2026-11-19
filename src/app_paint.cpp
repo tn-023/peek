@@ -145,7 +145,7 @@ void App::Layout() {
 
 void App::RebuildRows() {
     bool list = settings_.viewMode == 1;
-    float nameW = list ? settings_.colW[0] - 48.0f : cellW_ - 6 - 8;
+    float nameW = list ? ListNameW() - 48.0f : cellW_ - 6 - 8;
     int nameWi = static_cast<int>(nameW);
     int groupKey = settings_.group ? (settings_.sortKey * 2 + (settings_.sortDesc ? 1 : 0)) : -1;
     if (rowsVersion_ == visibleVersion_ && rowsMode_ == settings_.viewMode && rowsCols_ == cols_ &&
@@ -332,6 +332,8 @@ void App::Paint() {
         PaintCompare(dc);
     } else if (viewer_.open) {
         PaintViewer(dc);
+    } else if (viewerStart_) {
+        dc->Clear(D2D1::ColorF(0, 0, 0, 1));   // Start mit einer Bilddatei: dunkel, bis der Betrachter offen ist
     } else if (sheet_.open) {
         PaintSheet(dc);
     } else if (atlas_.open) {
@@ -1132,12 +1134,40 @@ void App::PaintTile(ID2D1DeviceContext* dc, int pos, const D2D1_RECT_F& cell) {
     }
 }
 
+// Namensspalte: der Platz, den die uebrigen Spalten am rechten Rand frei lassen (mindestens 200)
+float App::ListNameW() const {
+    float rest = 0;
+    for (int c = 1; c < 5; ++c) rest += static_cast<float>(settings_.colW[c]);
+    float avail = (gridRc_.right - 14) - (gridRc_.left + 8);
+    return std::max(200.0f, avail - rest);
+}
+
+float App::ListColsRight() const {
+    float r = gridRc_.left + 8 + ListNameW();
+    for (int c = 1; c < 5; ++c) r += static_cast<float>(settings_.colW[c]);
+    return r;
+}
+
+// Symbol und (umbrochener) Name einer Zeile; daneben beginnt Ziehen ein Auswahlrechteck
+bool App::OverListLabel(int pos, float x) {
+    if (pos < 0 || pos >= static_cast<int>(visible_.size())) return false;
+    float x0 = gridRc_.left + 8;
+    float nameW = ListNameW() - 48.0f;
+    const FileEntry& e = entries_[visible_[pos]];
+    std::vector<std::pair<uint32_t, uint32_t>> lines;
+    r_.BreakLines(e.name, nameW, kNameSize, lines);
+    float widest = 0;
+    IDWriteTextFormat* fn = r_.Text(kNameSize);
+    for (auto& [s, len] : lines) widest = std::max(widest, r_.MeasureText(e.name.substr(s, len), fn));
+    return x >= x0 && x <= x0 + 40 + widest + 6;
+}
+
 void App::PaintListHeader(ID2D1DeviceContext* dc) {
     Theme t = MakeTheme(dark_, backdrop_);
     IDWriteTextFormat* f = r_.Text(12, DWRITE_FONT_WEIGHT_SEMI_BOLD);
     float x = headerRc_.left + 8;
     for (int c = 0; c < 5; ++c) {
-        float w = static_cast<float>(settings_.colW[c]);
+        float w = c == 0 ? ListNameW() : static_cast<float>(settings_.colW[c]);
         D2D1_RECT_F rc = D2D1::RectF(x, headerRc_.top + 2, x + w, headerRc_.bottom - 2);
         if (rc.left >= headerRc_.right - 14) break;
         rc.right = std::min(rc.right, headerRc_.right - 14);
@@ -1152,12 +1182,15 @@ void App::PaintListHeader(ID2D1DeviceContext* dc) {
             wchar_t ga[2] = {static_cast<wchar_t>(settings_.sortDesc ? 0xE74B : 0xE74A), 0};
             DrawText(dc, ga, D2D1::RectF(tx + lw + 6, rc.top, tx + lw + 20, rc.bottom), r_.Icon(10), accent_);
         }
-        // Griff zum Aendern der Spaltenbreite
-        D2D1_RECT_F grip = D2D1::RectF(x + w - 4, rc.top, x + w + 4, rc.bottom);
-        int gIdx = static_cast<int>(hits_.size());
-        hits_.push_back({grip, HitType::ListResize, c});
-        if (hoverHit_ == gIdx || colDrag_ == c)
-            FillRound(dc, D2D1::RectF(x + w - 1, rc.top + 6, x + w + 1, rc.bottom - 6), 1, accent_);
+        // Griff zum Aendern der Spaltenbreite: an der linken Kante jeder Spalte rechts vom Namen
+        // (die Spalten haengen am rechten Rand, Ziehen nach links verbreitert sie)
+        if (c > 0) {
+            D2D1_RECT_F grip = D2D1::RectF(x - 4, rc.top, x + 4, rc.bottom);
+            int gIdx = static_cast<int>(hits_.size());
+            hits_.push_back({grip, HitType::ListResize, c});
+            if (hoverHit_ == gIdx || colDrag_ == c)
+                FillRound(dc, D2D1::RectF(x - 1, rc.top + 6, x + 1, rc.bottom - 6), 1, accent_);
+        }
         x += w;
     }
 }
@@ -1192,20 +1225,21 @@ void App::PaintListRow(ID2D1DeviceContext* dc, int pos, const D2D1_RECT_F& row) 
     DrawBitmapFit(dc, b, ib, 2.0f);
 
     // Name umbrochen
-    float nameW = settings_.colW[0] - 48.0f;
+    const float colName = ListNameW();
+    float nameW = colName - 48.0f;
     std::vector<std::pair<uint32_t, uint32_t>> lines;
     r_.BreakLines(e.name, nameW, kNameSize, lines);
     IDWriteTextFormat* fn = r_.Text(kNameSize);
     float ly = row.top + 8;
     for (auto& [s, len] : lines) {
-        DrawText(dc, e.name.substr(s, len), D2D1::RectF(x + 40, ly, x + settings_.colW[0] + 20, ly + kLineH), fn,
+        DrawText(dc, e.name.substr(s, len), D2D1::RectF(x + 40, ly, x + colName, ly + kLineH), fn,
                  e.offline ? t.text3 : t.text);
         ly += kLineH;
     }
 
     // weitere Spalten: einzeilig, am Fensterrand nur abgeschnitten (kein Umbruch)
     IDWriteTextFormat* fw = r_.Text(12);
-    float cx = x + settings_.colW[0];
+    float cx = x + colName;
     for (int c = 1; c < 5; ++c) {
         float w = static_cast<float>(settings_.colW[c]);
         if (cx >= gridRc_.right - 14) break;

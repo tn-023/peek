@@ -175,6 +175,7 @@ private:
     void ToggleFullscreen();
     void ApplyTheme();
     void ApplyLanguage();   // Sprache aus Einstellung bzw. --lang= setzen und Oberflaeche neu aufbauen
+    void EndViewerStart();
     DWORD OnDragOver(const std::vector<std::wstring>& paths, POINT screen, DWORD keys, DWORD allowed, bool leave);
     DWORD OnDrop(const std::vector<std::wstring>& paths, POINT screen, DWORD keys, DWORD allowed);
     DWORD CrumbDropEffect(const std::vector<std::wstring>& paths, const std::wstring& target, DWORD keys,
@@ -183,6 +184,9 @@ private:
     std::wstring TypeName(const FileEntry& e);
     std::wstring CellText(const FileEntry& e, int col);
     int ColumnMinWidth(int col);
+    float ListNameW() const;              // Detailansicht: Namensspalte fuellt die Breite, die uebrigen Spalten haengen rechts
+    float ListColsRight() const;          // rechter Rand der Spalten
+    bool OverListLabel(int pos, float x);   // Symbol und Name einer Zeile (Ziehen = Dateien ziehen)
     int colDragMin_ = 60;
     // Ordner hat sich geaendert: im Hintergrund neu einlesen, alte Ansicht bleibt bis zum Austausch stehen
     bool quietLoad_ = false;
@@ -519,6 +523,7 @@ private:
     int focus_ = -1, anchor_ = -1;
     std::wstring pendingSelect_;
     std::wstring pendingViewer_;
+    bool viewerStart_ = false;   // mit einer Bilddatei gestartet (z. B. "Oeffnen mit"): gleich im Betrachter, Esc fuehrt zum Ordner
     // nur fuer Bildschirmfotos der Dokumentation: Begriff aktivieren, Suche vorbelegen/oeffnen, Filtermenue oeffnen
     std::wstring pendingTerm_, pendingSearch_;
     bool pendingSearchOpen_ = false;
@@ -601,6 +606,9 @@ private:
     D2D1_POINT_2F marqueeStart_{}, marqueeCur_{};   // Inhaltskoordinaten
     POINT marqueeMouse_{};
     std::unordered_set<uint32_t> marqueeBase_;
+    bool rowMarquee_ = false;                       // Detailansicht: Ziehen neben dem Namen beginnt ein Auswahlrechteck
+    D2D1_POINT_2F rowMarqueeStart_{};
+    std::unordered_set<uint32_t> rowMarqueeBase_;
 
     // Sammlungen in der Seitenleiste verschieben
     int sideDragItem_ = -1;
@@ -683,6 +691,7 @@ constexpr UINT_PTR kTimerViewerClick = 6;
 constexpr UINT_PTR kTimerMetaHold = 47;
 constexpr UINT_PTR kTimerToast = 48;
 constexpr UINT_PTR kTimerDocMenu = 49;   // Dokumentation: Filtermenue verzoegert oeffnen
+constexpr UINT_PTR kTimerViewerStart = 50;   // Start mit einer Bilddatei: Notausgang, falls der Ordner nicht laedt
 constexpr UINT WM_APP_FILEOP = WM_APP + 20;
 constexpr UINT WM_APP_SHEET = WM_APP + 21;   // Fortschritt/Ende der PDF-Erstellung (Kontaktabzug)
 constexpr UINT WM_APP_ATLAS = WM_APP + 22;   // Fortschritt/Ende der Kacheltextur

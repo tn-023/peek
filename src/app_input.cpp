@@ -48,9 +48,7 @@ int App::GridPosAt(float x, float y) const {
     if (settings_.viewMode == 0) {
         rc.left += 3; rc.right -= 3; rc.top += 3; rc.bottom -= 3;
     } else {
-        float colsW = 8.0f;
-        for (int c = 0; c < 5; ++c) colsW += settings_.colW[c];
-        rc.right = std::min(rc.right, gridRc_.left + colsW);
+        rc.right = std::min(rc.right, ListColsRight());
     }
     return Inside(rc, x, cy) ? pos : -1;
 }
@@ -215,7 +213,9 @@ void App::OnMouseMove(float x, float y, WPARAM keys) {
         return;
     }
     if (colDrag_ >= 0) {
-        settings_.colW[colDrag_] = std::clamp(colDragW_ + static_cast<int>(x - colDragX_), colDragMin_, std::max(colDragMin_, 1200));
+        // Griff an der linken Kante: nach links ziehen verbreitert die Spalte (die Namensspalte gibt Platz ab)
+        settings_.colW[colDrag_] = std::clamp(colDragW_ - static_cast<int>(x - colDragX_), colDragMin_, std::max(colDragMin_, 1200));
+        Layout();
         InvalidateRect(hwnd_, nullptr, FALSE);
         return;
     }
@@ -254,6 +254,20 @@ void App::OnMouseMove(float x, float y, WPARAM keys) {
         ScreenToClient(hwnd_, &pt);
         if (std::abs(pt.x - downPt_.x) > GetSystemMetrics(SM_CXDRAG) ||
             std::abs(pt.y - downPt_.y) > GetSystemMetrics(SM_CYDRAG)) {
+            if (rowMarquee_) {
+                // Detailansicht neben dem Namen: Auswahlrechteck statt Dateien ziehen
+                lDown_ = false;
+                selectOnUp_ = false;
+                rowMarquee_ = false;
+                marquee_ = true;
+                marqueeBase_ = std::move(rowMarqueeBase_);
+                rowMarqueeBase_.clear();
+                marqueeStart_ = rowMarqueeStart_;
+                marqueeCur_ = marqueeStart_;
+                marqueeMouse_ = pt;
+                UpdateMarquee();
+                return;
+            }
             if (!selected_.count(visible_[downPos_])) {
                 selected_.clear();
                 selected_.insert(visible_[downPos_]);
@@ -553,6 +567,11 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
     downPt_ = pt;
     downPos_ = pos;
     selectOnUp_ = false;
+    rowMarquee_ = settings_.viewMode == 1 && !OverListLabel(pos, x);
+    if (rowMarquee_) {
+        rowMarqueeStart_ = D2D1::Point2F(x, y - gridRc_.top + scroll_);
+        rowMarqueeBase_ = (keys & MK_CONTROL) ? selected_ : std::unordered_set<uint32_t>{};
+    }
     uint32_t idx = visible_[pos];
     if (keys & MK_CONTROL) {
         if (selected_.count(idx)) selected_.erase(idx);
@@ -638,6 +657,8 @@ void App::OnLButtonUp(float x, float y) {
     }
     lDown_ = false;
     selectOnUp_ = false;
+    rowMarquee_ = false;
+    rowMarqueeBase_.clear();
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 

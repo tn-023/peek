@@ -198,7 +198,17 @@ bool App::Init(HINSTANCE inst, int show) {
             DWORD attr = GetFileAttributesW(a.c_str());
             if (attr != INVALID_FILE_ATTRIBUTES) {
                 if (attr & FILE_ATTRIBUTE_DIRECTORY) start = a;
-                else { start = ParentPath(a); select = a; }
+                else {
+                    start = ParentPath(a);
+                    select = a;
+                    // Bild (z. B. per "Oeffnen mit" aus dem Explorer): gleich im Betrachter oeffnen
+                    size_t dot = a.find_last_of(L'.'), slash = a.find_last_of(L"\\/");
+                    if (dot != std::wstring::npos && (slash == std::wstring::npos || dot > slash) &&
+                        IsViewerFormat(ToLower(a.substr(dot + 1)))) {
+                        pendingViewer_ = a;
+                        viewerStart_ = true;
+                    }
+                }
             }
         }
         LocalFree(argv);
@@ -215,6 +225,11 @@ bool App::Init(HINSTANCE inst, int show) {
     if (openAtlas && !start.empty()) OpenAtlas(start);
 
     ShowWindow(hwnd_, settings_.maximized ? SW_SHOWMAXIMIZED : show);
+    if (viewerStart_) {
+        // gleich im Vollbild (dunkel), bis das Bild bereit ist: kein kurzes Aufblitzen des Ordners
+        if (!fullscreen_) ToggleFullscreen();
+        SetTimer(hwnd_, kTimerViewerStart, 6000, nullptr);
+    }
     UpdateWindow(hwnd_);
     return true;
 }
@@ -445,6 +460,9 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         case kTimerAnim:   // Rueckfall, falls Present nicht auf VSync wartet (z. B. verdecktes Fenster)
             KillTimer(hwnd_, kTimerAnim);
             InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        case kTimerViewerStart:
+            EndViewerStart();
             break;
         case kTimerDocMenu: {
             KillTimer(hwnd_, kTimerDocMenu);
@@ -1066,6 +1084,7 @@ void App::OnLoadResults() {
         if (it != byPath_.end())
             for (size_t i = 0; i < visible_.size(); ++i)
                 if (visible_[i] == it->second) { OpenViewer(static_cast<int>(i)); break; }
+        if (viewerStart_) EndViewerStart();
         if (pendingCrop_ && viewer_.open) {   // nur fuer Dokumentation: Zuschnitt mit sichtbarem Rahmen
             EnterCrop(true);
             viewer_.cropN = D2D1::RectF(0.14f, 0.12f, 0.80f, 0.90f);
@@ -1606,6 +1625,17 @@ void App::OpenViewer(int pos) {
     SetTimer(hwnd_, kTimerViewerUi, 2100, nullptr);
     indexer_.Pause(true);
     ViewerPrefetch();
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+// Start mit einer Bilddatei abschliessen: der Betrachter gehoert das Vollbild (Esc fuehrt zurueck ins Fenster);
+// konnte das Bild nicht geoeffnet werden, zurueck zur normalen Ordneransicht
+void App::EndViewerStart() {
+    if (!viewerStart_) return;
+    viewerStart_ = false;
+    KillTimer(hwnd_, kTimerViewerStart);
+    if (viewer_.open) viewer_.ownFullscreen = fullscreen_;
+    else if (fullscreen_) ToggleFullscreen();
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 

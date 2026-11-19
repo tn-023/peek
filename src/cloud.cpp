@@ -122,16 +122,35 @@ void App::CloudTargets() {
         // Wolke). Jeder Streifen beginnt vorne mit dem ersten Element seiner Gruppe.
         std::vector<CloudGroup> groups = CloudGroups();
         const float kA = 0.4536f;   // Flaeche je Karte wie in der runden Wolke (pi * 0.38^2)
-        const float gap = 0.6f, wMin = 1.8f;
+        const float gap = kCloudGap, wMin = 1.8f;
         const int g = static_cast<int>(groups.size());
         const float A = kA * n, G = gap * (g - 1);
         const float sa = std::clamp(vw / vh, 1.0f, 3.0f);
         float H = std::max(1.8f, (G + std::sqrt(G * G + 4 * sa * A)) / (2 * sa));
-        std::vector<float> ws(g);
+        // Mindestbreite: Titel und Anzahl muessen in der Gesamtansicht ganz lesbar sein. Die Breite in DIP haengt
+        // vom Kameraabstand ab, der wiederum von der Gesamtbreite: einige Durchgaenge genuegen.
+        IDWriteTextFormat* gf = r_.Text(14, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        IDWriteTextFormat* cf = r_.Text(12);
+        std::vector<float> needPx(g), ws(g), wNeed(g, wMin);
+        for (int j = 0; j < g; ++j)
+            needPx[j] = r_.MeasureText(groups[j].label, gf) + 10 +
+                        r_.MeasureText(FormatThousands(static_cast<uint64_t>(groups[j].count)), cf) + 40;
+        const float fl = (vh / 2) / kTanHalfFov;
         float W = G;
-        for (int j = 0; j < g; ++j) {
-            ws[j] = std::max(wMin, kA * groups[j].count / H);
-            W += ws[j];
+        for (int it = 0; it < 8; ++it) {
+            W = G;
+            for (int j = 0; j < g; ++j) {
+                ws[j] = std::max(wNeed[j], kA * groups[j].count / H);
+                W += ws[j];
+            }
+            float fit = std::max((H / 2 + 0.7f) * fl / (vh / 2 * 0.94f), (W / 2 + 0.7f) * fl / (vw / 2 * 0.94f));
+            float px = fl / fit;   // DIP je Welteinheit in der Gesamtansicht
+            bool grown = false;
+            for (int j = 0; j < g; ++j) {
+                float w = needPx[j] / px - gap;
+                if (w > ws[j] + 0.01f) { wNeed[j] = w; grown = true; }
+            }
+            if (!grown) break;
         }
         float x = -W / 2;
         c.D = 0.3f;

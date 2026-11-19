@@ -22,7 +22,6 @@ namespace peek {
 extern const wchar_t* const kThemeNames[3];
 extern const wchar_t* const kViewerSmallNames[2];
 extern const wchar_t* const kViewerFullscreenNames[2];   // 0 = Vollbild, 1 = Taskleiste sichtbar
-extern const wchar_t* const kCloudGroupsNames[2];        // 0 = Streifen, 1 = aus (Wolke wie bisher)
 const wchar_t* LanguageName(int setting);   // 0 wie Windows, 1 Deutsch, 2 English
 
 enum class HitType {
@@ -32,7 +31,7 @@ enum class HitType {
     ViewerClose, ViewerPrev, ViewerNext, ViewerInfo, ViewerCrop, CropSave, CropCancel,
     ClearBookmarks, SearchHistItem, SearchHistDel, SearchHistClear, SearchParam,
     ViewCloud,
-    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen, SettingsCloudGroups,
+    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen,
     SheetCancel, SheetCreate, SheetOrient, SheetColsMinus, SheetColsPlus, SheetRowsMinus, SheetRowsPlus, SheetNames,
     SheetExts, SheetQuality, SheetPrev, SheetNext, SheetHeadline, SheetCheck, SheetCell, SheetStripCheck, SheetStrip,
     SheetOpenPdf, BookmarkSheet,
@@ -332,6 +331,7 @@ private:
         std::vector<CloudStrip> strips;                // leer = Wolke ohne Gruppen (wie bisher)
         float stripH = 0;                              // Hoehe der Streifen (Welt)
     } cloud_;
+    static constexpr float kCloudGap = 1.2f;   // Abstand zwischen zwei Streifen (Welt)
     int CloudGroupKey() const;
     std::vector<CloudGroup> CloudGroups();
     void CloudFocusStrip(int i);
@@ -672,7 +672,6 @@ private:
     void ShowViewerSmallMenu(const D2D1_RECT_F& rc);
     void ShowLanguageMenu(const D2D1_RECT_F& rc);
     void ShowViewerFullscreenMenu(const D2D1_RECT_F& rc);
-    void ShowCloudGroupsMenu(const D2D1_RECT_F& rc);
     int settingsPage_ = 0;          // 0 Einstellungen, 1 Tastenkombinationen
     float settingsScroll_ = 0, settingsContentH_ = 0;
     void PaintShortcuts(ID2D1DeviceContext* dc);

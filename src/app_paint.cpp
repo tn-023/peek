@@ -256,14 +256,16 @@ std::wstring App::GroupLabel(const FileEntry& e) const {
     }
 }
 
-// Gruppierung fuer die Wolke (-1 = keine Streifen: Wolke wie bisher)
+// Gruppierung fuer die Wolke (-1 = keine Streifen)
 int App::CloudGroupKey() const {
-    if (!settings_.group || !settings_.cloudGroups) return -1;
+    if (!settings_.group) return -1;
     return (settings_.sortKey * 2 + (settings_.sortDesc ? 1 : 0)) * 4 + std::clamp(settings_.language, 0, 3);
 }
 
-// Gruppen der Wolke: dieselben Gruppen wie im Raster, benachbarte zu hoechstens 6 Streifen zusammengefasst.
-// Die Grenzen gleichen die Anzahl aus; Sondergruppen (Ordner, ohne Datum ...) bleiben eigene Streifen.
+// Gruppen der Wolke, hoechstens 6 Streifen. Ausgangspunkt sind die Gruppen des Rasters:
+// - mehr als 6: benachbarte Gruppen zusammenfassen, Grenzen gleichen die Anzahl aus;
+// - weniger als 6: grosse Gruppen nach dem Sortierwert weiter teilen (Namensanfaenge, Zeitraeume, Groessen,
+//   Aufloesungen), Titel dann als Bereich. Sondergruppen (Ordner, ohne Datum ...) bleiben eigene Streifen.
 std::vector<App::CloudGroup> App::CloudGroups() {
     std::vector<CloudGroup> out;
     const int n = static_cast<int>(visible_.size());
@@ -274,12 +276,13 @@ std::vector<App::CloudGroup> App::CloudGroups() {
     std::vector<Run> rs;
     const std::wstring special[] = {T(L"Ordner"), T(L"Ohne Datum"), T(L"Ohne Aufnahmedatum"), T(L"In der Zukunft"),
                                     T(L"Leer"), T(L"Ohne Auflösung")};
+    auto timeOf = [&](const FileEntry& e) { return key == 5 ? e.taken : e.Time(); };
     for (int p = 0; p < n; ++p) {
         const FileEntry& e = entries_[visible_[p]];
         std::wstring label = GroupLabel(e);
         if (!rs.empty() && label == rs.back().label) { ++rs.back().count; continue; }
         bool sp = std::find(std::begin(special), std::end(special), label) != std::end(special);
-        rs.push_back({std::move(label), p, 1, sp, key == 5 ? e.taken : e.Time()});
+        rs.push_back({std::move(label), p, 1, sp, timeOf(e)});
     }
     constexpr int kMax = 6;
     std::vector<std::pair<int, int>> buckets;   // Bereiche von Gruppen [a, b)
@@ -345,6 +348,7 @@ std::vector<App::CloudGroup> App::CloudGroups() {
     int ny;
     unsigned nm, nd;
     CivilFromDays((now_ + tzOffset_) / 86400, ny, nm, nd);
+    std::vector<char> isSpecial;
     for (auto [a, b] : buckets) {
         CloudGroup g;
         g.start = rs[a].start;
@@ -368,9 +372,107 @@ std::vector<App::CloudGroup> App::CloudGroups() {
         } else {
             g.label = la + L" – " + lb;
         }
+        isSpecial.push_back(b - a == 1 && rs[a].special);
         out.push_back(std::move(g));
     }
-    return out;
+
+    // Verfeinern: zu wenige Streifen -> grosse Gruppen weiter teilen (nicht nach Dateityp: keine Reihenfolge darin)
+    if (key == 4 || static_cast<int>(out.size()) >= kMax) return out;
+    const int minPart = std::max(4, n / 24);
+    std::vector<int> parts(out.size(), 1);
+    int used = static_cast<int>(out.size());
+    while (used < kMax) {
+        int best = -1;
+        double bv = 0;
+        for (size_t i = 0; i < out.size(); ++i) {
+            if (isSpecial[i]) continue;
+            double v = double(out[i].count) / (parts[i] + 1);
+            if (v >= minPart && v > bv) { bv = v; best = static_cast<int>(i); }
+        }
+        if (best < 0) break;
+        ++parts[best];
+        ++used;
+    }
+    if (used == static_cast<int>(out.size())) return out;
+
+    auto stem = [&](int p) {
+        const FileEntry& e = entries_[visible_[p]];
+        std::wstring s = e.name;
+        if (e.kind != Kind::Folder) {
+            size_t dot = s.find_last_of(L'.');
+            if (dot != std::wstring::npos && dot > 0) s.resize(dot);
+        }
+        return s;
+    };
+    auto common = [](const std::wstring& x, const std::wstring& y) {
+        size_t i = 0;
+        while (i < x.size() && i < y.size() && towupper(x[i]) == towupper(y[i])) ++i;
+        return i;
+    };
+    auto decimal = [](double v) {
+        wchar_t buf[32];
+        std::swprintf(buf, 32, v < 10 ? L"%.1f" : L"%.0f", v);
+        std::wstring r = buf;
+        if (!LangEn()) for (auto& ch : r) if (ch == L'.') ch = L',';
+        return r;
+    };
+    auto rangeLabel = [&](int a, int b) -> std::wstring {   // Elemente [a, b)
+        const FileEntry& e0 = entries_[visible_[a]];
+        const FileEntry& e1 = entries_[visible_[b - 1]];
+        switch (key) {
+        case 0: {   // wie im Woerterbuch: kuerzeste Anfaenge, die sich von den Nachbarn unterscheiden
+            std::wstring f = stem(a), l = stem(b - 1);
+            size_t inner = common(f, l) + 1;
+            size_t lf = std::max(inner, a > 0 ? common(f, stem(a - 1)) + 1 : 1);
+            size_t ll = std::max(inner, b < n ? common(l, stem(b)) + 1 : 1);
+            lf = std::min<size_t>(std::min(lf, f.size()), 16);
+            ll = std::min<size_t>(std::min(ll, l.size()), 16);
+            return f.substr(0, lf) + L" – " + l.substr(0, ll);
+        }
+        case 1:
+        case 5: {
+            int64_t t0 = timeOf(e0), t1 = timeOf(e1);
+            if (t0 <= 0 || t1 <= 0) break;
+            int y0, y1;
+            unsigned m0, m1, d0, d1;
+            CivilFromDays((t0 + tzOffset_) / 86400, y0, m0, d0);
+            CivilFromDays((t1 + tzOffset_) / 86400, y1, m1, d1);
+            if (y0 != y1) return std::to_wstring(y0) + L" – " + std::to_wstring(y1);
+            if (m0 != m1) return std::wstring(MonthName(m0)) + L" – " + MonthName(m1) + L" " + std::to_wstring(y0);
+            if (d0 != d1)
+                return TF(L"{0}. – {1}. {2} {3}", {std::to_wstring(d0), std::to_wstring(d1), MonthName(m0), std::to_wstring(y0)});
+            auto hm = [&](int64_t t) {
+                int64_t sec = ((t + tzOffset_) % 86400 + 86400) % 86400;
+                wchar_t buf[16];
+                std::swprintf(buf, 16, L"%02d:%02d", static_cast<int>(sec / 3600), static_cast<int>(sec / 60 % 60));
+                return std::wstring(buf);
+            };
+            return FormatDay(y0, m0, d0) + L", " + hm(t0) + L" – " + hm(t1);
+        }
+        case 2: return FormatSize(e0.size) + L" – " + FormatSize(e1.size);
+        case 3: {
+            double p0 = double(e0.width) * e0.height / 1e6, p1 = double(e1.width) * e1.height / 1e6;
+            return TF(L"{0} – {1} MP", {decimal(p0), decimal(p1)});
+        }
+        default: break;
+        }
+        return {};
+    };
+    std::vector<CloudGroup> ref;
+    for (size_t i = 0; i < out.size(); ++i) {
+        if (parts[i] == 1) { ref.push_back(out[i]); continue; }
+        for (int j = 0; j < parts[i]; ++j) {
+            int a = out[i].start + static_cast<int>(int64_t(out[i].count) * j / parts[i]);
+            int b = out[i].start + static_cast<int>(int64_t(out[i].count) * (j + 1) / parts[i]);
+            CloudGroup g;
+            g.start = a;
+            g.count = b - a;
+            g.label = rangeLabel(a, b);
+            if (g.label.empty()) g.label = out[i].label;
+            ref.push_back(std::move(g));
+        }
+    }
+    return ref;
 }
 
 // Wolke mit Streifen: Trennlinien (hinter den Karten) bzw. Gruppentitel in der Leiste oben, gestaltet wie die
@@ -387,9 +489,8 @@ void App::PaintCloudHeaders(ID2D1DeviceContext* dc, bool titles) {
     const float k = c.f / std::max(0.15f, c.focusZ - c.cz);
     auto sx = [&](float X) { return vcx + (X - c.cx) * k; };
     const float top = band.top + 8;   // wie der erste Gruppenkopf im Raster
-    const float ly = std::round((top + kGroupH / 2 + 3) * sc) / sc + 0.5f;
     if (!titles) {
-        const float half = 0.3f;   // halber Abstand zwischen zwei Streifen (Welt)
+        const float half = kCloudGap / 2;   // halber Abstand zwischen zwei Streifen (Welt)
         for (int i = 0; i < ns; ++i) {
             CloudStrip& st = c.strips[i];
             st.sl = sx(i == 0 ? st.x0 - half : (c.strips[i - 1].x1 + st.x0) / 2);
@@ -399,17 +500,17 @@ void App::PaintCloudHeaders(ID2D1DeviceContext* dc, bool titles) {
         for (int i = 1; i < ns; ++i) {
             float x = std::round(c.strips[i].sl * sc) / sc + 0.5f;
             if (x < v.left || x > v.right) continue;
-            dc->DrawLine(D2D1::Point2F(x, ly), D2D1::Point2F(x, v.bottom), r_.Brush(t.stroke), 1.0f);
+            dc->DrawLine(D2D1::Point2F(x, top + 10), D2D1::Point2F(x, v.bottom), r_.Brush(t.stroke), 1.0f);
         }
         dc->PopAxisAlignedClip();
         return;
     }
     IDWriteTextFormat* gf = r_.Text(14, DWRITE_FONT_WEIGHT_SEMI_BOLD);
     IDWriteTextFormat* cf = r_.Text(12);
-    for (int i = 1; i < ns; ++i) {   // Trennlinien in der Leiste: treffen die Linie des Gruppenkopfs
+    for (int i = 1; i < ns; ++i) {   // Trennlinien auch in der Leiste: trennen die Titel
         float x = std::round(c.strips[i].sl * sc) / sc + 0.5f;
         if (x < band.left || x > band.right) continue;
-        dc->DrawLine(D2D1::Point2F(x, ly), D2D1::Point2F(x, band.bottom), r_.Brush(t.stroke), 1.0f);
+        dc->DrawLine(D2D1::Point2F(x, top + 10), D2D1::Point2F(x, band.bottom), r_.Brush(t.stroke), 1.0f);
     }
     for (int i = 0; i < ns; ++i) {
         const CloudStrip& st = c.strips[i];
@@ -424,9 +525,6 @@ void App::PaintCloudHeaders(ID2D1DeviceContext* dc, bool titles) {
         dc->PushAxisAlignedClip(D2D1::RectF(l, band.top, r, band.bottom), D2D1_ANTIALIAS_MODE_ALIASED);
         DrawText(dc, st.label, D2D1::RectF(lx, top + 10, lx + gw + 4, top + kGroupH - 4), gf, t.text);
         DrawText(dc, cnt, D2D1::RectF(lx + gw + 10, top + 10, lx + gw + 14 + cw, top + kGroupH - 4), cf, t.text3);
-        float l0 = lx + gw + cw + 26;
-        float l1 = i == ns - 1 ? std::min(st.sr, band.right) - 24 : std::min(st.sr, band.right - 24);
-        if (l0 < l1) dc->DrawLine(D2D1::Point2F(l0, ly), D2D1::Point2F(l1, ly), r_.Brush(t.stroke), 1.0f);
         dc->PopAxisAlignedClip();
     }
 }
@@ -2060,7 +2158,7 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
     DrawText(dc, T(L"Darstellung"), D2D1::RectF(x0, y, x1, y + 28), fh, t.text);
     y += 34;
     {
-        D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 8 + 5 * 56);
+        D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 8 + 4 * 56);
         FillRound(dc, rc, 8, t.chip);
         auto dropRow = [&](float ry, const wchar_t* label, HitType type, const std::wstring& cur) {
             DrawText(dc, label, D2D1::RectF(x0 + 20, ry, x1 - 260, ry + 56), r_.Text(13), t.text);
@@ -2083,9 +2181,6 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
         dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 172), D2D1::Point2F(x1 - 16, rc.top + 172), r_.Brush(t.stroke), 1.0f);
         dropRow(rc.top + 172, T(L"Kleine Bilder im Betrachter"), HitType::SettingsViewerSmall,
                 T(kViewerSmallNames[std::clamp(settings_.viewerSmall, 0, 1)]));
-        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 228), D2D1::Point2F(x1 - 16, rc.top + 228), r_.Brush(t.stroke), 1.0f);
-        dropRow(rc.top + 228, T(L"Gruppen in der Wolke"), HitType::SettingsCloudGroups,
-                T(kCloudGroupsNames[settings_.cloudGroups ? 0 : 1]));
         y = rc.bottom + 28;
     }
 

@@ -366,7 +366,8 @@ int RunRenderCheck(const std::wstring& report) {
             }
             fprintf(f, "  Text x%.2f bei (%.2f, %.2f): ohne Einrasten %3d, senkrecht %3d, beide %3d\n", t.scale, t.x, t.y, d[0], d[1], d[2]);
         }
-        fprintf(f, "  Text gesamt: ohne %d, senkrecht %d, beide %d\n", worst[0], worst[1], worst[2]);
+        ok = ok && worst[1] == 0;   // die Wolke zeichnet Dateinamen so (senkrecht eingerastet): muss exakt gleich sein
+        fprintf(f, "  Text gesamt: ohne %d, senkrecht %d, beide %d  %s\n", worst[0], worst[1], worst[2], worst[1] == 0 ? "ok" : "ABWEICHUNG");
 
         // Zeitbedarf je Zeichenbefehl (nur der Aufruf, ohne Abschluss)
         const int N = 3000;

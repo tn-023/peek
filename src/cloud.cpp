@@ -531,6 +531,8 @@ void App::CloudReleaseGpu() {
     c.pagesS.clear();
     c.pagesXS.clear();
     c.batch.Reset();
+    c.icons.clear();
+    c.iconBytes = 0;
     for (auto& k : c.cards) {
         k.face = 0;
         k.xs = false;
@@ -636,6 +638,7 @@ void App::CloudDrawFace(ID2D1DeviceContext* dc, const CloudCard& k, const D2D1_R
                 k.nameLay->GetMetrics(&tm);
                 k.nameH = tm.height;
             }
+            RecordGlyphRuns(k.nameLay.Get(), k.nameRuns);
         }
         if (IDWriteTextLayout* lay = k.nameLay.Get()) {
             float th = std::min(k.nameH, fsRef * 2.75f) * scale;
@@ -644,15 +647,84 @@ void App::CloudDrawFace(ID2D1DeviceContext* dc, const CloudCard& k, const D2D1_R
             D2D1_MATRIX_3X2_F old;
             dc->GetTransform(&old);
             dc->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale) * D2D1::Matrix3x2F::Translation(cxr - wRef * scale / 2, ty) * old);
-            dc->DrawTextLayout(D2D1::Point2F(0, 0), lay,
-                               r_.Brush(dark_ ? D2D1::ColorF(1, 1, 1, 0.9f) : D2D1::ColorF(0, 0, 0, 0.85f)),
-                               D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            // aufgezeichnete Glyphenlaeufe statt DrawTextLayout: dieselben Pixel (siehe --render-check), aber ohne
+            // das Layout in jedem Bild erneut zu durchlaufen
+            (void)lay;
+            DrawGlyphRuns(dc, k.nameRuns, r_.Brush(dark_ ? D2D1::ColorF(1, 1, 1, 0.9f) : D2D1::ColorF(0, 0, 0, 0.85f)), 1);
             dc->SetTransform(old);
         }
     }
 
-    dc->DrawBitmap(ii->second.bmp.Get(), D2D1::RectF(cxr - sx / 2, cyr - sy / 2, cxr + sx / 2, cyr + sy / 2), 1.0f,
-                   D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+    D2D1_RECT_F ir = D2D1::RectF(cxr - sx / 2, cyr - sy / 2, cxr + sx / 2, cyr + sy / 2);
+    if (large) {
+        // Symbol in Zielgroesse aus dem Zwischenspeicher (kubisch an die genaue Lage gelegt). Fehlt es noch, wird es
+        // dieses eine Mal direkt hochwertig gezeichnet und vor dem naechsten Bild angelegt.
+        const float px = r_.scale();
+        int w = static_cast<int>(std::lround(sx * px)), h = static_cast<int>(std::lround(sy * px));
+        D2D1_SIZE_U sp = ii->second.bmp->GetPixelSize();
+        if (w >= 4 && h >= 4 && w <= 512 && h <= 512 && static_cast<UINT>(w) < sp.width && static_cast<UINT>(h) < sp.height) {
+            auto& ic = cloud_.icons[std::make_tuple(ii->second.bmp.Get(), w, h)];
+            ic.lastUse = frame_;
+            if (!ic.src) ic.src = ii->second.bmp;
+            if (ic.bmp) {
+                dc->DrawBitmap(ic.bmp.Get(), ir, 1.0f, D2D1_INTERPOLATION_MODE_CUBIC);
+                return;
+            }
+        }
+    }
+    dc->DrawBitmap(ii->second.bmp.Get(), ir, 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+}
+
+// Angeforderte Symbolgroessen anlegen (vor dem Zeichnen der Wolke: dabei wechselt das Zeichenziel)
+void App::CloudFillIcons(ID2D1DeviceContext* dc) {
+    auto& c = cloud_;
+    if (c.icons.empty()) return;
+    // nicht mehr verwendete Groessen freigeben (beim Zoomen entstehen laufend neue)
+    if (c.iconBytes > 48u * 1024 * 1024 || c.icons.size() > 4000) {
+        for (auto it = c.icons.begin(); it != c.icons.end();) {
+            if (it->second.lastUse + 2 < frame_) {
+                if (it->second.bmp) c.iconBytes -= size_t(std::get<1>(it->first)) * std::get<2>(it->first) * 4;
+                it = c.icons.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    int made = 0;
+    bool switched = false;
+    ComPtr<ID2D1Image> oldTarget;
+    D2D1_MATRIX_3X2_F oldT{};
+    float dpiX = 96, dpiY = 96;
+    for (auto& [key, ic] : c.icons) {
+        if (ic.bmp || !ic.src || ic.lastUse + 1 < frame_) continue;
+        if (made >= 48) { InvalidateRect(hwnd_, nullptr, FALSE); break; }   // Rest im naechsten Bild
+        if (!switched) {
+            switched = true;
+            dc->GetTarget(&oldTarget);
+            dc->GetTransform(&oldT);
+            dc->GetDpi(&dpiX, &dpiY);
+            dc->SetDpi(96, 96);
+            dc->SetTransform(D2D1::Matrix3x2F::Identity());
+        }
+        const int w = std::get<1>(key), h = std::get<2>(key);
+        D2D1_BITMAP_PROPERTIES1 bp = D2D1::BitmapProperties1(
+            D2D1_BITMAP_OPTIONS_TARGET, D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), 96, 96);
+        if (FAILED(dc->CreateBitmap(D2D1::SizeU(static_cast<UINT>(w), static_cast<UINT>(h)), nullptr, 0, bp, &ic.bmp))) {
+            ic.src.Reset();   // nicht erneut versuchen
+            continue;
+        }
+        dc->SetTarget(ic.bmp.Get());
+        dc->Clear(D2D1::ColorF(0, 0, 0, 0));
+        dc->DrawBitmap(ic.src.Get(), D2D1::RectF(0, 0, static_cast<float>(w), static_cast<float>(h)), 1.0f,
+                       D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+        c.iconBytes += size_t(w) * h * 4;
+        ++made;
+    }
+    if (switched) {
+        dc->SetTarget(oldTarget.Get());
+        dc->SetDpi(dpiX, dpiY);
+        dc->SetTransform(oldT);
+    }
 }
 
 void App::CloudFillAtlas(ID2D1DeviceContext* dc) {
@@ -821,6 +893,7 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
     }
     const double pt0 = perfHud_ ? NowMs() : 0;
     CloudFillAtlas(dc);
+    CloudFillIcons(dc);
     const double pt1 = perfHud_ ? NowMs() : 0;
     int pImg = 0, pText = 0, pLayer = 0;
 

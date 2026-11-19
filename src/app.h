@@ -15,6 +15,7 @@
 #include "atlaswriter.h"
 #include <deque>
 #include <map>
+#include <tuple>
 #include <unordered_map>
 
 namespace peek {
@@ -295,6 +296,7 @@ private:
         mutable ComPtr<IDWriteTextLayout> nameLay;
         mutable int nameBucket = -1;
         mutable float nameH = 0;
+        mutable GlyphRuns nameRuns;   // aufgezeichnete Glyphenlaeufe des Layouts (guenstiger als das Layout je Bild)
     };
     struct CloudDrawn { D2D1_RECT_F rc; int card; };
     // Gruppierte Wolke: hoechstens 6 senkrechte Streifen (benachbarte Gruppen zusammengefasst)
@@ -331,6 +333,11 @@ private:
         DWORD lastRepack = 0;
         ComPtr<ID2D1SpriteBatch> batch;
         ComPtr<IDWriteInlineObject> ellipsis;          // Auslassungszeichen fuer gekuerzte Dateinamen
+        // Dateisymbole in Zielgroesse: einmal hochwertig verkleinert, danach guenstig gezeichnet. Viele Karten teilen
+        // sich Symbol und Groesse; je Karte und Bild neu zu filtern war der groesste Posten bei Karten ohne Vorschau.
+        struct IconScaled { ComPtr<ID2D1Bitmap1> src, bmp; uint64_t lastUse = 0; };
+        std::map<std::tuple<ID2D1Bitmap1*, int, int>, IconScaled> icons;
+        size_t iconBytes = 0;
         std::vector<CloudDrawn> drawn;
         D2D1_RECT_F view{};
         float f = 1;                                   // Brennweite in DIP
@@ -371,6 +378,7 @@ private:
     void CloudRepack(ID2D1DeviceContext* dc);
     bool CloudEnsurePage(ID2D1DeviceContext* dc, int slot);
     // rad > 0: Karte selbst mit runden Ecken fuellen (ohne Zwischenebene), sonst liefert die Ebene die Ecken
+    void CloudFillIcons(ID2D1DeviceContext* dc);
     void CloudDrawFace(ID2D1DeviceContext* dc, const CloudCard& c, const D2D1_RECT_F& rc, bool large, float rad = 0);
     void CloudReleaseGpu();
     int CloudPick(float x, float y) const;

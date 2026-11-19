@@ -138,13 +138,15 @@ int RunRenderCheck(const std::wstring& report) {
     const D2D1_COLOR_F bg = D2D1::ColorF(0.17f, 0.17f, 0.17f, 1);
     bool ok = true;
 
-    struct Case { const char* name; ID2D1Bitmap1* src; D2D1_RECT_F rc; };
+    struct Case { const char* name; ID2D1Bitmap1* src; D2D1_RECT_F rc; float fog = 0; };
+    const D2D1_COLOR_F fogC = D2D1::ColorF(0.17f, 0.17f, 0.17f, 1);
     const Case cases[] = {
         {"Karte stark verkleinert (0,31)", big.Get(), D2D1::RectF(10.3f, 7.6f, 10.3f + 200, 7.6f + 150)},
         {"Karte verkleinert (0,62)", big.Get(), D2D1::RectF(5.5f, 5.25f, 5.5f + 400, 5.25f + 300)},
         {"Karte fast 1:1 (0,95)", big.Get(), D2D1::RectF(3.2f, 4.7f, 3.2f + 608, 4.7f + 456)},
         {"Karte 1:1", big.Get(), D2D1::RectF(20, 20, 660, 500)},
         {"Karte vergroessert (2,6)", tiny.Get(), D2D1::RectF(12.4f, 9.1f, 12.4f + 520, 9.1f + 390)},
+        {"Karte abgedunkelt (0,62)", big.Get(), D2D1::RectF(5.5f, 5.25f, 5.5f + 400, 5.25f + 300), 0.45f},
     };
     for (const Case& cs : cases) {
         float rad = std::min(5.0f, 0.05f * std::min(cs.rc.right - cs.rc.left, cs.rc.bottom - cs.rc.top));
@@ -158,6 +160,10 @@ int RunRenderCheck(const std::wstring& report) {
             dc->PushLayer(D2D1::LayerParameters1(cs.rc, geo.Get(), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), 1.0f),
                           nullptr);
             dc->DrawBitmap(cs.src, cs.rc, 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+            if (cs.fog > 0) {
+                solid->SetColor(D2D1::ColorF(fogC.r, fogC.g, fogC.b, cs.fog));
+                dc->FillRectangle(cs.rc, solid.Get());
+            }
             dc->PopLayer();
         }
         if (FAILED(dc->EndDraw())) return fail("Zeichnen A");
@@ -166,13 +172,17 @@ int RunRenderCheck(const std::wstring& report) {
         dc->BeginDraw();
         dc->Clear(bg);
         DrawRoundedBitmap(dc.Get(), cs.src, cs.rc, rad);
+        if (cs.fog > 0) {
+            solid->SetColor(D2D1::ColorF(fogC.r, fogC.g, fogC.b, cs.fog));
+            dc->FillRoundedRectangle(D2D1::RoundedRect(cs.rc, rad, rad), solid.Get());
+        }
         if (FAILED(dc->EndDraw())) return fail("Zeichnen B");
         dc->SetTarget(nullptr);
         Img a, b;
         if (!ReadBack(dc.Get(), ta.Get(), a) || !ReadBack(dc.Get(), tb.Get(), b)) return fail("Auslesen");
         int inner, all, cnt;
         Compare(a, b, cs.rc, inner, all, cnt);
-        bool good = inner <= 1 && all <= 24;
+        bool good = inner <= 1 && all <= 80;   // Bildflaeche gleich; der geglaettete Rand darf abweichen (siehe cloud.cpp)
         ok = ok && good;
         fprintf(f, "  %-34s innen max %3d (%d Pixel), Rand max %3d  %s\n", cs.name, inner, cnt, all, good ? "ok" : "ABWEICHUNG");
     }
@@ -186,7 +196,7 @@ int RunRenderCheck(const std::wstring& report) {
         dc->Clear(overlay);
         dc->DrawBitmap(big.Get(), dst, 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
         if (FAILED(dc->EndDraw())) return fail("Zeichnen Betrachter A");
-        int x0 = static_cast<int>(std::floor(dst.left)), y0 = static_cast<int>(std::floor(dst.top));
+        int x0 = 0, y0 = 0;   // vom Ursprung an, wie im Betrachter
         int x1 = static_cast<int>(std::ceil(dst.right)), y1 = static_cast<int>(std::ceil(dst.bottom));
         ComPtr<ID2D1Bitmap1> cache = MakeTarget(dc.Get(), static_cast<UINT>(x1 - x0), static_cast<UINT>(y1 - y0));
         if (!cache) return fail("Zwischenspeicher");

@@ -962,9 +962,11 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
             CloudCard& k = c.cards[sg.direct];
             dc->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
             float rad = std::min(5.0f, kRound * std::min(sg.rc.right - sg.rc.left, sg.rc.bottom - sg.rc.top));
-            // Haeufigster Fall (Bild, voll deckend, nicht abgedunkelt): direkt mit runden Ecken fuellen. Eine
-            // Zwischenebene je Karte unterbricht das gebuendelte Zeichnen und kostet eine eigene Zeichenflaeche.
-            if (sg.fog <= 0.01f && sg.alpha >= 0.999f) {
+            // Haeufigster Fall (Bild, voll deckend): direkt mit runden Ecken fuellen, Abdunklung als zweite Fuellung.
+            // Eine Zwischenebene je Karte unterbricht das gebuendelte Zeichnen und kostet eine eigene Zeichenflaeche.
+            // Die Bildflaeche ist dieselbe (siehe --render-check); nur der 1 px breite geglaettete Rand faellt
+            // etwas klarer aus, weil er nicht mehr doppelt (Bildkante und Maske) abgeschwaecht wird.
+            if (sg.alpha >= 0.999f) {
                 auto it = byPath_.find(k.path);
                 auto bi = bmps_.find(k.path);
                 if (it != byPath_.end() && bi != bmps_.end() && bi->second.bmp) {
@@ -975,6 +977,9 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
                         auto fi = fullBmps_.find(k.path);
                         if (fi != fullBmps_.end() && fi->second.bmp) bmp = fi->second.bmp.Get();
                         DrawRoundedBitmap(dc, bmp, sg.rc, rad);
+                        if (sg.fog > 0.01f)
+                            dc->FillRoundedRectangle(D2D1::RoundedRect(sg.rc, rad, rad),
+                                                     r_.Brush(D2D1::ColorF(fogC.r, fogC.g, fogC.b, sg.fog)));
                         continue;
                     }
                 }

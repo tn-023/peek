@@ -2059,8 +2059,9 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         } else if (im == D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC) {
             const float sc = r_.scale();
             const D2D1_RECT_F& ib = viewer_.imgBox;
-            int x0 = static_cast<int>(std::floor(std::max(ib.left, 0.0f) * sc));
-            int y0 = static_cast<int>(std::floor(std::max(ib.top, 0.0f) * sc));
+            // vom Ursprung des Fensters an: gleiche Koordinaten wie beim direkten Zeichnen, also dieselben Pixel
+            // (ein verschobener Ausschnitt weicht durch Rundung beim Filtern minimal ab, siehe --render-check)
+            int x0 = 0, y0 = 0;
             int x1 = static_cast<int>(std::ceil(std::min(ib.right, VW) * sc));
             int y1 = static_cast<int>(std::ceil(std::min(ib.bottom, H_) * sc));
             if (x1 > x0 && y1 > y0 && static_cast<uint32_t>(x1 - x0) <= r_.maxBitmapSize() &&
@@ -2083,8 +2084,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
                         dc->GetTarget(&oldTarget);
                         dc->SetTarget(vc.bmp.Get());
                         dc->Clear(D2D1::ColorF(0, 0, 0, 0));
-                        dc->SetTransform(D2D1::Matrix3x2F::Rotation(viewer_.rotation * 90.0f, c) *
-                                         D2D1::Matrix3x2F::Translation(-x0 / sc, -y0 / sc));
+                        dc->SetTransform(D2D1::Matrix3x2F::Rotation(viewer_.rotation * 90.0f, c));
                         dc->DrawBitmap(b->bmp.Get(), dst, 1.0f, im);
                         dc->SetTransform(D2D1::Matrix3x2F::Identity());
                         dc->SetTarget(oldTarget.Get());

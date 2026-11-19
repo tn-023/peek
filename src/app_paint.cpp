@@ -1444,7 +1444,7 @@ void App::PaintInfoPanel(ID2D1DeviceContext* dc, const D2D1_RECT_F& rc, const st
         if (!e.source.empty()) row(T(L"Quelle"), T(e.source));
         if (e.templateId != UINT32_MAX) row(T(L"Namensmuster"), TPattern(templDict_.Word(e.templateId)));
         row(T(L"Ordner"), ParentPath(e.path));
-        if (e.offline) row(T(L"Hinweis"), T(L"Nur online verfügbar – wird nicht gelesen"));
+        if (e.offline) row(T(L"Hinweis"), T(L"Nur online verfügbar – keine Vorschau; wird beim Öffnen heruntergeladen"));
     } else if (sel.size() > 1) {
         uint64_t bytes = 0;
         size_t n[4] = {0, 0, 0, 0};
@@ -1670,11 +1670,11 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         bool hasPrev = false, hasNext = false;
         for (int p = viewer_.pos - 1; p >= 0 && !hasPrev; --p) {
             const FileEntry& x = entries_[visible_[p]];
-            hasPrev = x.kind == Kind::Image && !x.offline;
+            hasPrev = x.kind == Kind::Image;
         }
         for (int p = viewer_.pos + 1; p < n && !hasNext; ++p) {
             const FileEntry& x = entries_[visible_[p]];
-            hasNext = x.kind == Kind::Image && !x.offline;
+            hasNext = x.kind == Kind::Image;
         }
         float my = H_ / 2;
         auto arrow = [&](HitType type, wchar_t glyph, float x) {
@@ -1747,7 +1747,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         int imgIndex = 0, imgCount = 0;
         for (int p = 0; p < n; ++p) {
             const FileEntry& x = entries_[visible_[p]];
-            if (x.kind == Kind::Image && !x.offline) {
+            if (x.kind == Kind::Image) {
                 ++imgCount;
                 if (p <= viewer_.pos) imgIndex = imgCount;
             }

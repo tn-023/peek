@@ -863,7 +863,7 @@ bool App::OnKeyDown(WPARAM vk) {
             for (int k = 0; k < n; ++k) {
                 int i = last ? n - 1 - k : k;
                 const FileEntry& x = entries_[visible_[i]];
-                if (x.kind == Kind::Image && !x.offline) {
+                if (x.kind == Kind::Image) {
                     viewer_.pos = i;
                     viewer_.zoom = 0;
                     viewer_.pan = {0, 0};
@@ -1012,7 +1012,7 @@ bool App::OnKeyDown(WPARAM vk) {
             InvalidateRect(hwnd_, nullptr, FALSE);
         } else if (focus_ >= 0) {
             const FileEntry& e = entries_[visible_[focus_]];
-            if (e.kind == Kind::Image && !e.offline) OpenViewer(focus_);
+            if (e.kind == Kind::Image) OpenViewer(focus_);
         }
         return true;
     case VK_DELETE: DeleteSelection(); return true;

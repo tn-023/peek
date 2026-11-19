@@ -233,7 +233,7 @@ extern const LangPair kEnglish[] = {
     {L"Nur lokale Dateien werden unterstützt – Netzlaufwerke sind ausgeschlossen.", L"Only local files are supported – network drives are excluded."},
     {L"Nur lokale Laufwerke werden unterstützt – Netzlaufwerke sind ausgeschlossen.", L"Only local drives are supported – network drives are excluded."},
     {L"Nur lokale Ordner können Sammlungen sein.", L"Only local folders can be collections."},
-    {L"Nur online verfügbar – wird nicht gelesen", L"Available online only – not read"},
+    {L"Nur online verfügbar – keine Vorschau; wird beim Öffnen heruntergeladen", L"Available online only – no preview; downloaded when opened"},
     {L"Nächstes Bild", L"Next image"},
     {L"Ohne Auflösung", L"No resolution"},
     {L"Ohne Aufnahmedatum", L"No capture date"},

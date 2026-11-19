@@ -1282,7 +1282,7 @@ void App::FinishQuietReload() {
             // aktuelles Bild verschwunden: letztes vorhandenes Bild zeigen, Betrachter nie selbst schliessen
             viewer_.pos = -1;
             for (int p = static_cast<int>(visible_.size()) - 1; p >= 0; --p)
-                if (entries_[visible_[p]].kind == Kind::Image && !entries_[visible_[p]].offline) { viewer_.pos = p; break; }
+                if (entries_[visible_[p]].kind == Kind::Image) { viewer_.pos = p; break; }
             viewer_.animS = 0;
         }
     }
@@ -1600,7 +1600,7 @@ void App::OpenPos(int pos) {
     const FileEntry& e = entries_[visible_[pos]];
     if (e.kind == Kind::Folder) {
         Navigate(e.path);
-    } else if (e.kind == Kind::Image && !e.offline) {
+    } else if (e.kind == Kind::Image) {
         OpenViewer(pos);
     } else {
         // Videos und alle anderen Dateien: Standard-App (z. B. Standard-Mediaplayer)
@@ -1672,7 +1672,7 @@ void App::ViewerStep(int delta) {
         p += delta > 0 ? 1 : -1;
         if (p < 0 || p >= n) return;
         const FileEntry& e = entries_[visible_[p]];
-        if (e.kind == Kind::Image && !e.offline) break;
+        if (e.kind == Kind::Image) break;
     }
     viewer_.pos = p;
     viewer_.zoom = 0;
@@ -1701,10 +1701,10 @@ void App::ViewerDeleteCurrent() {
     // naechstes Bild (sonst vorheriges); keins mehr -> Betrachter schliessen
     int next = -1;
     for (int p = pos; p < static_cast<int>(visible_.size()); ++p)
-        if (entries_[visible_[p]].kind == Kind::Image && !entries_[visible_[p]].offline) { next = p; break; }
+        if (entries_[visible_[p]].kind == Kind::Image) { next = p; break; }
     if (next < 0)
         for (int p = pos - 1; p >= 0; --p)
-            if (entries_[visible_[p]].kind == Kind::Image && !entries_[visible_[p]].offline) { next = p; break; }
+            if (entries_[visible_[p]].kind == Kind::Image) { next = p; break; }
     // kein Bild mehr: Betrachter bleibt offen und zeigt einen Hinweis
     viewer_.pos = next;
     viewer_.zoom = 0;
@@ -1727,7 +1727,7 @@ void App::ViewerPrefetch() {
         int found = 0;
         for (int p = viewer_.pos + dir; p >= 0 && p < n && found < 2; p += dir) {
             const FileEntry& e = entries_[visible_[p]];
-            if (e.kind == Kind::Image && !e.offline) {
+            if (e.kind == Kind::Image && !e.offline) {   // Nachbarn nur, wenn sie schon auf dem PC liegen (kein Download)
                 wanted.push_back({p, 1});
                 ++found;
             }

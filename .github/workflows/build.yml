@@ -119,6 +119,19 @@ jobs:
           }
           Remove-Item Env:PEEK_SANDBOX
 
+      - name: Netzlaufwerk-Pruefung (Freigabe mit Laufwerksbuchstaben)
+        shell: powershell
+        run: |
+          # Testdaten als SMB-Freigabe auf diesem Rechner, eingebunden als Laufwerk P:
+          New-SmbShare -Name peektest -Path "$env:USERPROFILE\Pictures\peek-Sandbox" -FullAccess Everyone | Out-Null
+          net use P: \\localhost\peektest /persistent:no
+          if ($LASTEXITCODE -ne 0) { throw "Freigabe nicht einbindbar" }
+          $p = Start-Process -FilePath build\peek.exe -ArgumentList @('--sandbox-test', 'P:\', "`"$pwd\sandbox-netz.txt`"") -Wait -PassThru
+          Get-Content -Encoding UTF8 sandbox-netz.txt
+          net use P: /delete /y | Out-Null
+          Remove-SmbShare -Name peektest -Force
+          if ($p.ExitCode -ne 0) { throw "Netzlaufwerk-Pruefung fehlgeschlagen ($($p.ExitCode))" }
+
       - name: Index-Pruefung (verschluesselt)
         shell: pwsh
         run: |

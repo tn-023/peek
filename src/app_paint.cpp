@@ -425,9 +425,8 @@ std::vector<App::CloudGroup> App::CloudGroups() {
             size_t inner = common(f, l) + 1;
             size_t lf = std::max(inner, a > 0 ? common(f, stem(a - 1)) + 1 : 1);
             size_t ll = std::max(inner, b < n ? common(l, stem(b)) + 1 : 1);
-            lf = std::min<size_t>(std::min(lf, f.size()), 16);
-            ll = std::min<size_t>(std::min(ll, l.size()), 16);
-            return f.substr(0, lf) + L" – " + l.substr(0, ll);
+            size_t len = std::min<size_t>(std::max(lf, ll), 16);   // beide Enden gleich lang: besser vergleichbar
+            return f.substr(0, std::min(len, f.size())) + L" – " + l.substr(0, std::min(len, l.size()));
         }
         case 1:
         case 5: {

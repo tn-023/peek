@@ -412,6 +412,95 @@ int RunRenderCheck(const std::wstring& report) {
             D2D1_POINT_2F p = pos(i);
             dc->DrawBitmap(icon.Get(), D2D1::RectF(p.x, p.y, p.x + 41.3f, p.y + 41.3f), 1.0f, D2D1_INTERPOLATION_MODE_LINEAR);
         });
+        // Symbole: hochwertig je Bild  <->  einmal hochwertig in Zielgroesse, danach guenstig gezeichnet
+        {
+            // Testsymbol: Blatt mit Linien und farbigem Feld (wie ein Dateisymbol), 256 px
+            ComPtr<ID2D1Bitmap1> ic = MakeTarget(dc.Get(), 256, 256);
+            dc->SetTarget(ic.Get());
+            dc->BeginDraw();
+            dc->Clear(D2D1::ColorF(0, 0, 0, 0));
+            solid->SetColor(D2D1::ColorF(0.96f, 0.96f, 0.97f, 1));
+            dc->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(44, 14, 212, 242), 10, 10), solid.Get());
+            solid->SetColor(D2D1::ColorF(0.35f, 0.38f, 0.42f, 1));
+            dc->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(44, 14, 212, 242), 10, 10), solid.Get(), 5.0f);
+            for (int i = 0; i < 7; ++i) dc->FillRectangle(D2D1::RectF(68, 96.0f + i * 19, 188.0f - (i % 3) * 22, 103.0f + i * 19), solid.Get());
+            solid->SetColor(D2D1::ColorF(0.10f, 0.45f, 0.85f, 1));
+            dc->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(68, 38, 150, 80), 6, 6), solid.Get());
+            dc->EndDraw();
+            dc->SetTarget(nullptr);
+            auto diff = [&](const Img& a, const Img& b, int& mx, double& mean) {
+                mx = 0;
+                double sum = 0;
+                size_t cnt = 0;
+                for (size_t i = 0; i < a.px.size(); ++i) {
+                    int d = std::abs(int(a.px[i]) - int(b.px[i]));
+                    mx = std::max(mx, d);
+                    if (a.px[i] != 44 || b.px[i] != 44) { sum += d; ++cnt; }   // nur dort, wo etwas gezeichnet ist
+                }
+                mean = cnt ? sum / cnt : 0;
+            };
+            const float sizes[] = {30.4f, 41.3f, 57.7f, 66.0f, 96.5f};
+            for (float sz : sizes) {
+                D2D1_RECT_F r = D2D1::RectF(100.37f, 80.62f, 100.37f + sz, 80.62f + sz);
+                auto render = [&](ID2D1Bitmap1* target, const std::function<void()>& fn, Img& out) {
+                    dc->SetTarget(target);
+                    dc->BeginDraw();
+                    dc->Clear(bg);
+                    fn();
+                    dc->EndDraw();
+                    dc->SetTarget(nullptr);
+                    return ReadBack(dc.Get(), target, out);
+                };
+                Img ref, o;
+                render(ta.Get(), [&] { dc->DrawBitmap(ic.Get(), r, 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC); }, ref);
+                // Zwischenspeicher in ganzzahliger Zielgroesse (hochwertig), dann an die echte Lage
+                UINT ci = static_cast<UINT>(std::lround(sz));
+                ComPtr<ID2D1Bitmap1> cache = MakeTarget(dc.Get(), ci, ci);
+                dc->SetTarget(cache.Get());
+                dc->BeginDraw();
+                dc->Clear(D2D1::ColorF(0, 0, 0, 0));
+                dc->DrawBitmap(ic.Get(), D2D1::RectF(0, 0, static_cast<float>(ci), static_cast<float>(ci)), 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+                dc->EndDraw();
+                dc->SetTarget(nullptr);
+                // Stufe einer Pyramide (naechste Zweierstufe ueber der Zielgroesse)
+                UINT lv = 256;
+                while (lv / 2 >= sz) lv /= 2;
+                ComPtr<ID2D1Bitmap1> pyr = MakeTarget(dc.Get(), lv, lv);
+                dc->SetTarget(pyr.Get());
+                dc->BeginDraw();
+                dc->Clear(D2D1::ColorF(0, 0, 0, 0));
+                dc->DrawBitmap(ic.Get(), D2D1::RectF(0, 0, static_cast<float>(lv), static_cast<float>(lv)), 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+                dc->EndDraw();
+                dc->SetTarget(nullptr);
+                int m1, m2, m3, m4, m5;
+                double a1, a2, a3, a4, a5;
+                render(tb.Get(), [&] { dc->DrawBitmap(cache.Get(), r, 1.0f, D2D1_INTERPOLATION_MODE_LINEAR); }, o);
+                diff(ref, o, m1, a1);
+                render(tb.Get(), [&] { dc->DrawBitmap(cache.Get(), r, 1.0f, D2D1_INTERPOLATION_MODE_CUBIC); }, o);
+                diff(ref, o, m2, a2);
+                render(tb.Get(), [&] { dc->DrawBitmap(pyr.Get(), r, 1.0f, D2D1_INTERPOLATION_MODE_LINEAR); }, o);
+                diff(ref, o, m3, a3);
+                render(tb.Get(), [&] { dc->DrawBitmap(pyr.Get(), r, 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC); }, o);
+                diff(ref, o, m4, a4);
+                render(tb.Get(), [&] { dc->DrawBitmap(ic.Get(), r, 1.0f, D2D1_INTERPOLATION_MODE_LINEAR); }, o);
+                diff(ref, o, m5, a5);
+                fprintf(f, "  Symbol %5.1f px: Groesse+linear max %3d mittel %.2f | Groesse+kubisch max %3d mittel %.2f | Stufe %u+linear max %3d mittel %.2f | Stufe+hochwertig max %3d mittel %.2f | nur linear max %3d mittel %.2f\n",
+                        sz, m1, a1, m2, a2, lv, m3, a3, m4, a4, m5, a5);
+            }
+            ComPtr<ID2D1Bitmap1> c41 = MakeTarget(dc.Get(), 41, 41), p64 = MakeTarget(dc.Get(), 64, 64);
+            bench("Symbol aus Zielgroesse, linear", [&](int i) {
+                D2D1_POINT_2F p = pos(i);
+                dc->DrawBitmap(c41.Get(), D2D1::RectF(p.x, p.y, p.x + 41.3f, p.y + 41.3f), 1.0f, D2D1_INTERPOLATION_MODE_LINEAR);
+            });
+            bench("Symbol aus Zielgroesse, kubisch", [&](int i) {
+                D2D1_POINT_2F p = pos(i);
+                dc->DrawBitmap(c41.Get(), D2D1::RectF(p.x, p.y, p.x + 41.3f, p.y + 41.3f), 1.0f, D2D1_INTERPOLATION_MODE_CUBIC);
+            });
+            bench("Symbol aus Stufe 64, hochwertig", [&](int i) {
+                D2D1_POINT_2F p = pos(i);
+                dc->DrawBitmap(p64.Get(), D2D1::RectF(p.x, p.y, p.x + 41.3f, p.y + 41.3f), 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+            });
+        }
         bench("Begrenzung setzen und aufheben", [&](int i) {
             D2D1_POINT_2F p = pos(i);
             dc->PushAxisAlignedClip(D2D1::RectF(p.x, p.y, p.x + 90, p.y + 70), D2D1_ANTIALIAS_MODE_ALIASED);

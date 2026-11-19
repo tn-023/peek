@@ -180,7 +180,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: peek-x64
-          retention-days: 7   # Speicher sparen; Releases liegen dauerhaft bei den Releases
+          retention-days: 3   # Speicher sparen; Releases liegen dauerhaft bei den Releases
           path: |
             build/peek.exe
             README.md

@@ -67,7 +67,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: peek-screenshots
-          retention-days: 2   # die Bilder liegen ohnehin im Zweig "screenshots"
+          retention-days: 3   # die Bilder liegen ohnehin im Zweig "screenshots"
           path: |
             screenshots/*.png
             screenshots/en/*.png

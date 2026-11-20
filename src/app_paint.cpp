@@ -2261,6 +2261,10 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
     IDWriteTextFormat* fnw = r_.TextWrap(14, DWRITE_FONT_WEIGHT_SEMI_BOLD);
     float nameW = std::max(120.0f, W_ * 0.45f - 24);
     float nameH = 0;
+    // aus dem Explorer geoeffnet: grosser "Zurueck"-Knopf links (Platz vom Namen abziehen)
+    IDWriteTextFormat* backF = r_.Text(14, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    const float backW = viewer_.shell ? 16 + 20 + 10 + r_.MeasureText(T(L"Zurück"), backF) + 18 : 0;
+    if (backW > 0) nameW = std::max(80.0f, nameW - backW - 8);
     if (viewer_.bar) {
         nameH = r_.MeasureWrapped(e.name, fnw, nameW);
         barH = std::max(48.0f, nameH + 28);
@@ -2306,7 +2310,19 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         DrawText(dc, T(L"Speichern"), save, bf, D2D1::ColorF(1, 1, 1, 1));
     } else if (viewer_.bar) {
         dc->FillRectangle(D2D1::RectF(0, 0, W_, barH), r_.Brush(D2D1::ColorF(0, 0, 0, 0.45f)));
-        r_.DrawWrapped(e.name, 20, (barH - nameH) / 2, nameW, fnw, white);
+        float nameX = 20;
+        if (backW > 0) {
+            // grosser "Zurueck"-Knopf links fuehrt in die Ordneransicht
+            D2D1_RECT_F rc = D2D1::RectF(8, 6, 8 + backW, 42);
+            int bi = static_cast<int>(hits_.size());
+            hits_.push_back({rc, HitType::ViewerBack, 0});
+            FillRound(dc, rc, 6, D2D1::ColorF(1, 1, 1, hoverHit_ == bi ? 0.24f : 0.14f));
+            wchar_t gb[2] = {0xE72B, 0};
+            DrawText(dc, gb, D2D1::RectF(rc.left + 16, rc.top, rc.left + 36, rc.bottom), r_.Icon(16), white);
+            DrawText(dc, T(L"Zurück"), D2D1::RectF(rc.left + 46, rc.top, rc.right, rc.bottom), backF, white);
+            nameX = rc.right + 16;
+        }
+        r_.DrawWrapped(e.name, nameX, (barH - nameH) / 2, nameW, fnw, white);
         int imgIndex = 0, imgCount = 0;
         for (int p = 0; p < n; ++p) {
             const FileEntry& x = entries_[visible_[p]];
@@ -2320,7 +2336,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         info += L"   \u00b7   " + FormatSize(e.size);
         info += L"   \u00b7   " + std::to_wstring(static_cast<int>(std::round(sTarget * r_.scale() * 100))) + L" %";
         IDWriteTextFormat* fi = r_.TextWrap(12.5f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
-        float infoW = std::max(60.0f, W_ - 152 - (20 + nameW + 16));
+        float infoW = std::max(60.0f, W_ - 152 - (nameX + nameW + 16));
         float infoH = r_.MeasureWrapped(info, fi, infoW);
         r_.DrawWrapped(info, W_ - 152 - infoW, (barH - infoH) / 2, infoW, fi, dim);
         if (e.ext != L"svg" && e.ext != L"tga") topButton(HitType::ViewerCrop, 0xE7A8, W_ - 144, W_ - 96, 44, false, false);

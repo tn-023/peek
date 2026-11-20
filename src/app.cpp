@@ -214,6 +214,7 @@ bool App::Init(HINSTANCE inst, int show) {
         }
         LocalFree(argv);
     }
+    if (viewerStart_) shellLastFolder_ = settings_.lastFolder;
     if (start.empty() && !settings_.lastFolder.empty() && DirectoryExists(settings_.lastFolder)) start = settings_.lastFolder;
     if (start.empty()) start = KnownFolderPath(FOLDERID_Pictures);
     if (start.empty() || !IsLocalDrivePath(start)) {
@@ -502,7 +503,7 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             break;
         case kTimerViewerClick:
             KillTimer(hwnd_, kTimerViewerClick);
-            if (viewer_.open) {
+            if (viewer_.open && !viewer_.shell) {   // aus dem Explorer geoeffnet: Leiste bleibt
                 viewer_.bar = !viewer_.bar;
                 settings_.viewerBar = viewer_.bar;   // fuer das naechste Oeffnen merken
                 InvalidateRect(hwnd_, nullptr, FALSE);
@@ -594,6 +595,8 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 settings_.maximized = wpl.showCmd == SW_SHOWMAXIMIZED;
             }
         }
+        // nur als Bildbetrachter aus dem Explorer benutzt und beendet: beim naechsten Start wieder der vorige Ordner
+        if (viewer_.open && viewer_.shell) settings_.lastFolder = shellLastFolder_;
         settings_.Save();
         RevokeDragDrop(hwnd_);
         indexer_.Stop();
@@ -1698,8 +1701,13 @@ void App::EndViewerStart() {
     if (!viewerStart_) return;
     viewerStart_ = false;
     KillTimer(hwnd_, kTimerViewerStart);
-    if (viewer_.open) viewer_.ownFullscreen = fullscreen_;
-    else if (fullscreen_) ToggleFullscreen();
+    if (viewer_.open) {
+        viewer_.ownFullscreen = fullscreen_;
+        viewer_.shell = true;   // Leiste immer sichtbar (unabhaengig von der gemerkten Einstellung), "Zurueck" zum Ordner
+        viewer_.bar = true;
+    } else if (fullscreen_) {
+        ToggleFullscreen();
+    }
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
@@ -1712,6 +1720,8 @@ void App::CloseViewer() {
     int pos = viewer_.pos;
     bool ownFs = viewer_.ownFullscreen;
     viewer_.open = false;
+    viewer_.shell = false;
+    viewer_.bar = settings_.viewerBar;
     viewCache_ = {};
     infoAnim_ = settings_.infoPanel ? 1.0f : 0.0f;      // Infobereich der Ansicht wiederherstellen (ohne Animation)
     settings_.Save();                                   // Betrachter-Leisten merken

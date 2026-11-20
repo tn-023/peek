@@ -30,7 +30,7 @@ enum class HitType {
     None, SidebarToggle, NavBack, NavForward, NavUp, Refresh, Crumb, CrumbChevron, Search, SearchClear,
     Chip, Term, ResetFilters, SidebarItem, SidebarAdd, SettingsButton, InfoToggle, ZoomSlider,
     ZoomIn, ZoomOut, ViewGrid, ViewList, SortButton, MoreFilters, ListHeader, ListResize,
-    ViewerClose, ViewerPrev, ViewerNext, ViewerInfo, ViewerCrop, CropSave, CropCancel,
+    ViewerClose, ViewerBack, ViewerPrev, ViewerNext, ViewerInfo, ViewerCrop, CropSave, CropCancel,
     ClearBookmarks, SearchHistItem, SearchHistDel, SearchHistClear, SearchParam,
     ViewCloud,
     SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen,
@@ -94,6 +94,7 @@ struct ViewerState {
     POINT dragStart{};
     D2D1_POINT_2F panStart{};
     bool bar = true;        // transparente Leiste oben
+    bool shell = false;     // aus dem Explorer geoeffnet: Leiste immer sichtbar, links "Zurueck" zum Ordner, X beendet peek
     bool corner = false;    // Mauszeiger in der Ecke oben rechts -> Schliessen-Knopf
     DWORD controlsUntil = 0;// Blaetter-Pfeile sichtbar bis
     bool ownFullscreen = false;
@@ -597,6 +598,7 @@ private:
     int focus_ = -1, anchor_ = -1;
     std::wstring pendingSelect_;
     std::wstring pendingViewer_;
+    std::wstring shellLastFolder_;   // zuletzt geoeffneter Ordner vor dem Start aus dem Explorer (beim Beenden behalten)
     bool viewerStart_ = false;   // mit einer Bilddatei gestartet (z. B. "Oeffnen mit"): gleich im Betrachter, Esc fuehrt zum Ordner
     // nur fuer Bildschirmfotos der Dokumentation: Begriff aktivieren, Suche vorbelegen/oeffnen, Filtermenue oeffnen
     std::wstring pendingTerm_, pendingSearch_;

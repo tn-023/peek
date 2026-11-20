@@ -328,7 +328,11 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
     if (viewer_.open) {
         if (const Hit* h = HitAt(x, y)) {
             switch (h->type) {
-            case HitType::ViewerClose: CloseViewer(); return;
+            case HitType::ViewerClose:
+                if (viewer_.shell) PostMessageW(hwnd_, WM_CLOSE, 0, 0);   // aus dem Explorer geoeffnet: peek beenden
+                else CloseViewer();
+                return;
+            case HitType::ViewerBack: CloseViewer(); return;   // zur Ordneransicht
             case HitType::ViewerPrev: ViewerStep(-1); return;
             case HitType::ViewerNext: ViewerStep(1); return;
             case HitType::ViewerInfo:

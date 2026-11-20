@@ -94,8 +94,7 @@ struct ViewerState {
     POINT dragStart{};
     D2D1_POINT_2F panStart{};
     bool bar = true;        // transparente Leiste oben
-    float barAnim = 0;
-    DWORD barToggled = 0;   // Zeitpunkt des letzten Ein-/Ausblendens per Klick (Doppelklick nimmt es zurueck)      // Leiste oben: 0 = ausgeblendet, 1 = ganz da (gleitet von oben herein)
+    float barAnim = 0;      // Leiste oben: 0 = ausgeblendet, 1 = ganz da (gleitet von oben herein)
     bool shell = false;     // aus dem Explorer geoeffnet: Leiste immer sichtbar, links "Zurueck" zum Ordner, X beendet peek
     bool corner = false;    // Mauszeiger in der Ecke oben rechts -> Schliessen-Knopf
     DWORD controlsUntil = 0;// Blaetter-Pfeile sichtbar bis

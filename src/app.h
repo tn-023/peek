@@ -29,7 +29,7 @@ const wchar_t* LanguageName(int setting);   // 0 wie Windows, 1 Deutsch, 2 Engli
 enum class HitType {
     None, SidebarToggle, NavBack, NavForward, NavUp, Refresh, Crumb, CrumbChevron, Search, SearchClear,
     Chip, Term, ResetFilters, SidebarItem, SidebarAdd, SettingsButton, InfoToggle, ZoomSlider,
-    ZoomIn, ZoomOut, ViewGrid, ViewList, SortButton, ListHeader, ListResize,
+    ZoomIn, ZoomOut, ViewGrid, ViewList, SortButton, MoreFilters, ListHeader, ListResize,
     ViewerClose, ViewerPrev, ViewerNext, ViewerInfo, ViewerCrop, CropSave, CropCancel,
     ClearBookmarks, SearchHistItem, SearchHistDel, SearchHistClear, SearchParam,
     ViewCloud,
@@ -530,6 +530,10 @@ private:
     const Hit* HitAt(float x, float y) const;
     int GridPosAt(float x, float y) const;
     void ShowChipMenu(ChipId id, const D2D1_RECT_F& rc);
+    std::vector<MenuItem> ChipMenuItems(ChipId id, UINT base);        // Eintraege eines Filtermenues (ids base + Wert)
+    void ApplyChipChoice(ChipId id, int v, const D2D1_RECT_F& rc);     // gewaehlten Wert uebernehmen
+    void ShowMoreFiltersMenu(const D2D1_RECT_F& rc);                   // "..." mit den Filtern, die nicht mehr passen
+    std::vector<ChipId> chipOverflow_;                                 // beim Zeichnen ermittelt
     void ShowContextMenu(int pos, POINT screen);
     void ShowSidebarMenu(int item, POINT screen);
     void ShowCrumbMenu(int index, const D2D1_RECT_F& rc);

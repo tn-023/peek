@@ -1004,8 +1004,57 @@ void App::PaintChips(ID2D1DeviceContext* dc) {
         right = rc.left - 8;
     }
 
-    bool resetShown = filters_.Any();
+    // Filterknoepfe (in dieser Reihenfolge); passen nicht alle in die Leiste, kommen die hinteren in "..."
+    IDWriteTextFormat* ff = r_.Text(14, DWRITE_FONT_WEIGHT_NORMAL);
+    struct ChipDef { ChipId id; bool active, dropdown; wchar_t glyph; };
+    std::vector<ChipDef> defs = {{ChipId::Type, filters_.type >= 0, true, 0},
+                                 {ChipId::Date, filters_.date != 0, true, 0},
+                                 {ChipId::Taken, filters_.taken != 0, true, 0},
+                                 {ChipId::Size, filters_.size != 0, true, 0},
+                                 {ChipId::Resolution, filters_.res != 0, true, 0},
+                                 {ChipId::Orientation, filters_.orient != 0, true, 0}};
+    if (!sourceFacets_.empty() || !filters_.source.empty()) defs.push_back({ChipId::Source, !filters_.source.empty(), true, 0});
+    if (!templFacets_.empty() || filters_.templ != UINT32_MAX) defs.push_back({ChipId::Pattern, filters_.templ != UINT32_MAX, true, 0});
+    if (!collectionsView_) defs.push_back({ChipId::Recursive, settings_.recursive, false, 0xE8B7});
+    auto chipW = [&](const ChipDef& d) {
+        return r_.MeasureText(ChipLabel(d.id), ff) + 20 + (d.dropdown ? 18 : 0) + (d.glyph ? 22 : 0);
+    };
     IDWriteTextFormat* fr = r_.Text(12.5f, DWRITE_FONT_WEIGHT_BOLD);
+    bool resetShown = filters_.Any();
+    const float resetW = resetShown ? r_.MeasureText(T(L"Zurücksetzen"), fr) + 24 + 8 : 0;
+    const float moreW = 36;
+    size_t fit = 0;
+    {
+        float cx = x, lim = right - resetW;
+        for (const auto& d : defs) cx += chipW(d) + 2;
+        if (cx > lim) {   // nicht alle: Platz fuer "..." lassen, vordere Knoepfe der Reihe nach
+            cx = x;
+            lim -= moreW + 6;
+            for (const auto& d : defs) {
+                float w = chipW(d);
+                if (cx + w > lim) break;
+                cx += w + 2;
+                ++fit;
+            }
+        } else {
+            fit = defs.size();
+        }
+    }
+    chipOverflow_.clear();
+    for (size_t i = fit; i < defs.size(); ++i) chipOverflow_.push_back(defs[i].id);
+    if (!chipOverflow_.empty()) {
+        bool anyActive = false;
+        for (size_t i = fit; i < defs.size(); ++i) anyActive = anyActive || defs[i].active;
+        D2D1_RECT_F rc = D2D1::RectF(right - moreW, y, right, y + h);
+        int idx = static_cast<int>(hits_.size());
+        hits_.push_back({rc, HitType::MoreFilters, 0});
+        if (openMenu_ == 2000) FillRound(dc, rc, 5, t.press);
+        else if (hoverHit_ == idx) FillRound(dc, rc, 5, t.hover);
+        else if (anyActive) FillRound(dc, rc, 5, WithAlpha(accent_, 0.12f));   // ein verborgener Filter ist aktiv
+        wchar_t gm[2] = {0xE712, 0};
+        DrawText(dc, gm, rc, r_.Icon(14), anyActive ? accent_ : t.text);
+        right = rc.left - 6;
+    }
     if (resetShown) {
         float resetW = r_.MeasureText(T(L"Zurücksetzen"), fr) + 24;
         D2D1_RECT_F rc = D2D1::RectF(right - resetW, y, right, y + h);
@@ -1019,7 +1068,6 @@ void App::PaintChips(ID2D1DeviceContext* dc) {
 
     // Auswahlfilter mit Dropdown: flache Knoepfe wie im Windows Explorer (duenne, etwas groessere Schrift).
     // Erkannte Begriffe (rom, urlaub ...): weiterhin Pillen.
-    IDWriteTextFormat* ff = r_.Text(14, DWRITE_FONT_WEIGHT_NORMAL);
     auto chip = [&](HitType type, int a, const std::wstring& label, const std::wstring& count, bool active,
                     bool dropdown, wchar_t glyph) -> bool {
         bool flat = type == HitType::Chip;
@@ -1065,23 +1113,10 @@ void App::PaintChips(ID2D1DeviceContext* dc) {
         return true;
     };
 
-    chip(HitType::Chip, static_cast<int>(ChipId::Type), ChipLabel(ChipId::Type), L"", filters_.type >= 0, true, 0);
-    chip(HitType::Chip, static_cast<int>(ChipId::Date), ChipLabel(ChipId::Date), L"", filters_.date != 0, true, 0);
-    chip(HitType::Chip, static_cast<int>(ChipId::Taken), ChipLabel(ChipId::Taken), L"", filters_.taken != 0, true, 0);
-    chip(HitType::Chip, static_cast<int>(ChipId::Size), ChipLabel(ChipId::Size), L"", filters_.size != 0, true, 0);
-    chip(HitType::Chip, static_cast<int>(ChipId::Resolution), ChipLabel(ChipId::Resolution), L"", filters_.res != 0,
-         true, 0);
-    chip(HitType::Chip, static_cast<int>(ChipId::Orientation), ChipLabel(ChipId::Orientation), L"",
-         filters_.orient != 0, true, 0);
-    if (!sourceFacets_.empty() || !filters_.source.empty())
-        chip(HitType::Chip, static_cast<int>(ChipId::Source), ChipLabel(ChipId::Source), L"", !filters_.source.empty(),
-             true, 0);
-    if (!templFacets_.empty() || filters_.templ != UINT32_MAX)
-        chip(HitType::Chip, static_cast<int>(ChipId::Pattern), ChipLabel(ChipId::Pattern), L"",
-             filters_.templ != UINT32_MAX, true, 0);
-    if (!collectionsView_)
-        chip(HitType::Chip, static_cast<int>(ChipId::Recursive), ChipLabel(ChipId::Recursive), L"", settings_.recursive,
-             false, 0xE8B7);
+    for (size_t i = 0; i < fit; ++i)
+        chip(HitType::Chip, static_cast<int>(defs[i].id), ChipLabel(defs[i].id), L"", defs[i].active, defs[i].dropdown,
+             defs[i].glyph);
+    if (!chipOverflow_.empty()) return;   // kein Platz mehr fuer erkannte Begriffe
 
     x += 8;
     for (uint32_t id : filters_.terms) {

@@ -423,6 +423,9 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         case HitType::SortButton:
             if (!MenuJustClosed(static_cast<int>(ChipId::Sort))) ShowSortMenu(rc);
             break;
+        case HitType::MoreFilters:
+            if (!MenuJustClosed(2000)) ShowMoreFiltersMenu(rc);
+            break;
         case HitType::ListHeader: SortByColumn(a); break;
         case HitType::ListResize:
             colDrag_ = a;
@@ -1181,7 +1184,7 @@ static POINT BelowRect(HWND hwnd, const D2D1_RECT_F& rc, float scale, float gap)
     return pt;
 }
 
-void App::ShowChipMenu(ChipId id, const D2D1_RECT_F& rc) {
+std::vector<MenuItem> App::ChipMenuItems(ChipId id, UINT base) {
     ComputeDateBounds();
     std::vector<MenuItem> items;
     auto countOption = [&](int v) {
@@ -1204,7 +1207,7 @@ void App::ShowChipMenu(ChipId id, const D2D1_RECT_F& rc) {
         const wchar_t* n[] = {T(L"Alle"), T(L"Ordner"), T(L"Bilder"), T(L"SVG-Grafiken"), L"Videos", L"PDF", L"Photoshop (PSD)",
                               L"Illustrator (AI)", T(L"Sonstige Dateien")};
         const int v[] = {-1, 0, 1, 13, 2, 10, 11, 12, 3};
-        for (int i = 0; i < 9; ++i) add(100 + i, n[i], filters_.type == v[i], countOption(v[i]));
+        for (int i = 0; i < 9; ++i) add(base + i, n[i], filters_.type == v[i], countOption(v[i]));
         break;
     }
     case ChipId::Date:
@@ -1212,10 +1215,10 @@ void App::ShowChipMenu(ChipId id, const D2D1_RECT_F& rc) {
         const wchar_t* n[] = {T(L"Alle"), T(L"Heute"), T(L"Letzte 7 Tage"), T(L"Letzte 30 Tage"), T(L"Dieses Jahr"), T(L"Letztes Jahr"),
                               T(L"Älter")};
         int cur = id == ChipId::Taken ? filters_.taken : filters_.date;
-        for (int i = 0; i < 7; ++i) add(100 + i, n[i], cur == i, countOption(i));
+        for (int i = 0; i < 7; ++i) add(base + i, n[i], cur == i, countOption(i));
         items.push_back(MenuItem::Sep());
         MenuItem m;
-        m.id = 107;
+        m.id = base + 7;
         m.text = cur == 7 ? T(L"Individuell: ") + SpanLabel(id == ChipId::Taken ? filters_.takenFrom : filters_.dateFrom,
                                                          id == ChipId::Taken ? filters_.takenTo : filters_.dateTo)
                           : T(L"Individuell \u2026");
@@ -1226,36 +1229,42 @@ void App::ShowChipMenu(ChipId id, const D2D1_RECT_F& rc) {
     }
     case ChipId::Size: {
         const wchar_t* n[] = {T(L"Alle"), T(L"Kleiner als 1 MB"), T(L"1 bis 10 MB"), T(L"10 bis 100 MB"), T(L"Größer als 100 MB")};
-        for (int i = 0; i < 5; ++i) add(100 + i, n[i], filters_.size == i, countOption(i));
+        for (int i = 0; i < 5; ++i) add(base + i, n[i], filters_.size == i, countOption(i));
         break;
     }
     case ChipId::Resolution: {
         const wchar_t* n[] = {T(L"Alle"), T(L"Unter HD (< 1280 px)"), T(L"Ab HD (≥ 1280 px)"), T(L"Ab Full HD (≥ 1920 px)"),
                               T(L"Ab 4K (≥ 3840 px)"), T(L"Über 20 Megapixel")};
-        for (int i = 0; i < 6; ++i) add(100 + i, n[i], filters_.res == i, countOption(i));
+        for (int i = 0; i < 6; ++i) add(base + i, n[i], filters_.res == i, countOption(i));
         break;
     }
     case ChipId::Orientation: {
         const wchar_t* n[] = {T(L"Alle"), T(L"Querformat"), T(L"Hochformat"), T(L"Quadratisch"), T(L"Panorama (ab 2:1)")};
-        for (int i = 0; i < 5; ++i) add(100 + i, n[i], filters_.orient == i, countOption(i));
+        for (int i = 0; i < 5; ++i) add(base + i, n[i], filters_.orient == i, countOption(i));
         break;
     }
     case ChipId::Source:
-        add(100, T(L"Alle"), filters_.source.empty(), -1);
+        add(base, T(L"Alle"), filters_.source.empty(), -1);
         for (size_t i = 0; i < sourceFacets_.size() && i < 30; ++i)
-            add(101 + static_cast<UINT>(i), T(sourceFacets_[i].first), filters_.source == sourceFacets_[i].first,
+            add(base + 1 + static_cast<UINT>(i), T(sourceFacets_[i].first), filters_.source == sourceFacets_[i].first,
                 sourceFacets_[i].second);
         break;
     case ChipId::Pattern:
-        add(100, T(L"Alle"), filters_.templ == UINT32_MAX, -1);
+        add(base, T(L"Alle"), filters_.templ == UINT32_MAX, -1);
         for (size_t i = 0; i < templFacets_.size(); ++i)
-            add(101 + static_cast<UINT>(i), TPattern(templDict_.Word(templFacets_[i].id)), filters_.templ == templFacets_[i].id,
+            add(base + 1 + static_cast<UINT>(i), TPattern(templDict_.Word(templFacets_[i].id)), filters_.templ == templFacets_[i].id,
                 templFacets_[i].count);
         break;
     default:
-        return;
+        break;
     }
 
+    return items;
+}
+
+void App::ShowChipMenu(ChipId id, const D2D1_RECT_F& rc) {
+    std::vector<MenuItem> items = ChipMenuItems(id, 100);
+    if (items.empty()) return;
     openMenu_ = static_cast<int>(id);
     InvalidateRect(hwnd_, nullptr, FALSE);
     UpdateWindow(hwnd_);
@@ -1265,7 +1274,10 @@ void App::ShowChipMenu(ChipId id, const D2D1_RECT_F& rc) {
     lastMenuClose_ = GetTickCount();
     InvalidateRect(hwnd_, nullptr, FALSE);
     if (!cmd) return;
-    int v = static_cast<int>(cmd) - 100;
+    ApplyChipChoice(id, static_cast<int>(cmd) - 100, rc);
+}
+
+void App::ApplyChipChoice(ChipId id, int v, const D2D1_RECT_F& rc) {
     switch (id) {
     case ChipId::Type: { const int map[] = {-1, 0, 1, 13, 2, 10, 11, 12, 3}; if (v >= 0 && v < 9) filters_.type = map[v]; break; }
     case ChipId::Date:
@@ -1285,6 +1297,48 @@ void App::ShowChipMenu(ChipId id, const D2D1_RECT_F& rc) {
     default: break;
     }
     Refilter();
+}
+
+// "..." links neben "Sortieren": die Filter, die bei schmalem Fenster nicht mehr in die Leiste passen, jeweils
+// mit ihrem Menue als Untermenue (aktiver Wert rechts daneben)
+void App::ShowMoreFiltersMenu(const D2D1_RECT_F& rc) {
+    if (chipOverflow_.empty()) return;
+    std::vector<MenuItem> items;
+    for (ChipId id : chipOverflow_) {
+        MenuItem m;
+        if (id == ChipId::Recursive) {
+            m.id = 900;
+            m.text = T(L"Unterordner");
+            m.checked = settings_.recursive;
+            m.glyph = 0xE8B7;
+            items.push_back(m);
+            continue;
+        }
+        static const wchar_t* names[] = {N_(L"Typ"), N_(L"Datum"), N_(L"Größe"), N_(L"Auflösung"), N_(L"Ausrichtung"),
+                                         N_(L"Quelle"), N_(L"Muster")};
+        int k = static_cast<int>(id);
+        m.text = id == ChipId::Taken ? std::wstring(T(L"Aufgenommen")) : std::wstring(T(names[std::clamp(k, 0, 6)]));
+        std::wstring cur = ChipLabel(id);
+        if (cur != m.text) m.right = cur;   // aktiver Wert
+        UINT base = 10000 + static_cast<UINT>(k) * 1000;   // je Filter eigener Bereich (Muster koennen viele sein)
+        m.submenu = [this, id, base] { return ChipMenuItems(id, base); };
+        items.push_back(m);
+    }
+    openMenu_ = 2000;
+    InvalidateRect(hwnd_, nullptr, FALSE);
+    UpdateWindow(hwnd_);
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
+    openMenu_ = -1;
+    lastMenu_ = 2000;
+    lastMenuClose_ = GetTickCount();
+    InvalidateRect(hwnd_, nullptr, FALSE);
+    if (cmd == 900) {
+        settings_.recursive = !settings_.recursive;
+        Reload(false);
+        return;
+    }
+    if (cmd < 10000) return;
+    ApplyChipChoice(static_cast<ChipId>((cmd - 10000) / 1000), static_cast<int>((cmd - 10000) % 1000), rc);
 }
 
 void App::ShowSortMenu(const D2D1_RECT_F& rc) {

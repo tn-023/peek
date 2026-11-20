@@ -52,7 +52,7 @@ struct FileEntry {
 };
 
 Kind ClassifyExt(std::wstring_view extLower);
-bool IsViewerFormat(std::wstring_view extLower);   // JPEG/JPG, PNG, GIF, BMP, WebP, AVIF, TIFF, ICO, SVG
+bool IsViewerFormat(std::wstring_view extLower);   // JPEG/JPG, PNG, GIF, BMP, WebP, AVIF, TIFF, ICO, SVG, TGA, HEIC/HEIF
 
 // Laufwerke mit Buchstaben: lokal (DRIVE_FIXED / DRIVE_REMOVABLE) und eingebundene Netzlaufwerke (DRIVE_REMOTE).
 // Netzwerkpfade ohne Buchstaben (\\server\...) nicht. peek hat keinen eigenen Netzwerkcode: Netzlaufwerke liest Windows.

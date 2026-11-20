@@ -2,6 +2,7 @@
 #include <unordered_map>
 // App: Darstellung (Direct2D)
 #include "app.h"
+#include "imaging.h"
 #include "sandbox.h"
 #include "core/textutil.h"
 #include "core/atlaslayout.h"
@@ -1894,6 +1895,14 @@ void App::PaintInfoPanel(ID2D1DeviceContext* dc, const D2D1_RECT_F& rc, const st
         if (e.templateId != UINT32_MAX) row(T(L"Namensmuster"), TPattern(templDict_.Word(e.templateId)));
         row(T(L"Ordner"), ParentPath(e.path));
         if (e.offline) row(T(L"Hinweis"), T(L"Nur online verfügbar – keine Vorschau; wird beim Öffnen heruntergeladen"));
+        if (!e.offline && (e.ext == L"heic" || e.ext == L"heif" || e.ext == L"hif")) {
+            // HEIF zeigt peek ueber den Codec von Windows: fehlt er, sagen, was noetig ist
+            auto bi = bmps_.find(e.path);
+            if (bi != bmps_.end() && bi->second.failed)
+                row(T(L"Hinweis"), HeifCodecInstalled()
+                                       ? T(L"Der HEIF-Codec von Windows ließ sich nicht verwenden")
+                                       : T(L"Zum Anzeigen werden die „HEIF-Bilderweiterungen“ und „HEVC-Videoerweiterungen“ von Microsoft benötigt"));
+        }
     } else if (sel.size() > 1) {
         uint64_t bytes = 0;
         size_t n[4] = {0, 0, 0, 0};

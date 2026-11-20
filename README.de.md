@@ -151,7 +151,7 @@ Daten liegen in `%LOCALAPPDATA%\peek`. Mit einer leeren Datei `peek.portable` ne
 ## Funktionen
 
 - **Ansichten:** Kacheln, Liste, Bilderwolke. Vorschau für Bilder, SVG, Videos, PDF, PSD, AI.
-- **Bildbetrachter:** JPEG, PNG, GIF, BMP, WebP, AVIF, TIFF, ICO, SVG, TGA. Zoom, Drehen, Zuschneiden. SVG bleibt in jeder Zoomstufe scharf.
+- **Bildbetrachter:** JPEG, PNG, GIF, BMP, WebP, AVIF, TIFF, ICO, SVG, TGA, HEIC/HEIF (benötigt die kostenlosen „HEIF-Bilderweiterungen“ und die „HEVC-Videoerweiterungen“ von Microsoft aus dem Store). Zoom, Drehen, Zuschneiden. SVG bleibt in jeder Zoomstufe scharf.
 - **Filter und Suche:** Begriffe, Quelle, Muster, Kalender, Suchparameter, Suchverlauf.
 - **Merkliste und Sammlungen:** vormerken mit Stern, Ordner indexieren, solange peek läuft.
 - **Vergleichen:** zwei Bilder nebeneinander, Zoom synchron. Oder übereinander mit Trennlinie am Mauszeiger.

@@ -20,6 +20,8 @@ bool DecodeEmbeddedThumb(const std::wstring& path, uint32_t maxEdge, Pixels& out
 // Aufnahmedaten fuer den Info-Bereich (EXIF): Objektiv, Blende, Belichtungszeit (s), ISO als Text mit
 // Trennzeichen U+001F, Zahlen unformatiert ("2.8", "0.004", "400"); fehlende Angaben leer
 bool ReadPhotoDetails(const std::wstring& path, std::wstring& out);
+// Ist ein HEIF-Codec in Windows eingetragen? (nur die Liste der Codecs, keine Datei; einmal ermittelt)
+bool HeifCodecInstalled();
 
 // JPEG fuer PDF: Transparenz auf Weiss, Qualitaet 0..1
 bool EncodeJpegOnWhite(const Pixels& px, float quality, std::vector<uint8_t>& out);

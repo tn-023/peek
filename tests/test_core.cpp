@@ -7,7 +7,9 @@
 #include "core/textutil.h"
 #include "core/svgcheck.h"
 #include "core/tga.h"
+#include "core/heif.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -280,7 +282,149 @@ static void TestTga() {
   unsigned seed=1; for(int k=0;k<200000;k++){ std::vector<uint8_t> z(18+(seed%200)); for(auto&c:z){seed=seed*1103515245+12345; c=seed>>16;} z[2]=(seed%2)?10:2; z[16]=32; z[12]=z[12]%16+1; z[13]=0; z[14]=z[14]%16+1; z[15]=0; TgaDecode(z.data(),z.size(),1<<20,out,w,h);} 
 }
 
+
+// --- HEIF-Kopf und EXIF ---------------------------------------------------
+static void Be32(std::vector<uint8_t>& v, uint32_t x) { for (int i = 3; i >= 0; --i) v.push_back(uint8_t(x >> (i * 8))); }
+static void Be16(std::vector<uint8_t>& v, uint16_t x) { v.push_back(uint8_t(x >> 8)); v.push_back(uint8_t(x)); }
+static void Le16(std::vector<uint8_t>& v, uint16_t x) { v.push_back(uint8_t(x)); v.push_back(uint8_t(x >> 8)); }
+static void Le32(std::vector<uint8_t>& v, uint32_t x) { for (int i = 0; i < 4; ++i) v.push_back(uint8_t(x >> (i * 8))); }
+static std::vector<uint8_t> Bx(const char* t, const std::vector<uint8_t>& p, int ver = -1, uint32_t flags = 0) {
+    std::vector<uint8_t> v;
+    Be32(v, uint32_t(8 + (ver >= 0 ? 4 : 0) + p.size()));
+    v.insert(v.end(), t, t + 4);
+    if (ver >= 0) { v.push_back(uint8_t(ver)); v.push_back(uint8_t(flags >> 16)); v.push_back(uint8_t(flags >> 8)); v.push_back(uint8_t(flags)); }
+    v.insert(v.end(), p.begin(), p.end());
+    return v;
+}
+static void Cat(std::vector<uint8_t>& a, const std::vector<uint8_t>& b) { a.insert(a.end(), b.begin(), b.end()); }
+
+// kleiner TIFF-Block (Little Endian): Hersteller, Modell, EXIF-Verzeichnis mit Datum, Blende, Belichtung, ISO, Objektiv
+static std::vector<uint8_t> TestTiff() {
+    const char make[] = "Apple", model[] = "iPhone 15 Pro", date[] = "2024:08:17 14:30:05", lens[] = "iPhone 15 Pro back camera";
+    // Aufbau: Kopf(8) | IFD0 (2+3*12+4=42) | EXIF-IFD (2+5*12+4=66) | Daten
+    const uint32_t ifd0 = 8, exif = ifd0 + 42, data0 = exif + 66;
+    std::vector<uint8_t> dat;
+    auto add = [&](const void* p, size_t n) { uint32_t at = data0 + uint32_t(dat.size()); dat.insert(dat.end(), (const uint8_t*)p, (const uint8_t*)p + n); return at; };
+    uint32_t oMake = add(make, sizeof make), oModel = add(model, sizeof model), oDate = add(date, sizeof date), oLens = add(lens, sizeof lens);
+    std::vector<uint8_t> r1, r2;
+    Le32(r1, 178); Le32(r1, 100);
+    Le32(r2, 1); Le32(r2, 250);
+    uint32_t oF = add(r1.data(), 8), oE = add(r2.data(), 8);
+    std::vector<uint8_t> v = {'I', 'I'};
+    Le16(v, 42); Le32(v, ifd0);
+    auto ent = [&](uint16_t tag, uint16_t type, uint32_t count, uint32_t val) { Le16(v, tag); Le16(v, type); Le32(v, count); Le32(v, val); };
+    Le16(v, 3);
+    ent(271, 2, sizeof make, oMake);
+    ent(272, 2, sizeof model, oModel);
+    ent(34665, 4, 1, exif);
+    Le32(v, 0);
+    Le16(v, 5);
+    ent(33434, 5, 1, oE);
+    ent(33437, 5, 1, oF);
+    ent(34855, 3, 1, 125);
+    ent(36867, 2, sizeof date, oDate);
+    ent(42036, 2, sizeof lens, oLens);
+    Le32(v, 0);
+    Cat(v, dat);
+    return v;
+}
+
+static std::vector<uint8_t> TestHeif(uint32_t exifOffset, size_t exifLen) {
+    std::vector<uint8_t> f, ftyp;
+    const char brands[] = "heic\0\0\0\0mif1heic";
+    ftyp.insert(ftyp.end(), brands, brands + 16);
+    Cat(f, Bx("ftyp", ftyp));
+    std::vector<uint8_t> meta, p;
+    Cat(meta, Bx("hdlr", std::vector<uint8_t>(20, 0), 0));
+    p.clear(); Be16(p, 1); Cat(meta, Bx("pitm", p, 0));
+    std::vector<uint8_t> iinf, e1, e2;
+    Be16(iinf, 2);
+    Be16(e1, 1); Be16(e1, 0); e1.insert(e1.end(), {'h', 'v', 'c', '1', 0});
+    Be16(e2, 2); Be16(e2, 0); e2.insert(e2.end(), {'E', 'x', 'i', 'f', 0});
+    Cat(iinf, Bx("infe", e1, 2));
+    Cat(iinf, Bx("infe", e2, 2));
+    Cat(meta, Bx("iinf", iinf, 0));
+    std::vector<uint8_t> iloc = {0x44, 0x00};
+    Be16(iloc, 1);
+    Be16(iloc, 2); Be16(iloc, 0); Be16(iloc, 1); Be32(iloc, exifOffset); Be32(iloc, uint32_t(exifLen));
+    Cat(meta, Bx("iloc", iloc, 0));
+    std::vector<uint8_t> ipco, ispe, irot = {3}, ipma;
+    Be32(ispe, 4032); Be32(ispe, 3024);
+    Cat(ipco, Bx("ispe", ispe, 0));
+    Cat(ipco, Bx("irot", irot));
+    Be32(ipma, 1);
+    Be16(ipma, 1); ipma.push_back(2); ipma.push_back(0x01); ipma.push_back(0x82);
+    std::vector<uint8_t> iprp = Bx("ipco", ipco);
+    Cat(iprp, Bx("ipma", ipma, 0));
+    Cat(meta, Bx("iprp", iprp));
+    Cat(f, Bx("meta", meta, 0));
+    return f;
+}
+
+static void TestHeif() {
+    CHECK(HeifOrientation(0, -1, false) == 1);
+    CHECK(HeifOrientation(1, -1, false) == 8);
+    CHECK(HeifOrientation(2, -1, false) == 3);
+    CHECK(HeifOrientation(3, -1, false) == 6);
+    CHECK(HeifOrientation(0, 1, false) == 2);
+    CHECK(HeifOrientation(0, 0, false) == 4);
+    CHECK(HeifOrientation(1, 0, false) == 5);   // wie libavif: irot 1 + imir 0
+    CHECK(HeifOrientation(3, 0, false) == 7);
+
+    std::vector<uint8_t> tiff = TestTiff();
+    std::vector<uint8_t> item;
+    Be32(item, 6);
+    item.insert(item.end(), {'E', 'x', 'i', 'f', 0, 0});
+    Cat(item, tiff);
+    size_t headLen = TestHeif(0, 0).size();
+    std::vector<uint8_t> file = TestHeif(uint32_t(headLen + 8), item.size());
+    std::vector<uint8_t> mdat = Bx("mdat", item);
+    Cat(file, mdat);
+
+    HeifInfo hi;
+    CHECK(HeifParse(file.data(), file.size(), hi));
+    CHECK(hi.width == 4032 && hi.height == 3024);
+    CHECK(hi.orientation == 6);
+    CHECK(hi.exifOffset == headLen + 8 && hi.exifLength == item.size());
+    CHECK(hi.metaEnd <= headLen);
+
+    ExifInfo ex;
+    CHECK(HeifExifParse(file.data() + hi.exifOffset, size_t(hi.exifLength), ex));
+    CHECK(ex.make == "Apple" && ex.model == "iPhone 15 Pro");
+    CHECK(ex.dateTaken == "2024:08:17 14:30:05");
+    CHECK(ex.fnumber > 1.779 && ex.fnumber < 1.781);
+    CHECK(ex.exposure > 0.00399 && ex.exposure < 0.00401);
+    CHECK(ex.iso == 125);
+    CHECK(ex.lens == "iPhone 15 Pro back camera");
+
+    // abgeschnittener Kopf: meldet die benoetigte Laenge
+    HeifInfo cut;
+    CHECK(!HeifParse(file.data(), 200, cut));
+    CHECK(cut.metaEnd == headLen);
+    CHECK(!HeifParse(tiff.data(), tiff.size(), cut));   // kein HEIF
+
+    // Zufallstest: veraenderte und gekuerzte Dateien duerfen nichts ausser false/true liefern
+    uint32_t seed = 2024;
+    auto rnd = [&] { seed = seed * 1664525u + 1013904223u; return seed >> 8; };
+    for (int i = 0; i < 20000; ++i) {
+        std::vector<uint8_t> m = file;
+        int changes = 1 + int(rnd() % 8);
+        for (int k = 0; k < changes; ++k) m[rnd() % m.size()] = uint8_t(rnd());
+        size_t n = rnd() % (m.size() + 1);
+        HeifInfo h2;
+        if (HeifParse(m.data(), n, h2) && h2.exifLength && h2.exifOffset < n) {
+            ExifInfo e2;
+            HeifExifParse(m.data() + h2.exifOffset, size_t(std::min<uint64_t>(h2.exifLength, n - h2.exifOffset)), e2);
+        }
+        std::vector<uint8_t> t = tiff;
+        for (int k = 0; k < changes; ++k) t[rnd() % t.size()] = uint8_t(rnd());
+        ExifInfo e3;
+        ExifParse(t.data(), rnd() % (t.size() + 1), e3);
+    }
+}
+
 int main() {
+    TestHeif();
     TestAtlas();
     TestText();
     TestTokenizer();

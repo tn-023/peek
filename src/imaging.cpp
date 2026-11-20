@@ -2,6 +2,8 @@
 #include "svgimaging.h"
 #include "fileinput.h"
 #include "core/tga.h"
+#include "core/heif.h"
+#include "core/textutil.h"
 
 #include <commoncontrols.h>
 #include <mfapi.h>
@@ -136,6 +138,69 @@ bool DecodeAvifFallback(const std::wstring& path, uint32_t maxEdge, Pixels& out)
 }
 
 // TGA: Windows hat keinen Dekoder dafuer; eigener, gepruefter Dekoder (core/tga.cpp)
+bool IsHeifPath(const std::wstring& path) {
+    size_t dot = path.find_last_of(L'.');
+    if (dot == std::wstring::npos) return false;
+    const wchar_t* e = path.c_str() + dot;
+    return _wcsicmp(e, L".heic") == 0 || _wcsicmp(e, L".heif") == 0 || _wcsicmp(e, L".hif") == 0;
+}
+
+bool ReadStreamRange(IStream* in, uint64_t off, size_t n, std::vector<uint8_t>& out) {
+    LARGE_INTEGER li;
+    li.QuadPart = static_cast<LONGLONG>(off);
+    out.clear();
+    if (FAILED(in->Seek(li, STREAM_SEEK_SET, nullptr))) return false;
+    out.resize(n);
+    size_t got = 0;
+    while (got < n) {
+        ULONG r = 0;
+        HRESULT hr = in->Read(out.data() + got, static_cast<ULONG>(std::min<size_t>(n - got, 1u << 20)), &r);
+        if (FAILED(hr) || r == 0) break;
+        got += r;
+    }
+    out.resize(got);
+    return got > 0;
+}
+
+// HEIF/HEIC: Groesse, Drehung und EXIF liest peek selbst aus dem Dateikopf (core/heif.cpp), die Bilddaten
+// dekodiert der HEIF-Codec von Windows. So sind Aufnahmedatum und Abmessungen auch ohne Codec bekannt, und die
+// Angaben haengen nicht davon ab, welche Metadaten der Codec weiterreicht.
+struct HeifHead {
+    HeifInfo info;
+    ExifInfo exif;
+    bool ok = false, haveExif = false;
+};
+
+HeifHead ReadHeifHead(const std::wstring& path) {
+    HeifHead h;
+    ComPtr<IStream> in = OpenInputStream(path);
+    if (!in) return h;
+    std::vector<uint8_t> buf;
+    if (!ReadStreamRange(in.Get(), 0, 256 * 1024, buf)) return h;
+    h.ok = HeifParse(buf.data(), buf.size(), h.info);
+    if (!h.ok && h.info.metaEnd > buf.size() && h.info.metaEnd <= 8u * 1024 * 1024 &&
+        ReadStreamRange(in.Get(), 0, static_cast<size_t>(h.info.metaEnd), buf))
+        h.ok = HeifParse(buf.data(), buf.size(), h.info);
+    if (h.ok && h.info.exifLength > 0 && h.info.exifLength <= 1024 * 1024) {
+        std::vector<uint8_t> ex;
+        if (ReadStreamRange(in.Get(), h.info.exifOffset, static_cast<size_t>(h.info.exifLength), ex) &&
+            ex.size() == h.info.exifLength)
+            h.haveExif = HeifExifParse(ex.data(), ex.size(), h.exif);
+    }
+    return h;
+}
+
+// Drehung eines HEIF-Bildes fuer die Pixel, die der Codec liefert. In HEIF ist sie Teil des Containers (irot/imir),
+// EXIF ist dort nur Information. Hat der Codec bei 90/270 Grad schon gedreht, sind Breite und Hoehe vertauscht.
+UINT HeifFrameOrientation(const HeifHead& h, UINT fw, UINT fh) {
+    if (!h.ok) return 1;
+    UINT o = static_cast<UINT>(h.info.orientation);
+    if (o >= 5 && h.info.width && h.info.height && h.info.width != h.info.height && fw == h.info.height &&
+        fh == h.info.width)
+        return 1;
+    return o;
+}
+
 bool IsTgaPath(const std::wstring& path) {
     size_t dot = path.find_last_of(L'.');
     return dot != std::wstring::npos && _wcsicmp(path.c_str() + dot, L".tga") == 0;
@@ -203,11 +268,12 @@ bool DecodeWebPFallback(const std::wstring& path, uint32_t maxEdge, Pixels& out)
     return true;
 }
 
-bool DecodeFrame(IWICBitmapFrameDecode* frame, uint32_t maxEdge, Pixels& out) {
+// orientation: 0 = aus EXIF lesen, sonst vorgegeben (HEIF)
+bool DecodeFrame(IWICBitmapFrameDecode* frame, uint32_t maxEdge, Pixels& out, UINT orientation = 0) {
     auto f = Wic();
     UINT w = 0, h = 0;
     if (FAILED(frame->GetSize(&w, &h)) || w == 0 || h == 0) return false;
-    UINT orientation = ReadOrientation(frame);
+    if (orientation < 1 || orientation > 8) orientation = ReadOrientation(frame);
     bool swap = orientation >= 5;
 
     ComPtr<IWICBitmapSource> src = frame;
@@ -281,8 +347,13 @@ bool SaveCroppedImage(const std::wstring& srcPath, int viewRot, double x0, doubl
         FAILED(dec->GetFrame(0, &frame)))
         return false;
     ComPtr<IWICBitmapSource> src = frame;
-    // 1) EXIF-Ausrichtung, 2) Drehung im Betrachter
+    // 1) EXIF-Ausrichtung (HEIF: aus dem Container), 2) Drehung im Betrachter
     UINT o = ReadOrientation(frame.Get());
+    if (IsHeifPath(srcPath)) {
+        UINT fw = 0, fh = 0;
+        frame->GetSize(&fw, &fh);
+        o = HeifFrameOrientation(ReadHeifHead(srcPath), fw, fh);
+    }
     auto rotate = [&](WICBitmapTransformOptions opt) {
         ComPtr<IWICBitmap> cached;
         ComPtr<IWICBitmapFlipRotator> rot;
@@ -419,7 +490,15 @@ bool DecodeImageFile(const std::wstring& path, uint32_t maxEdge, Pixels& out) {
     HRESULT hr = f->CreateDecoderFromStream(in.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &dec);
     if (SUCCEEDED(hr)) {
         ComPtr<IWICBitmapFrameDecode> frame;
-        if (SUCCEEDED(dec->GetFrame(0, &frame)) && DecodeFrame(frame.Get(), maxEdge, out)) return true;
+        if (SUCCEEDED(dec->GetFrame(0, &frame))) {
+            UINT o = 0;
+            if (IsHeifPath(path)) {
+                UINT fw = 0, fh = 0;
+                frame->GetSize(&fw, &fh);
+                o = HeifFrameOrientation(ReadHeifHead(path), fw, fh);
+            }
+            if (DecodeFrame(frame.Get(), maxEdge, out, o)) return true;
+        }
     }
     // WebP und AVIF ohne Systemcodec
     size_t dot = path.find_last_of(L'.');
@@ -454,7 +533,8 @@ bool DecodeEmbeddedThumb(const std::wstring& path, uint32_t maxEdge, Pixels& out
             SUCCEEDED(scaler->Initialize(src.Get(), fw, fh, WICBitmapInterpolationModeFant)))
             src = scaler;
     }
-    UINT orientation = ReadOrientation(frame.Get());   // das Vorschaubild ist wie das Bild selbst gespeichert
+    // das Vorschaubild ist wie das Bild selbst gespeichert (HEIF: Drehung aus dem Container)
+    UINT orientation = IsHeifPath(path) ? HeifFrameOrientation(ReadHeifHead(path), w, h) : ReadOrientation(frame.Get());
     if (orientation != 1) {
         ComPtr<IWICBitmap> cached;
         if (SUCCEEDED(f->CreateBitmapFromSource(src.Get(), WICBitmapCacheOnLoad, &cached))) {
@@ -527,9 +607,46 @@ bool QueryFirst(IWICMetadataQueryReader* q, std::initializer_list<const wchar_t*
 }
 }  // namespace
 
+bool HeifCodecInstalled() {
+    static int known = -1;
+    if (known >= 0) return known == 1;
+    known = 0;
+    auto f = Wic();
+    ComPtr<IEnumUnknown> en;
+    if (!f || FAILED(f->CreateComponentEnumerator(WICDecoder, WICComponentEnumerateDefault, &en))) return false;
+    ComPtr<IUnknown> u;
+    ULONG got = 0;
+    while (en->Next(1, &u, &got) == S_OK && got == 1) {
+        ComPtr<IWICBitmapDecoderInfo> di;
+        if (SUCCEEDED(u.As(&di))) {
+            wchar_t ext[512] = {};
+            UINT len = 0;
+            if (SUCCEEDED(di->GetFileExtensions(511, ext, &len))) {
+                std::wstring e = ToLower(ext);
+                if (e.find(L".heic") != std::wstring::npos || e.find(L".heif") != std::wstring::npos) known = 1;
+            }
+        }
+        u.Reset();
+        if (known == 1) break;
+    }
+    return known == 1;
+}
+
 bool ReadPhotoDetails(const std::wstring& path, std::wstring& out) {
     out.clear();
     if (IsSvgPath(path) || IsTgaPath(path)) return false;
+    if (IsHeifPath(path)) {   // HEIF: EXIF selbst lesen (geht auch ohne Codec)
+        HeifHead hh = ReadHeifHead(path);
+        if (!hh.haveExif) return false;
+        std::wstring lens = Utf8ToWide(hh.exif.lens);
+        if (lens.size() > 120) lens.resize(120);
+        for (auto& c : lens) if (c == 0x1f || c < 0x20) c = L' ';
+        auto num = [](double d) { wchar_t b[32]; std::swprintf(b, 32, L"%.6g", d); return std::wstring(b); };
+        const ExifInfo& x = hh.exif;
+        out = lens + L'\x1f' + (x.fnumber > 0 ? num(x.fnumber) : L"") + L'\x1f' + (x.exposure > 0 ? num(x.exposure) : L"") +
+              L'\x1f' + (x.iso > 0 ? num(x.iso) : L"");
+        return !lens.empty() || x.fnumber > 0 || x.exposure > 0 || x.iso > 0;
+    }
     auto f = Wic();
     if (!f) return false;
     ComPtr<IStream> in = OpenInputStream(path);
@@ -692,6 +809,20 @@ int64_t ParseExifDate(const char* s) {
     return FileTimeToUnix(ft);
 }
 
+// Kamera fuer die Anzeige: Hersteller nur voranstellen, wenn er nicht schon im Modell steht
+std::wstring CameraName(std::wstring make, std::wstring model) {
+    auto trim = [](std::wstring& s) {
+        while (!s.empty() && (s.back() == L' ' || s.back() == 0)) s.pop_back();
+    };
+    trim(make);
+    trim(model);
+    if (!make.empty() && !model.empty() && _wcsnicmp(model.c_str(), make.c_str(), std::min<size_t>(make.size(), 5)) != 0) {
+        size_t sp = make.find(L' ');
+        return (sp == std::wstring::npos ? make : make.substr(0, sp)) + L" " + model;
+    }
+    return model.empty() ? make : model;
+}
+
 std::wstring PropString(const PROPVARIANT& v) {
     if (v.vt == VT_LPWSTR && v.pwszVal) return v.pwszVal;
     if (v.vt == VT_LPSTR && v.pszVal) return Utf8ToWide(v.pszVal);
@@ -714,6 +845,19 @@ bool ReadImageMeta(const std::wstring& path, MetaRow& m) {
         if (!ReadInputHead(path, 18, head) || !TgaReadInfo(head.data(), head.size(), ti)) return false;
         m.width = ti.width;
         m.height = ti.height;
+        return true;
+    }
+    if (IsHeifPath(path)) {
+        // HEIF: Groesse, Aufnahmedatum und Kamera aus dem eigenen Kopf-Leser (auch ohne HEIF-Codec)
+        HeifHead hh = ReadHeifHead(path);
+        if (!hh.ok || !hh.info.width || !hh.info.height) return false;
+        bool swap = hh.info.orientation >= 5;
+        m.width = swap ? hh.info.height : hh.info.width;
+        m.height = swap ? hh.info.width : hh.info.height;
+        if (hh.haveExif) {
+            if (!hh.exif.dateTaken.empty()) m.taken = ParseExifDate(hh.exif.dateTaken.c_str());
+            m.camera = CameraName(Utf8ToWide(hh.exif.make), Utf8ToWide(hh.exif.model));
+        }
         return true;
     }
     auto f = Wic();
@@ -785,19 +929,7 @@ bool ReadImageMeta(const std::wstring& path, MetaRow& m) {
             if (SUCCEEDED(q->GetMetadataByName(L"/app1/ifd/{ushort=271}", &v))) make = PropString(v);
             PropVariantClear(&v);
         }
-        // Hersteller nur voranstellen, wenn er nicht schon im Modell steht
-        auto trim = [](std::wstring s) {
-            while (!s.empty() && (s.back() == L' ' || s.back() == 0)) s.pop_back();
-            return s;
-        };
-        make = trim(make);
-        model = trim(model);
-        if (!make.empty() && !model.empty() && _wcsnicmp(model.c_str(), make.c_str(), std::min<size_t>(make.size(), 5)) != 0) {
-            size_t sp = make.find(L' ');
-            m.camera = (sp == std::wstring::npos ? make : make.substr(0, sp)) + L" " + model;
-        } else {
-            m.camera = model.empty() ? make : model;
-        }
+        m.camera = CameraName(make, model);
     }
     return true;
 }

@@ -223,7 +223,7 @@ void App::SaveCrop() {
         // Zwischendatei ohne Bildendung, damit sie nie als Bild in der Ansicht auftaucht
         target = dir + L"\\~" + base + L"." + e.ext + L".peek-tmp";
     } else {
-        // WebP, AVIF, GIF, ICO: als PNG-Kopie daneben
+        // WebP, AVIF, HEIC, GIF, ICO: als PNG-Kopie daneben
         container = GUID_ContainerFormatPng;
         for (int i = 1; i < 1000; ++i) {
             target = dir + L"\\" + base + (i == 1 ? T(L" (zugeschnitten)") : T(L" (zugeschnitten ") + std::to_wstring(i) + L")") + L".png";

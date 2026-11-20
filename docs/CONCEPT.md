@@ -20,7 +20,7 @@ peek is built as a single, statically linked C++20 Win32 application (`peek.exe`
 | Fast search | SQLite FTS5 (trigram) + column filters, query syntax with operators |
 | Folder navigation | Sidebar (quick access, collections, drives), path bar with drop-down subfolder lists, view including subfolders |
 | Overview of all files | All file types of a folder in the grid, thumbnails only for images and videos, all other files with their file type icon; in large sizes, folders show the thumbnail of a contained file |
-| Built-in image viewer | Borderless full screen without title bar, GPU zoom, preloading of neighboring images; JPEG/JPG, PNG, GIF, BMP, WebP, AVIF, TIFF, ICO, SVG, TGA – no RAW, no HEIC |
+| Built-in image viewer | Borderless full screen without title bar, GPU zoom, preloading of neighboring images; JPEG/JPG, PNG, GIF, BMP, WebP, AVIF, TIFF, ICO, SVG, TGA, HEIC/HEIF (with the Windows codec) – no RAW |
 | Videos external | No playback of its own; opens in the default media player via `ShellExecuteExW` |
 | Drag & drop in and out | OLE `IDropTarget` / `SHDoDragDrop` with `CF_HDROP` |
 
@@ -35,7 +35,7 @@ Plain Win32 with a self-drawn interface on Direct2D is recommended, because it g
 | Windows 11 look | Mica via `DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE)`, rounded corners, Segoe UI Variable, light/dark mode | System look without the Windows App SDK; own dark popup menus with acrylic background (DWMSBT\_TRANSIENTWINDOW) and rounded corners |
 | Composition | DirectComposition + DXGI flip-model swap chain | Tear-free scrolling at 60–144 Hz, low latency |
 | Rendering | Direct3D 11.1 + Direct2D 1.3 (shared D3D device) | Broad driver base, shareable with Media Foundation |
-| Image decoding | WIC with system codecs: JPEG/JPG, PNG, GIF, BMP, TIFF, ICO, WebP, AVIF (if present) | Scaled decoding, EXIF orientation; crops are saved via the WIC encoder; RAW and HEIC/HEIF deliberately unsupported |
+| Image decoding | WIC with system codecs: JPEG/JPG, PNG, GIF, BMP, TIFF, ICO, WebP, AVIF, HEIC/HEIF (if present) | Scaled decoding, EXIF orientation; crops are saved via the WIC encoder; RAW deliberately unsupported. HEIC/HEIF (since 1.6.5): pixels only through Microsoft's "HEIF Image Extensions" and "HEVC Video Extensions" (no own HEVC decoder: patents and LGPL); size, rotation (irot/imir), capture date, camera and exposure data come from peek's own header reader (`core/heif.cpp`, unit and random tests), so the index is complete even without the codec. Without the codec the file shows its icon and the info panel says which extensions are needed |
 | Extra codecs (static) | libwebp and libavif (decoder dav1d) as fallback without a system codec; stb\_image for the Photoshop composite image | No Store extension required, statically linked, permissive licenses (BSD, public domain) |
 | Video thumbnail & metadata | Media Foundation `IMFSourceReader` with DXGI device manager (DXVA), system codecs only | One still frame via hardware decoder, duration/codec/resolution; no own HEVC decoder |
 | Icons of other files | `IShellItemImageFactory` with SIIGBF\_ICONONLY: file type icon only, no thumbnail | No third-party thumbnail handlers: faster and safer |
@@ -133,7 +133,7 @@ peek runs from a USB stick or any folder, writes nothing to the registry or syst
 - No Windows service, no autostart, no scheduled task: indexing runs only while the app is open.
 - No reading of the NTFS USN journal (a volume handle usually requires admin rights); instead directory comparison and `ReadDirectoryChangesW`.
 - No file type registration and no shell context menu. Optional: a menu item "create shortcut in Start menu" that only creates a `.lnk` in the user profile.
-- No dependence on Store codec extensions; only image formats that Windows 11 decodes without an extension are supported, plus WebP (libwebp) and AVIF (libavif with dav1d) as built-in fallbacks.
+- No dependence on Store codec extensions for the core formats: they are decoded by Windows 11 without an extension, plus WebP (libwebp) and AVIF (libavif with dav1d) as built-in fallbacks. Exception (since 1.6.5): HEIC/HEIF is shown only if the Microsoft HEIF and HEVC extensions are installed (per user, no admin rights); peek installs nothing itself.
 
 ## Rendering & hardware acceleration
 
@@ -156,7 +156,7 @@ The GPU draws only what is visible, from textures already in graphics memory; th
 4. **Video:** Media Foundation `IMFSourceReader` with `MF_SOURCE_READER_D3D_MANAGER`, seek to about 10 % of the duration, one frame via the DXVA hardware decoder, output directly as a D3D11 texture. Only with the codecs present in Windows (e.g. H.264, VP9); peek ships no HEVC decoder – such videos get the file type icon.
 5. **Upload:** the result goes into a free tile of a texture atlas (4096 × 4096 BGRA, 256 tiles of 256 px).
 
-**Documents with thumbnails (exception):** PDF shows the first page (built-in WinRT feature `Windows.Data.Pdf`, page count in the info panel), Illustrator (AI) is read like PDF, otherwise the embedded XMP thumbnail; Photoshop (PSD/PSB) shows the stored composite image (`stb_image`), otherwise the embedded JPEG thumbnail. At the bottom right, the thumbnail carries the icon of the default app. **All other file types** (documents, archives, audio, unknown types, including RAW or HEIC) appear with their file type icon (`IShellItemImageFactory` with `SIIGBF_ICONONLY`, cached per extension). Third-party shell thumbnail handlers are never called.
+**Documents with thumbnails (exception):** PDF shows the first page (built-in WinRT feature `Windows.Data.Pdf`, page count in the info panel), Illustrator (AI) is read like PDF, otherwise the embedded XMP thumbnail; Photoshop (PSD/PSB) shows the stored composite image (`stb_image`), otherwise the embedded JPEG thumbnail. At the bottom right, the thumbnail carries the icon of the default app. **All other file types** (documents, archives, audio, unknown types, including RAW, and HEIC without the Windows codec) appear with their file type icon (`IShellItemImageFactory` with `SIIGBF_ICONONLY`, cached per extension). Third-party shell thumbnail handlers are never called.
 
 **Folder thumbnails** (as in Windows Explorer): from a tile size of 96 px, a folder shows the folder icon with the thumbnail of a contained file on it; at smaller sizes and in the list view, only the icon.
 
@@ -350,7 +350,7 @@ A single window with header, filter bar, grid and status bar; the sidebar on the
 - The info panel is also available in the viewer (button or `I`) and shows the data of the current image; it is linked to the panel of the overview.
 - Double-click toggles between fit and 100 %. Zoom with the mouse wheel, smoothly animated around a fixed point (no arc movement), `0` fit, `1` = 100 %, `R` rotates the display. Small images are shown at original size or fitted to the view, depending on the setting. `Del` moves the image to the recycle bin (brief notice at the top; the viewer stays open and shows the next or last image).
 - Navigation arrows at the far left and right edges, visible only after mouse movement and hidden again after 2 seconds; also arrow keys and the mouse forward/back buttons.
-- **Crop:** via the icon in the bar (image fitted slightly smaller) or directly by dragging with the middle mouse button; handles at corners and edges, rule-of-thirds lines, pixel size, bar with "Abbrechen" (cancel) and "Speichern" (save) (Enter/Esc). JPEG, PNG, BMP and TIFF are overwritten (original to the recycle bin, JPEG at 95 % with metadata), WebP, AVIF, GIF and ICO saved as a PNG copy.
+- **Crop:** via the icon in the bar (image fitted slightly smaller) or directly by dragging with the middle mouse button; handles at corners and edges, rule-of-thirds lines, pixel size, bar with "Abbrechen" (cancel) and "Speichern" (save) (Enter/Esc). JPEG, PNG, BMP and TIFF are overwritten (original to the recycle bin, JPEG at 95 % with metadata), WebP, AVIF, HEIC, GIF and ICO saved as a PNG copy.
 - First the thumbnail from the cache, then the full image; neighboring images (±2) are decoded in advance.
 - **Smoothing:** in the context menu "Beim Vergrößern glätten" (smooth when enlarging): on = cubic interpolation when enlarging, off (default) = sharp pixels from 3× size. Also applies in compare.
 - **SVG:** base image at 2048–4096 px; when the view is at rest and the base image is coarser than the screen, resvg renders the visible section in the background at screen resolution (sharp at every zoom level). Crop is hidden for SVG.

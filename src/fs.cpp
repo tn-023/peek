@@ -46,7 +46,8 @@ Kind ClassifyExt(std::wstring_view e) {
 
 bool IsViewerFormat(std::wstring_view e) {
     static const wchar_t* kImg[] = {L"jpg", L"jpeg", L"jpe", L"jfif", L"png", L"gif", L"bmp",
-                                    L"dib", L"webp", L"avif", L"tif", L"tiff", L"ico", L"svg", L"tga"};
+                                    L"dib", L"webp", L"avif", L"tif", L"tiff", L"ico", L"svg", L"tga",
+                                    L"heic", L"heif", L"hif"};   // HEIF: ueber den Codec von Windows
     for (auto v : kImg)
         if (e == v) return true;
     return false;

@@ -17,8 +17,8 @@ uint32_t TokenDict::Id(const std::wstring& word) {
 }
 
 bool IsStopword(std::wstring_view w) {
-    static const std::array<std::wstring_view, 35> kStop = {
-        L"jpg", L"jpeg", L"png", L"gif", L"bmp", L"tif", L"tiff", L"webp", L"avif", L"mp4", L"mov",
+    static const std::array<std::wstring_view, 36> kStop = {
+        L"jpg", L"jpeg", L"png", L"gif", L"bmp", L"tif", L"tiff", L"webp", L"avif", L"heic", L"mp4", L"mov",
         L"copy", L"kopie", L"der", L"die", L"das", L"und", L"oder", L"the", L"and", L"of",
         L"von", L"mit", L"im", L"in", L"am", L"an", L"auf", L"zu", L"new", L"neu",
         L"final", L"file", L"datei", L"img"};

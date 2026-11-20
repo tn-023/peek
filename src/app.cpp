@@ -1191,6 +1191,7 @@ void App::DrainThumbs(double budgetMs) {
         }
         b.failed = !b.bmp;
         b.lastUse = frame_;
+        if (settings_.viewMode == 2 && cloud_.arrived.size() < 20000) cloud_.arrived.push_back(res.key);
         if (res.hasMeta) {
             auto it = byPath_.find(res.path);
             if (it != byPath_.end()) {

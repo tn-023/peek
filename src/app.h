@@ -298,6 +298,9 @@ private:
         mutable float nameH = 0;
         mutable float nameHs = -1;   // angezeigte Texthoehe: laeuft nameH weich nach (kein Sprung beim Zeilenwechsel)
         mutable GlyphRuns nameRuns;   // aufgezeichnete Glyphenlaeufe des Layouts (guenstiger als das Layout je Bild)
+        mutable float nameW = 0;      // Bezugsbreite des Layouts
+        mutable float nameNat = -1;   // Breite des Namens in einer Zeile (Bezugsgroesse), -1 = noch nicht gemessen
+        mutable uint64_t nameUse = 0; // zuletzt mit Namen gezeichnet (Bildnummer): ferne Karten geben ihn wieder ab
     };
     struct CloudDrawn { D2D1_RECT_F rc; int card; };
     // Gruppierte Wolke: hoechstens 6 senkrechte Streifen (benachbarte Gruppen zusammengefasst)
@@ -346,6 +349,34 @@ private:
         float f = 1;                                   // Brennweite in DIP
         int groupKey = -1;                             // Gruppierung beim letzten Anordnen (-1 = keine Streifen)
         std::vector<CloudStrip> strips;                // leer = Wolke ohne Gruppen (wie bisher)
+        // Grosse Wolken: nur bewegte Karten animieren, im Ruhezustand nur sichtbare Karten anfassen
+        std::vector<int> active;                       // Karten, die sich noch bewegen
+        bool allActive = true;                         // alle pruefen (neue Ziele, Auswahl geaendert)
+        int stepSel = -2;
+        bool posMoving = true;                         // im letzten Schritt hat sich eine Karte verschoben
+        bool fading = false;                           // Karten gleiten noch vor dem ausgewaehlten Bild zur Seite
+        struct Grid {                                  // Raster ueber x/y, je Zelle Karten nach Tiefe sortiert
+            bool valid = false;
+            float x0 = 0, y0 = 0, cs = 1, maxHalf = 0, maxSize = 0;
+            int nx = 0, ny = 0;
+            std::vector<int> start;                    // je Zelle Beginn in items (nx*ny+1 Eintraege)
+            std::vector<int> items;
+            std::vector<float> itemZ;
+            std::vector<int> byZ;                      // alle Karten nach Tiefe (fuer das Ausweichen)
+            std::vector<float> byZz;
+        } grid;
+        std::vector<int> evaded;                       // Karten mit Ausweichversatz (zum Zuruecksetzen)
+        std::vector<uint32_t> visStamp, fillStamp;     // sichtbar in diesem Bild / im Atlas-Durchlauf betrachtet
+        uint32_t stamp = 0, fillMark = 0;
+        size_t fillCursor = 0;                         // Atlas: Karten ausserhalb des Bildes schrittweise pruefen
+        std::vector<std::wstring> arrived;             // gerade fertige Vorschaubilder: zuerst in den Atlas
+        double nameT0 = 0;                             // Dateinamen: Zeitbudget je Bild
+        int nameMade = 0;
+        bool namePending = false;
+        // Zeichenlisten (bleiben ueber die Bilder erhalten: keine grossen Speicheranforderungen je Bild)
+        std::vector<D2D1_RECT_F> sDst;
+        std::vector<D2D1_RECT_U> sSrc;
+        std::vector<D2D1_COLOR_F> sCol;
         float stripH = 0;                              // Hoehe der Streifen (Welt)
     } cloud_;
     static constexpr float kCloudGap = 1.2f;   // Abstand zwischen zwei Streifen (Welt)
@@ -382,6 +413,8 @@ private:
     bool CloudEnsurePage(ID2D1DeviceContext* dc, int slot);
     // rad > 0: Karte selbst mit runden Ecken fuellen (ohne Zwischenebene), sonst liefert die Ebene die Ecken
     void CloudFillIcons(ID2D1DeviceContext* dc);
+    void CloudBuildGrid();
+    void CloudMarkVisible();
     void CloudDrawFace(ID2D1DeviceContext* dc, const CloudCard& c, const D2D1_RECT_F& rc, bool large, float rad = 0);
     void CloudReleaseGpu();
     int CloudPick(float x, float y) const;

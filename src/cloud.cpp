@@ -110,6 +110,8 @@ static float CardAspect(const FileEntry* e, const Bmp* b) {
 
 void App::CloudTargets() {
     auto& c = cloud_;
+    c.allActive = true;   // neue Ziele: alle Karten einmal pruefen
+    c.grid.valid = false;
     const int n = static_cast<int>(c.order.size());
     float vw = std::max(50.0f, c.view.right - c.view.left), vh = std::max(50.0f, c.view.bottom - c.view.top);
     float va = std::clamp(vw / vh, 1.0f, 2.4f);
@@ -428,6 +430,16 @@ bool App::CloudStep(float dt) {
         if (Approach(c.selAnim, c.sel >= 0 ? 1.0f : 0.0f, ks, 0.002f)) more = true;
     }
 
+    // Neue Ziele oder geaenderte Auswahl: alle Karten pruefen; sonst nur die, die sich noch bewegen
+    if (c.sel != c.stepSel) {
+        c.stepSel = c.sel;
+        c.allActive = true;
+    }
+    // Raster, sobald keine Karte mehr ihre Lage aendert (Ein-/Ausblenden und Ausweichen vor der Auswahl duerfen
+    // weiterlaufen: sie verschieben nichts im Raster)
+    if (!c.grid.valid && !c.allActive && !c.posMoving) CloudBuildGrid();
+    const bool fast = c.grid.valid;
+
     // Karte in der Bildmitte (vorderste, die die Mitte ueberdeckt; mit Beharrung gegen Flackern):
     // sie weicht nie aus, die Kamera stoesst dagegen
     const float vw = std::max(50.0f, c.view.right - c.view.left), vh = std::max(50.0f, c.view.bottom - c.view.top);
@@ -441,10 +453,29 @@ bool App::CloudStep(float dt) {
         };
         int best = -1;
         float bestD = 1e30f;
-        for (int ci : c.order) {
-            if (!covers(ci, 1.0f)) continue;
-            float d = c.cards[ci].z - c.cz;
-            if (d < bestD) { bestD = d; best = ci; }
+        if (fast) {
+            // nur die Zellen um den Kamerastrahl; je Zelle nach Tiefe sortiert: die erste ueberdeckende ist die vorderste
+            const auto& g = c.grid;
+            int gx0 = std::clamp(static_cast<int>(std::floor((c.cx - g.maxHalf - g.x0) / g.cs)), 0, g.nx - 1);
+            int gx1 = std::clamp(static_cast<int>(std::floor((c.cx + g.maxHalf - g.x0) / g.cs)), 0, g.nx - 1);
+            int gy0 = std::clamp(static_cast<int>(std::floor((c.cy - g.maxHalf - g.y0) / g.cs)), 0, g.ny - 1);
+            int gy1 = std::clamp(static_cast<int>(std::floor((c.cy + g.maxHalf - g.y0) / g.cs)), 0, g.ny - 1);
+            for (int gy = gy0; gy <= gy1; ++gy)
+                for (int gx = gx0; gx <= gx1; ++gx) {
+                    int cell = gy * g.nx + gx, s0 = g.start[cell], s1 = g.start[cell + 1];
+                    int i = static_cast<int>(std::lower_bound(g.itemZ.begin() + s0, g.itemZ.begin() + s1, c.cz + kNear) - g.itemZ.begin());
+                    for (; i < s1; ++i) {
+                        float d = g.itemZ[i] - c.cz;
+                        if (d >= bestD) break;
+                        if (covers(g.items[i], 1.0f)) { bestD = d; best = g.items[i]; break; }
+                    }
+                }
+        } else {
+            for (int ci : c.order) {
+                if (!covers(ci, 1.0f)) continue;
+                float d = c.cards[ci].z - c.cz;
+                if (d < bestD) { bestD = d; best = ci; }
+            }
         }
         if (c.block >= 0 && c.block < static_cast<int>(c.cards.size()) && covers(c.block, 1.25f) &&
             (best < 0 || c.cards[c.block].z - c.cz <= bestD + 0.1f))
@@ -454,7 +485,7 @@ bool App::CloudStep(float dt) {
     // Ausweichen als perspektivische Spreizung: nahe der Kamera ruecken Karten proportional zu ihrem seitlichen
     // Abstand vom Kamerastrahl nach aussen. In der Bildmitte bewegt sich praktisch nichts, am Rand gleiten die Karten
     // unauffaellig zur Seite. Kein Umschalten zwischen "Mitte" und "Rand", keine Verzoegerung.
-    for (size_t ci = 0; ci < c.cards.size(); ++ci) {
+    auto evade = [&](int ci) {
         CloudCard& k = c.cards[ci];
         float d = k.z - c.cz;
         float lx = k.x - c.cx, ly = k.y - c.cy;
@@ -467,7 +498,7 @@ bool App::CloudStep(float dt) {
         g += 6.0f * nearP * nearP;
         float ex = lx * g, ey = ly * g;
         // vor dem ausgewaehlten Bild: aus dem Bild gleiten (gesteuert ueber fade, das weich animiert wird)
-        if (k.fade < 1.0f && static_cast<int>(ci) != c.sel) {
+        if (k.fade < 1.0f && ci != c.sel) {
             if (k.evAng < 0) k.evAng = static_cast<float>(Hash(k.path) >> 40) / 16777216.0f * 6.2831853f;
             float lat = std::sqrt(lx * lx + ly * ly);
             float dx = lat > 0.05f ? lx / lat : std::cos(k.evAng), dy = lat > 0.05f ? ly / lat : std::sin(k.evAng);
@@ -478,24 +509,69 @@ bool App::CloudStep(float dt) {
         }
         k.ex = ex;
         k.ey = ey;
+    };
+    if (fast && c.sel < 0 && !c.fading) {
+        // Ruhezustand ohne Auswahl: der Versatz ist nur nahe der Kamera ungleich null (bis 5,5 Kartengroessen davor).
+        // Nur diese Tiefenscheibe rechnen; Karten, die sie verlassen haben, auf null setzen.
+        const auto& g = c.grid;
+        float zLo = c.cz - 2.5f * g.maxSize, zHi = c.cz + 5.5f * g.maxSize + 0.01f;
+        size_t i0 = std::lower_bound(g.byZz.begin(), g.byZz.end(), zLo) - g.byZz.begin();
+        size_t i1 = std::upper_bound(g.byZz.begin(), g.byZz.end(), zHi) - g.byZz.begin();
+        ++c.stamp;
+        if (c.visStamp.size() != c.cards.size()) c.visStamp.assign(c.cards.size(), 0);
+        std::vector<int> now;
+        now.reserve(i1 - i0);
+        for (size_t i = i0; i < i1; ++i) {
+            int ci = g.byZ[i];
+            evade(ci);
+            c.visStamp[ci] = c.stamp;
+            if (c.cards[ci].ex != 0 || c.cards[ci].ey != 0) now.push_back(ci);
+        }
+        for (int ci : c.evaded)
+            if (ci >= 0 && ci < static_cast<int>(c.cards.size()) && c.visStamp[ci] != c.stamp) c.cards[ci].ex = c.cards[ci].ey = 0;
+        c.evaded.swap(now);
+    } else {
+        c.evaded.clear();
+        for (size_t ci = 0; ci < c.cards.size(); ++ci) {
+            evade(static_cast<int>(ci));
+            if (c.cards[ci].ex != 0 || c.cards[ci].ey != 0) c.evaded.push_back(static_cast<int>(ci));
+        }
     }
     float kp = 1.0f - std::exp(-dt / 230.0f), ka = 1.0f - std::exp(-dt / 160.0f);
     float selZ = c.sel >= 0 ? c.cards[c.sel].tz : 0.0f;
     bool dead = false;
-    for (auto& k : c.cards) {
+    bool posMove = false, fading = false;
+    auto approach = [&](CloudCard& k) {
         float any = 0;
         any += Approach(k.x, k.tx, kp, 0.0001f);
         any += Approach(k.y, k.ty, kp, 0.0001f);
         any += Approach(k.z, k.tz, kp, 0.0001f);
         any += Approach(k.w, k.tw, kp, 0.0001f);
         any += Approach(k.h, k.th, kp, 0.0001f);
+        if (any > 0) posMove = true;
         any += Approach(k.a, k.ta, ka, 0.004f);
         // vor dem ausgewaehlten Bild liegende Karten weichen aus (fade 0 = ganz zur Seite)
         float tf = (c.sel >= 0 && k.tz < selZ - 1e-5f) ? 0.0f : 1.0f;
         any += Approach(k.fade, tf, ka, 0.004f);
-        if (any > 0) more = true;
+        if (k.fade < 1.0f) fading = true;
         if (k.leaving && k.a <= 0.0f) dead = true;
+        return any > 0 || k.leaving;
+    };
+    // nur Karten, die sich noch bewegen (nach neuen Zielen einmal alle)
+    std::vector<int> still;
+    if (c.allActive) {
+        c.allActive = false;
+        for (size_t ci = 0; ci < c.cards.size(); ++ci)
+            if (approach(c.cards[ci])) still.push_back(static_cast<int>(ci));
+    } else {
+        for (int ci : c.active)
+            if (ci >= 0 && ci < static_cast<int>(c.cards.size()) && approach(c.cards[ci])) still.push_back(ci);
     }
+    c.active.swap(still);
+    c.posMoving = posMove;
+    c.fading = fading;
+    if (posMove) c.grid.valid = false;
+    if (!c.active.empty()) more = true;
     if (dead) {
         // ausgeblendete Karten entfernen (Atlasplatz wird frei)
         std::vector<int> remap(c.cards.size(), -1);
@@ -519,8 +595,93 @@ bool App::CloudStep(float dt) {
         c.hover = c.hover >= 0 ? remap[c.hover] : -1;
         c.block = c.block >= 0 ? remap[c.block] : -1;
         c.drawn.clear();
+        c.stepSel = c.sel;
+        c.allActive = true;   // Nummern haben sich verschoben
+        c.evaded.clear();
+        c.grid.valid = false;
+        more = true;
     }
     return more;
+}
+
+// Raster fuer die ruhende Wolke: Zellen ueber x/y, je Zelle die Karten nach Tiefe. Damit muessen Zeichnen,
+// Ausweichen und die Suche nach der Karte in der Bildmitte nicht mehr alle Karten durchlaufen.
+void App::CloudBuildGrid() {
+    auto& c = cloud_;
+    auto& g = c.grid;
+    g.valid = false;
+    const int n = static_cast<int>(c.cards.size());
+    if (n == 0) return;
+    float x0 = 1e30f, x1 = -1e30f, y0 = 1e30f, y1 = -1e30f;
+    g.maxHalf = 0;
+    g.maxSize = 0;
+    for (const auto& k : c.cards) {
+        x0 = std::min(x0, k.x);
+        x1 = std::max(x1, k.x);
+        y0 = std::min(y0, k.y);
+        y1 = std::max(y1, k.y);
+        g.maxHalf = std::max(g.maxHalf, std::max(k.w, k.h) / 2);
+        g.maxSize = std::max(g.maxSize, std::max(k.w, k.h));
+    }
+    // etwa 8 Karten je Zelle, hoechstens 256 x 256 Zellen
+    float area = std::max(1e-3f, (x1 - x0) * (y1 - y0));
+    g.cs = std::max({0.5f, std::sqrt(area * 8.0f / n), (x1 - x0) / 256.0f, (y1 - y0) / 256.0f});
+    g.x0 = x0;
+    g.y0 = y0;
+    g.nx = std::clamp(static_cast<int>((x1 - x0) / g.cs) + 1, 1, 257);
+    g.ny = std::clamp(static_cast<int>((y1 - y0) / g.cs) + 1, 1, 257);
+    const int cells = g.nx * g.ny;
+    std::vector<int> cellOf(n);
+    g.start.assign(cells + 1, 0);
+    for (int i = 0; i < n; ++i) {
+        const auto& k = c.cards[i];
+        int gx = std::clamp(static_cast<int>((k.x - g.x0) / g.cs), 0, g.nx - 1);
+        int gy = std::clamp(static_cast<int>((k.y - g.y0) / g.cs), 0, g.ny - 1);
+        cellOf[i] = gy * g.nx + gx;
+        ++g.start[cellOf[i] + 1];
+    }
+    for (int i = 0; i < cells; ++i) g.start[i + 1] += g.start[i];
+    g.items.assign(n, 0);
+    std::vector<int> fill(g.start.begin(), g.start.end() - 1);
+    for (int i = 0; i < n; ++i) g.items[fill[cellOf[i]]++] = i;
+    for (int cell = 0; cell < cells; ++cell)
+        std::sort(g.items.begin() + g.start[cell], g.items.begin() + g.start[cell + 1],
+                  [&](int a, int b) { return c.cards[a].z < c.cards[b].z; });
+    g.itemZ.resize(n);
+    for (int i = 0; i < n; ++i) g.itemZ[i] = c.cards[g.items[i]].z;
+    g.byZ.resize(n);
+    for (int i = 0; i < n; ++i) g.byZ[i] = i;
+    std::sort(g.byZ.begin(), g.byZ.end(), [&](int a, int b) { return c.cards[a].z < c.cards[b].z; });
+    g.byZz.resize(n);
+    for (int i = 0; i < n; ++i) g.byZz[i] = c.cards[g.byZ[i]].z;
+    g.valid = true;
+}
+
+// Ruhezustand: Karten markieren, die im Blickfeld liegen koennen. Je Zelle ist das ein Abschnitt ab einer
+// Mindesttiefe: weiter seitlich liegende Zellen werden erst in groesserer Entfernung sichtbar (der Blickkegel
+// wird nach hinten breiter). Bewusst grosszuegig; die genaue Pruefung macht das Zeichnen selbst.
+void App::CloudMarkVisible() {
+    auto& c = cloud_;
+    const auto& g = c.grid;
+    ++c.stamp;
+    if (c.visStamp.size() != c.cards.size()) c.visStamp.assign(c.cards.size(), 0);
+    const D2D1_RECT_F& v = c.view;
+    const float hx = (v.right - v.left) / 2 + 48, hy = (v.bottom - v.top) / 2 + 48;   // wie beim Zeichnen: 40 px Rand
+    const float f = std::max(1.0f, c.f);
+    for (int gy = 0; gy < g.ny; ++gy) {
+        float cy0 = g.y0 + gy * g.cs, cy1 = cy0 + g.cs;
+        float dy = std::max({0.0f, cy0 - c.cy, c.cy - cy1}) - g.maxHalf;
+        for (int gx = 0; gx < g.nx; ++gx) {
+            int cell = gy * g.nx + gx, s0 = g.start[cell], s1 = g.start[cell + 1];
+            if (s0 == s1) continue;
+            float cx0 = g.x0 + gx * g.cs, cx1 = cx0 + g.cs;
+            float dx = std::max({0.0f, cx0 - c.cx, c.cx - cx1}) - g.maxHalf;
+            // sichtbar ab der Tiefe, in der der seitliche Abstand in den Bildausschnitt passt
+            float dmin = std::max({kNear, dx > 0 ? dx * f / hx : 0.0f, dy > 0 ? dy * f / hy : 0.0f});
+            int i = static_cast<int>(std::lower_bound(g.itemZ.begin() + s0, g.itemZ.begin() + s1, c.cz + dmin) - g.itemZ.begin());
+            for (; i < s1; ++i) c.visStamp[g.items[i]] = c.stamp;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -620,26 +781,55 @@ void App::CloudDrawFace(ID2D1DeviceContext* dc, const CloudCard& k, const D2D1_R
         const float fsRef = 12.0f;
         float fs = std::clamp(rh * 0.075f, 9.0f, 16.0f);
         float scale = fs / fsRef;
-        int bucket = std::max(5, static_cast<int>(rw * 0.86f / scale / 4));
-        float wRef = bucket * 4.0f;
-        // Layout je Karte merken; neu nur, wenn sich die Breitenstufe aendert (beim Verschieben nie, beim Zoomen selten)
-        if (k.nameBucket != bucket) {
-            k.nameBucket = bucket;
-            k.nameLay.Reset();
-            k.nameH = 0;
-            IDWriteTextFormat* tf = r_.TextWrap(fsRef, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
-            if (tf && SUCCEEDED(r_.dwrite()->CreateTextLayout(e->name.c_str(), static_cast<UINT32>(e->name.size()), tf, wRef,
-                                                              fsRef * 2.75f, &k.nameLay))) {
-                k.nameLay->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);   // lange Namen ohne Leerzeichen brechen
-                DWRITE_TRIMMING trim = {DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
-                if (!cloud_.ellipsis) r_.dwrite()->CreateEllipsisTrimmingSign(tf, &cloud_.ellipsis);
-                k.nameLay->SetTrimming(&trim, cloud_.ellipsis.Get());
-                DWRITE_TEXT_METRICS tm{};
-                k.nameLay->GetMetrics(&tm);
-                k.nameH = tm.height;
-            }
-            RecordGlyphRuns(k.nameLay.Get(), k.nameRuns);
+        const float avail = rw * 0.86f / scale;   // verfuegbare Zeilenbreite in Bezugsgroesse
+        k.nameUse = frame_;
+        // Umbrueche nur in festen Stufen (je 25 % breiter): beim Zoomen aendern sie sich selten, und passt der Name in
+        // eine Zeile, nie mehr. Breiter wird erst gewechselt, wenn mehr als eine Stufe Platz gewonnen ist (kein Hin
+        // und Her an der Grenze); schmaler sofort, sobald die alte Zeile nicht mehr passt.
+        if (k.nameNat < 0) k.nameNat = r_.TextWidthFast(e->name, fsRef) * 1.08f + 4.0f;   // halbfett etwas breiter
+        constexpr int kSingle = 1000;
+        auto stepW = [](int L) { return 20.0f * std::pow(1.25f, static_cast<float>(L)); };
+        int want;
+        float wantW;
+        if (k.nameNat <= avail) {
+            want = kSingle;
+            wantW = k.nameNat;
+        } else {
+            want = avail > 20 ? std::clamp(static_cast<int>(std::floor(std::log(avail / 20.0f) / std::log(1.25f))), 0, 40) : 0;
+            wantW = stepW(want);
         }
+        bool fits = k.nameLay && k.nameW <= avail + 0.5f;
+        if (fits && want != k.nameBucket && avail < k.nameW * 1.3f) {   // bisherige Umbrueche behalten
+            want = k.nameBucket;
+            wantW = k.nameW;
+        }
+        if (want != k.nameBucket || !k.nameLay) {
+            // Zeitbudget: hoechstens etwa 1,5 ms je Bild fuer neue Umbrueche (mindestens 4), der Rest im naechsten Bild
+            if (cloud_.nameMade < 4 || NowMs() - cloud_.nameT0 < 1.5) {
+                ++cloud_.nameMade;
+                k.nameBucket = want;
+                k.nameW = wantW;
+                k.nameLay.Reset();
+                k.nameH = 0;
+                IDWriteTextFormat* tf = r_.TextWrap(fsRef, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+                if (tf && SUCCEEDED(r_.dwrite()->CreateTextLayout(e->name.c_str(), static_cast<UINT32>(e->name.size()), tf,
+                                                                  wantW, fsRef * 2.75f, &k.nameLay))) {
+                    k.nameLay->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);   // lange Namen ohne Leerzeichen brechen
+                    DWRITE_TRIMMING trim = {DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
+                    if (!cloud_.ellipsis) r_.dwrite()->CreateEllipsisTrimmingSign(tf, &cloud_.ellipsis);
+                    k.nameLay->SetTrimming(&trim, cloud_.ellipsis.Get());
+                    DWRITE_TEXT_METRICS tm{};
+                    k.nameLay->GetMetrics(&tm);
+                    k.nameH = tm.height;
+                }
+                RecordGlyphRuns(k.nameLay.Get(), k.nameRuns);
+            } else {
+                cloud_.namePending = true;
+                // bis dahin die bisherigen Umbrueche, falls noetig etwas kleiner, damit sie auf die Karte passen
+                if (k.nameLay && k.nameW > avail) scale *= avail / k.nameW;
+            }
+        }
+        const float wRef = k.nameW;
         if (IDWriteTextLayout* lay = k.nameLay.Get()) {
             // Texthoehe weich angleichen: wechselt der Name beim Zoomen zwischen ein und zwei Zeilen, gleitet das
             // Symbol an seine neue Hoehe statt zu springen
@@ -742,10 +932,11 @@ void App::CloudFillAtlas(ID2D1DeviceContext* dc) {
     struct Job { int card; int face; };
     std::vector<Job> jobs;
     const size_t maxJobs = 160;
-    std::vector<char> visited(c.cards.size(), 0);
+    if (c.fillStamp.size() != c.cards.size()) c.fillStamp.assign(c.cards.size(), 0);
+    ++c.fillMark;
     auto consider = [&](int ci, int prio) {
-        if (ci < 0 || ci >= static_cast<int>(c.cards.size()) || visited[ci]) return;
-        visited[ci] = 1;
+        if (ci < 0 || ci >= static_cast<int>(c.cards.size()) || c.fillStamp[ci] == c.fillMark) return;
+        c.fillStamp[ci] = c.fillMark;
         CloudCard& k = c.cards[ci];
         if (k.leaving || k.face == 2) return;
         auto it = byPath_.find(k.path);
@@ -767,7 +958,24 @@ void App::CloudFillAtlas(ID2D1DeviceContext* dc) {
         if (face > k.face && jobs.size() < maxJobs) jobs.push_back({ci, face});
     };
     for (auto it = c.drawn.rbegin(); it != c.drawn.rend(); ++it) consider(it->card, 1);
-    for (int ci : c.order) consider(ci, 2);
+    // gerade eingetroffene Vorschaubilder sofort uebernehmen (bevor der Speicher sie wieder verdraengt)
+    size_t ai = 0;
+    for (; ai < c.arrived.size() && jobs.size() < maxJobs; ++ai) {
+        auto it = c.index.find(c.arrived[ai]);
+        if (it != c.index.end()) consider(it->second, 2);
+    }
+    c.arrived.erase(c.arrived.begin(), c.arrived.begin() + static_cast<std::ptrdiff_t>(ai));
+    // Karten ausserhalb des Bildes: je Bild nur ein Abschnitt (reihum). Jede Pruefung sucht ueber den Dateipfad;
+    // bei 100.000 Karten waere ein voller Durchlauf je Bild der groesste Posten.
+    const size_t no = c.order.size();
+    if (no) {
+        if (c.fillCursor >= no) c.fillCursor = 0;
+        size_t scan = std::min<size_t>(no, 3000);
+        for (size_t i = 0; i < scan && jobs.size() < maxJobs; ++i) {
+            consider(c.order[c.fillCursor], 2);
+            if (++c.fillCursor >= no) c.fillCursor = 0;
+        }
+    }
     bool repack = c.needRepack && GetTickCount() - c.lastRepack > 1500;
     if (jobs.empty() && !repack) return;
 
@@ -808,8 +1016,15 @@ void App::CloudFillAtlas(ID2D1DeviceContext* dc) {
                     auto it = byPath_.find(k.path);
                     auto bi = bmps_.find(k.path);
                     float a = CardAspect(it != byPath_.end() ? &entries_[it->second] : nullptr, bi != bmps_.end() ? &bi->second : nullptr);
-                    k.tw = std::sqrt(a);
-                    k.th = 1.0f / std::sqrt(a);
+                    float tw = std::sqrt(a), th = 1.0f / std::sqrt(a);
+                    if (tw != k.tw || th != k.th) {   // Karte nimmt die neue Form an: wieder in Bewegung
+                        k.tw = tw;
+                        k.th = th;
+                        if (c.allActive || c.active.size() > 4096) c.allActive = true;
+                        else if (std::find(c.active.begin(), c.active.end(), j.card) == c.active.end()) c.active.push_back(j.card);
+                        c.grid.valid = false;
+                        StartAnimation();
+                    }
                 }
                 CloudDrawFace(dc, k, cell, false);
                 if (geo) dc->PopLayer();
@@ -924,14 +1139,23 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
     dc->PushAxisAlignedClip(v, D2D1_ANTIALIAS_MODE_ALIASED);
 
     struct Seg { int start = 0, count = 0; ID2D1Bitmap1* bmp = nullptr; int direct = -1; D2D1_RECT_F rc{}; float alpha = 1, fog = 0; };
-    std::vector<D2D1_RECT_F> dst;
-    std::vector<D2D1_RECT_U> src;
-    std::vector<D2D1_COLOR_F> col;
+    // Listen bleiben ueber die Bilder erhalten (bei 100.000 Karten sonst mehrere MB Speicheranforderung je Bild)
+    std::vector<D2D1_RECT_F>& dst = c.sDst;
+    std::vector<D2D1_RECT_U>& src = c.sSrc;
+    std::vector<D2D1_COLOR_F>& col = c.sCol;
+    dst.clear();
+    src.clear();
+    col.clear();
     std::vector<Seg> segs;
-    dst.reserve(c.cards.size() * 3);
-    src.reserve(c.cards.size() * 3);
-    col.reserve(c.cards.size() * 3);
     c.drawn.clear();
+    // Dateinamen: Zeitbudget fuer neue Umbrueche in diesem Bild
+    c.nameT0 = NowMs();
+    c.nameMade = 0;
+    c.namePending = false;
+    // Ruhezustand: nur Karten anfassen, die im Blickfeld liegen koennen
+    if (!c.grid.valid && !c.allActive && !c.posMoving) CloudBuildGrid();
+    const bool cull = c.grid.valid;
+    if (cull) CloudMarkVisible();
     std::unordered_set<std::wstring> wantFull;
 
     auto addSprite = [&](ID2D1Bitmap1* bmp, const D2D1_RECT_F& d, const D2D1_RECT_U& s, const D2D1_COLOR_F& cc) {
@@ -1029,12 +1253,18 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
     for (size_t i = 0; i < c.cards.size(); ++i)
         if (c.cards[i].leaving) drawCard(static_cast<int>(i));
     if (c.strips.empty()) {
-        for (auto it = c.order.rbegin(); it != c.order.rend(); ++it) drawCard(*it);
+        for (auto it = c.order.rbegin(); it != c.order.rend(); ++it)
+            if (!cull || c.visStamp[*it] == c.stamp) drawCard(*it);
     } else {
         // Streifen: Rang und Tiefe laufen je Gruppe neu, deshalb nach der aktuellen Tiefe zeichnen (hinten zuerst)
-        std::vector<int> seq = c.order;
-        std::stable_sort(seq.begin(), seq.end(), [&](int a, int b) { return c.cards[a].z > c.cards[b].z; });
-        for (int ci : seq) drawCard(ci);
+        if (cull) {   // Raster: Karten liegen schon nach Tiefe sortiert vor
+            for (auto it = c.grid.byZ.rbegin(); it != c.grid.byZ.rend(); ++it)
+                if (c.visStamp[*it] == c.stamp) drawCard(*it);
+        } else {
+            std::vector<int> seq = c.order;
+            std::stable_sort(seq.begin(), seq.end(), [&](int a, int b) { return c.cards[a].z > c.cards[b].z; });
+            for (int ci : seq) drawCard(ci);
+        }
     }
 
     ComPtr<ID2D1DeviceContext3> dc3;
@@ -1130,6 +1360,16 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
         perfCount_[4] = static_cast<int>(dst.size());
     }
     if (c.nameMoving) StartAnimation();   // Symbole gleiten noch an ihre Hoehe
+    if (c.namePending) InvalidateRect(hwnd_, nullptr, FALSE);   // restliche Umbrueche im naechsten Bild
+    // Dateinamen ferner Karten freigeben (Speicher waechst sonst bei einem Flug durch grosse Wolken stetig)
+    if ((frame_ & 63) == 0)
+        for (auto& k : c.cards)
+            if (k.nameLay && k.nameUse + 240 < frame_) {
+                k.nameLay.Reset();
+                GlyphRuns().runs.swap(k.nameRuns.runs);
+                k.nameBucket = -1;
+                k.nameHs = -1;
+            }
     if (runs > 48) c.needRepack = true;
 
     // nicht mehr benoetigte Bilder in voller Aufloesung freigeben (der Betrachter verwaltet seine eigenen)

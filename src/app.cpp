@@ -2036,16 +2036,20 @@ DWORD App::OnDragOver(const std::vector<std::wstring>& paths, POINT screen, DWOR
         // Ablegen auf ein Pfad-Element: dorthin kopieren oder verschieben
         crumb = h->a;
         eff = CrumbDropEffect(paths, crumbPaths_[h->a], keys, allowed);
-    } else if (!ownDrag_) {
-        if (SidebarWidth() > 1 && x < SidebarWidth() && y > topH_) {
+    } else if (SidebarWidth() > 1 && x < SidebarWidth() && y > topH_) {
+        // freie Flaeche der Seitenleiste: Ordner als Sammlung hinzufuegen
+        if (!ownDrag_)
             for (auto& p : paths)
                 if (DirectoryExists(p)) { side = true; break; }
-            eff = side ? DROPEFFECT_LINK : DROPEFFECT_NONE;
-        } else {
-            eff = DROPEFFECT_LINK;   // oeffnen
+        eff = side ? ((allowed & DROPEFFECT_LINK) ? DROPEFFECT_LINK : (allowed & DROPEFFECT_COPY)) : DROPEFFECT_NONE;
+    } else if (!ownDrag_ && x >= gridRc_.left && x < gridRc_.right && y >= gridRc_.top && y < gridRc_.bottom) {
+        // freie Flaeche der Dateiansicht: in den angezeigten Ordner kopieren bzw. verschieben (Ablegen oeffnet nie
+        // etwas; Oeffnen mit peek geht ueber das Kontextmenue des Explorers). Ziel in der Pfadleiste hervorheben.
+        std::wstring target;
+        if (CurrentFolderTarget(target)) {
+            eff = CrumbDropEffect(paths, target, keys, allowed);
+            if (eff != DROPEFFECT_NONE && !crumbPaths_.empty()) crumb = static_cast<int>(crumbPaths_.size()) - 1;
         }
-        if (eff == DROPEFFECT_LINK && !(allowed & DROPEFFECT_LINK))
-            eff = (allowed & DROPEFFECT_COPY) ? DROPEFFECT_COPY : (allowed & DROPEFFECT_MOVE);
     }
     if (crumb != dropCrumb_ || side != dropSidebar_) {
         dropCrumb_ = crumb;
@@ -2060,12 +2064,14 @@ DWORD App::OnDrop(const std::vector<std::wstring>& paths, POINT screen, DWORD ke
     ScreenToClient(hwnd_, &pt);
     float x = pt.x / r_.scale(), y = pt.y / r_.scale();
     const Hit* h = HitAt(x, y);
-    bool hadTarget = dropPos_ >= 0 || dropSideItem_ >= 0;
-    dropPos_ = dropSideItem_ = -1;
+    dropPos_ = dropSideItem_ = dropCrumb_ = -1;
+    dropSidebar_ = dropBookmarks_ = false;
     InvalidateRect(hwnd_, nullptr, FALSE);
     std::wstring folderTarget;
     int fPos = -1, fSide = -1;
-    if (hadTarget && FolderDropTarget(x, y, folderTarget, fPos, fSide)) {
+    // (die Hervorhebung ist hier schon zurueckgesetzt: das Ziel wird neu bestimmt, wie in OnDragOver)
+    bool onBookmarks = h && h->type == HitType::SidebarItem && sidebar_[h->a].kind == SidebarItem::Bookmarks;
+    if (!onBookmarks && FolderDropTarget(x, y, folderTarget, fPos, fSide)) {
         DWORD e = CrumbDropEffect(paths, folderTarget, keys, allowed);
         if (e == DROPEFFECT_NONE) return e;
         fileOps_.push_back({paths, folderTarget, e == DROPEFFECT_MOVE});
@@ -2086,19 +2092,28 @@ DWORD App::OnDrop(const std::vector<std::wstring>& paths, POINT screen, DWORD ke
     }
     if (ownDrag_) return DROPEFFECT_NONE;
     if (SidebarWidth() > 1 && x < SidebarWidth() && y > topH_) {
+        bool any = false;
         for (auto& p : paths)
-            if (DirectoryExists(p)) AddCollection(p);
+            if (DirectoryExists(p)) { AddCollection(p); any = true; }
+        if (!any) return DROPEFFECT_NONE;
         return DROPEFFECT_LINK & allowed ? DROPEFFECT_LINK : DROPEFFECT_COPY;
     }
-    const std::wstring& first = paths.front();
-    if (!IsLocalDrivePath(first)) {
-        SetStatus(T(L"Nur Dateien auf Laufwerken mit Buchstaben werden unterstützt."));
-        return DROPEFFECT_NONE;
+    // freie Flaeche: in den angezeigten Ordner (aus jeder App und jedem anderen peek-Fenster)
+    std::wstring target;
+    if (x >= gridRc_.left && x < gridRc_.right && y >= gridRc_.top && y < gridRc_.bottom && CurrentFolderTarget(target)) {
+        DWORD e = CrumbDropEffect(paths, target, keys, allowed);
+        if (e == DROPEFFECT_NONE) return e;
+        fileOps_.push_back({paths, target, e == DROPEFFECT_MOVE});
+        PostMessageW(hwnd_, WM_APP_FILEOP, 0, 0);
+        return e;
     }
-    if (DirectoryExists(first)) Navigate(first);
-    else Navigate(ParentPath(first), true, first);
-    SetForegroundWindow(hwnd_);
-    return (allowed & DROPEFFECT_LINK) ? DROPEFFECT_LINK : DROPEFFECT_COPY;
+    return DROPEFFECT_NONE;
+}
+
+bool App::CurrentFolderTarget(std::wstring& target) const {
+    if (collectionsView_ || bookmarksView_ || path_.empty() || !IsLocalDrivePath(path_) || !DirectoryExists(path_)) return false;
+    target = path_;
+    return true;
 }
 
 // Ordner unter dem Mauszeiger als Ablageziel: Ordner-Kachel/-Zeile der Ansicht oder Ordner der Seitenleiste

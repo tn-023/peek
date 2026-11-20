@@ -157,7 +157,7 @@ Daten liegen in `%LOCALAPPDATA%\peek`. Mit einer leeren Datei `peek.portable` ne
 - **Vergleichen:** zwei Bilder nebeneinander, Zoom synchron. Oder übereinander mit Trennlinie am Mauszeiger.
 - **Kontaktabzug:** A4 hoch/quer, Raster frei wählbar, Bilder per Ziehen sortieren. PDF mit eingebetteter Schrift.
 - **Kacheltextur:** PNG-Sequenz zu einer PNG, pixelgenau. 8 und 16 Bit, Transparenz bleibt.
-- **Dateien:** Umbenennen, Eigenschaften, Öffnen mit, Kopieren, Einfügen, Ziehen auf Ordner, Papierkorb.
+- **Dateien:** Umbenennen, Eigenschaften, Öffnen mit, Kopieren, Einfügen, Ziehen auf Ordner oder in den geöffneten Ordner (auch zwischen peek-Fenstern), Papierkorb.
 - **Laufwerke:** lokale Laufwerke und eingebundene Netzlaufwerke (mit Laufwerksbuchstaben); nur online verfügbare Cloud-Dateien bekommen kein Vorschaubild.
 - **Sandbox:** Dekoder laufen in AppContainer-Prozessen. Eine präparierte Datei kann weder ins Netz noch an andere Dateien.
 - **Index verschlüsselt:** Pfade und Vorschaubilder nur verschlüsselt gespeichert, an das Windows-Konto gebunden. Gelöschtes verschwindet auch aus dem Index.

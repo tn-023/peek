@@ -159,7 +159,7 @@ Data is stored in `%LOCALAPPDATA%\peek`. With an empty file `peek.portable` next
 - **Compare:** two images side by side with synchronized zoom, or overlaid with a divider at the mouse pointer.
 - **Contact sheet:** A4 portrait/landscape, freely chosen grid, reorder images by dragging. PDF with embedded font.
 - **Tile texture:** PNG sequence to a single PNG, pixel-exact. 8 and 16 bit, transparency preserved.
-- **Files:** rename, properties, open with, copy, paste, drag onto folders, recycle bin.
+- **Files:** rename, properties, open with, copy, paste, drag onto folders or into the open folder (also between peek windows), recycle bin.
 - **Drives:** local drives and mapped network drives (with a drive letter); online-only cloud files get no thumbnail.
 - **Sandbox:** decoders run in AppContainer processes. A crafted file can reach neither the network nor other files.
 - **Encrypted index:** paths and thumbnails are stored only in encrypted form, bound to the Windows account. Deleted files also disappear from the index.

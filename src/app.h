@@ -569,6 +569,7 @@ private:
 
     // Ansicht
     std::wstring path_;
+    bool CurrentFolderTarget(std::wstring& target) const;   // angezeigter Ordner als Ablageziel (nicht Lesezeichen/Sammlungen)
     bool collectionsView_ = false;
     bool bookmarksView_ = false;
     D2D1_RECT_F bookmarkBarRc_{};

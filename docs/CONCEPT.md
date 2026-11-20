@@ -360,8 +360,8 @@ A single window with header, filter bar, grid and status bar; the sidebar on the
 
 **Drag & drop**
 
-- **In:** folder onto empty space → open; onto the sidebar → add as a collection; onto "Merkliste" → add to bookmarks; files → open their folder and select the file.
-- **Onto folders:** dragging files or folders onto a folder in the view, a folder/drive/collection in the sidebar or a segment of the path bar copies or moves them there (same drive: move, otherwise copy; `Ctrl` = copy, `Shift` = move; the target is highlighted) – also from within peek. Executed via `IFileOperation` with progress dialog and undo; the view is then updated without jumping.
+- **In (since 1.6.6):** dropping never opens anything in peek – opening is done via "Open with peek" in the Explorer context menu. Files or folders dropped onto the empty space of the file view are copied or moved into the folder shown (from any app and from another peek window; same rules as onto folders, the target is highlighted in the path bar; not in the bookmarks or collections view, and not within the same window). Folders dropped onto the empty space of the sidebar are added as collections; onto "Merkliste" → add to bookmarks.
+- **Onto folders:** dragging files or folders onto a folder in the view, a folder/drive/collection in the sidebar or a segment of the path bar copies or moves them there (same drive: move, otherwise copy; `Ctrl` = copy, `Shift` = move; the target is highlighted) – also from within peek and between peek windows. Executed via `IFileOperation` with progress dialog and undo; the view is then updated without jumping.
 - **Out:** `SHDoDragDrop` with the shell items of the selection; targets such as Explorer, mail programs or image editors receive real file paths.
 - Additionally: `Ctrl+C` copies files to the clipboard, `Ctrl+Shift+C` the path, `Ctrl+V` pastes files from the clipboard into the current folder (cut files are moved).
 

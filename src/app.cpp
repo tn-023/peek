@@ -503,9 +503,10 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             break;
         case kTimerViewerClick:
             KillTimer(hwnd_, kTimerViewerClick);
-            if (viewer_.open && !viewer_.shell) {   // aus dem Explorer geoeffnet: Leiste bleibt
+            if (viewer_.open) {
                 viewer_.bar = !viewer_.bar;
-                settings_.viewerBar = viewer_.bar;   // fuer das naechste Oeffnen merken
+                // fuer das naechste Oeffnen merken (nicht beim Start aus dem Explorer: dort beginnt die Leiste immer sichtbar)
+                if (!viewer_.shell) settings_.viewerBar = viewer_.bar;
                 InvalidateRect(hwnd_, nullptr, FALSE);
             }
             break;

@@ -93,7 +93,7 @@ private:
     float alpha_ = 1;       // Deckkraft des Inhalts (Einblenden)
 
 public:
-    bool fade = false;      // Kontextmenue (an der Mausposition): einblenden statt hereinschieben
+    bool fade = false;      // Kontextmenue (an der Mausposition): ohne Animation (nur seine Untermenues gleiten)
     int pendingSub_ = -2;   // Eintrag, dessen Untermenue nach kSubDelay auf- bzw. das bisherige zuklappen soll
 };
 
@@ -176,24 +176,17 @@ bool PopupMenu::Open(HWND owner, const std::vector<MenuItem>& items, POINT pt, c
     r_.Resize();
     full_ = {x, yy, x + wpx, yy + hpx};
     up_ = up;
-    // Kontext- und Untermenues blenden sehr schnell ein, aufklappende Menues schieben sich herein
-    slide_ = !beside && !fade;
+    // Aufklappende Menues und Untermenues (etwa "Oeffnen mit") schieben sich herein; Kontextmenues erscheinen sofort
+    slide_ = beside || !fade;
+    if (beside) up = false;   // Untermenue: von seiner Oberkante aus
     if (slide_) {
         Paint();   // ganzer Inhalt, bevor das Fenster sichtbar wird
         SetWindowPos(hwnd_, nullptr, x, up ? yy + hpx - 1 : yy, wpx, 1, SWP_NOACTIVATE | SWP_NOZORDER);
         ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
         SlideWindow(hwnd_, r_, full_, up, true, 120);
     } else {
-        alpha_ = 0;
-        Paint();
         ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
-        const double t0 = PopupNowMs();
-        for (;;) {
-            double u = std::clamp((PopupNowMs() - t0) / 70.0, 0.0, 1.0);
-            alpha_ = static_cast<float>(1.0 - (1.0 - u) * (1.0 - u));
-            Paint();   // wartet selbst auf den Takt des Bildschirms
-            if (u >= 1.0) break;
-        }
+        Paint();
     }
     alpha_ = 1;
     return true;
@@ -202,17 +195,7 @@ bool PopupMenu::Open(HWND owner, const std::vector<MenuItem>& items, POINT pt, c
 void PopupMenu::Close(bool animate) {
     CloseSub();
     if (hwnd_ && animate && IsWindowVisible(hwnd_)) {
-        if (slide_) {
-            SlideWindow(hwnd_, r_, full_, up_, false, 90);
-        } else {
-            const double t0 = PopupNowMs();
-            for (;;) {
-                double u = std::clamp((PopupNowMs() - t0) / 50.0, 0.0, 1.0);
-                alpha_ = static_cast<float>(1.0 - u);
-                Paint();
-                if (u >= 1.0) break;
-            }
-        }
+        if (slide_) SlideWindow(hwnd_, r_, full_, up_, false, 90);
     }
     if (hwnd_) {
         DestroyWindow(hwnd_);
@@ -697,7 +680,7 @@ void PanelHost::Paint() {
 UINT ShowPopupMenu(HWND owner, const std::vector<MenuItem>& items, POINT screen, const D2D1_COLOR_F& accent) {
     if (items.empty()) return 0;
     PopupMenu menu;
-    // an der Mausposition geoeffnet = Kontextmenue (einblenden); sonst unter einem Knopf (hereinschieben)
+    // an der Mausposition geoeffnet = Kontextmenue (erscheint sofort); sonst unter einem Knopf (schiebt sich herein)
     POINT cur;
     if (GetCursorPos(&cur) && std::abs(cur.x - screen.x) <= 2 && std::abs(cur.y - screen.y) <= 2) menu.fade = true;
     return menu.Run(owner, items, screen, accent);

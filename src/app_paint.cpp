@@ -2300,7 +2300,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
     // aus dem Explorer geoeffnet: grosser "Zurueck"-Knopf in der Ecke links oben (wie das X rechts)
     const float backW = viewer_.shell ? 56.0f : 0.0f;
     if (backW > 0) nameW = std::max(80.0f, nameW - backW + 4);
-    UiAnim(viewer_.barAnim, viewer_.bar && !viewer_.crop, 140.0f);   // Leiste gleitet herein bzw. hinaus
+    UiAnim(viewer_.barAnim, viewer_.bar && !viewer_.crop, 80.0f);   // Leiste gleitet herein bzw. hinaus (sehr kurz)
     const float ba = EaseOut(viewer_.barAnim);
     if (viewer_.bar || ba > 0) {
         nameH = r_.MeasureWrapped(e.name, fnw, nameW);
@@ -2308,9 +2308,15 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
     }
     const float by = -(1.0f - ba) * barH;   // Verschiebung der Leiste nach oben
     if (InfoWidth() > 0.5f) {
-        float panelTop = 48.0f + (barH - 48.0f) * ba;
-        if (panelTop > ba * barH)   // Teil oben, den die Leiste (gerade) nicht bedeckt
-            dc->FillRectangle(D2D1::RectF(VW, ba * barH, W_, panelTop), r_.Brush(D2D1::ColorF(0.11f, 0.11f, 0.11f, 0.96f)));
+        // auf ganze Pixel: der Streifen oben und das Panel stossen ohne Naht aneinander (sonst duenne helle Linie)
+        const float px = r_.scale();
+        float panelTop = std::round((48.0f + (barH - 48.0f) * ba) * px) / px;
+        float covered = std::round(ba * barH * px) / px;   // Teil oben, den die Leiste (gerade) bedeckt
+        if (panelTop > covered) {
+            dc->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
+            dc->FillRectangle(D2D1::RectF(VW, covered, W_, panelTop), r_.Brush(D2D1::ColorF(0.11f, 0.11f, 0.11f, 0.96f)));
+            dc->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+        }
         PaintInfoPanel(dc, D2D1::RectF(VW, panelTop, W_, H_), InfoSelection(), true);
     }
 

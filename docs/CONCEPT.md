@@ -120,7 +120,7 @@ peek runs from a USB stick or any folder, writes nothing to the registry or syst
 - Application manifest: `requestedExecutionLevel level="asInvoker"`, `supportedOS` Windows 10/11, `dpiAwareness PerMonitorV2`, `longPathAware true`, UTF-8 code page.
 - Code signing with a dedicated certificate is recommended so that SmartScreen and virus scanners do not block the EXE.
 
-**App icon and logo:** the designed "p" with a blue gradient from `assets/peek-icon.svg`, stored as `assets/peek.ico` (16–256 px, PNG entries) in the repository; it appears on the EXE in Explorer, in the title bar and taskbar and in Alt+Tab. "Über peek" (About peek) shows the logo with wordmark in a light and a dark variant (SVG as a program resource, drawn with Direct2D's SVG renderer). On the first start of a new build, peek refreshes the Windows icon cache for the EXE.
+**App icon and logo:** the designed "p" with a blue gradient from `assets/peek-icon.svg`, stored as `assets/peek.ico` (16–256 px, PNG entries) in the repository; it appears on the EXE in Explorer, in the title bar and taskbar and in Alt+Tab. "About peek" shows the logo with wordmark in a light and a dark variant (SVG as a program resource, drawn with Direct2D's SVG renderer). On the first start of a new build, peek refreshes the Windows icon cache for the EXE.
 
 **Data storage**
 
@@ -185,7 +185,7 @@ The GPU draws only what is visible, from textures already in graphics memory; th
 
 The indexer works only while peek is open, at background priority, and after a restart continues exactly where it left off.
 
-**Libraries:** the user adds root folders as "Sammlungen" (collections), by drag & drop or via the menu. Only these are fully indexed; any other folder can still be browsed and is captured temporarily when opened. All file types are recorded, image and video metadata only for the supported formats. Only local drives are allowed (GetDriveTypeW: DRIVE\_FIXED, DRIVE\_REMOVABLE).
+**Libraries:** the user adds root folders as "Collections", by drag & drop or via the menu. Only these are fully indexed; any other folder can still be browsed and is captured temporarily when opened. All file types are recorded, image and video metadata only for the supported formats. Only local drives are allowed (GetDriveTypeW: DRIVE\_FIXED, DRIVE\_REMOVABLE).
 
 **Three passes**
 
@@ -241,28 +241,28 @@ peek derives filter terms purely statistically and locally from file names, fold
 
 **1. Tokenization**
 
-- Split at separators (`_ - . , ( ) [ ]` and spaces), at case changes (`SommerUrlaub` → `sommer`, `urlaub`) and at letter/digit boundaries (`img2041` → `img`, `2041`).
-- Normalize: lowercase, Unicode NFC, merge umlaut variants (`muenchen` = `münchen`).
-- Folder names in the path are carried as a separate source (source "Ordner"/folder), EXIF fields as source "Metadaten"/metadata (e.g. `Fujifilm X-T5`, `35 mm`).
+- Split at separators (`_ - . , ( ) [ ]` and spaces), at case changes (`SummerVacation` → `summer`, `vacation`) and at letter/digit boundaries (`img2041` → `img`, `2041`).
+- Normalize: lowercase, Unicode NFC, merge umlaut variants (e.g. `muenchen` = `münchen`).
+- Folder names in the path are carried as a separate source (source "Folder"), EXIF fields as source "Metadata" (e.g. `Fujifilm X-T5`, `35 mm`).
 
 **2. Detection of typical patterns**
 
 | Pattern | Example | Result |
 | --- | --- | --- |
 | Date in the name | `20240817_143012.jpg`, `2024-08-17` | Date as a filter value; compared with the EXIF date |
-| Camera/device prefix | `IMG_`, `DSC_`, `PXL_`, `DJI_`, `GOPR` | Facet "Quelle" (source) |
-| Screenshots & messengers | `Screenshot`, `WhatsApp Image` | Facet "Quelle" (source) |
-| Sequence numbers | `Urlaub (12).jpg`, `_0042` | Removed, not counted as a term |
-| Edit variants | `_edit`, `-bearbeitet`, `_v2`, `(1)` | Facet "Variante" (variant), grouped with the original |
+| Camera/device prefix | `IMG_`, `DSC_`, `PXL_`, `DJI_`, `GOPR` | Facet "Source" |
+| Screenshots & messengers | `Screenshot`, `WhatsApp Image` | Facet "Source" |
+| Sequence numbers | `Vacation (12).jpg`, `_0042` | Removed, not counted as a term |
+| Edit variants | `_edit`, `-edited`, `-bearbeitet`, `_v2`, `(1)` | Facet "Variant", grouped with the original |
 | Resolution in the name | `4k`, `1920x1080` | Compared with the actual resolution |
 
-**3. Name templates:** digit sequences are replaced by `#`, recognized dates by `{Datum}` (`IMG_20240817_1430.jpg` → `IMG_{Datum}_####`). Identical templates form groups that can be selected as their own facet.
+**3. Name templates:** digit sequences are replaced by `#`, recognized dates by `{date}` (`IMG_20240817_1430.jpg` → `IMG_{date}_####`). Identical templates form groups that can be selected as their own facet.
 
 **4. Weighting and sorting of terms**
 
 - The document frequency (df) per term is counted relative to the current view (folder, collection or search result).
-- Shown are terms with df ≥ 3 that do not occur in more than 80 % of the view (otherwise not distinctive), excluding stop words (`img`, `jpg`, `copy`, `kopie` …) and pure numbers.
-- Sorted by df descending by default, switchable to alphabetical; terms that often occur together (e.g. `italien` + `rom`) are suggested as a refinement when one of them is selected.
+- Shown are terms with df ≥ 3 that do not occur in more than 80 % of the view (otherwise not distinctive), excluding stop words (`img`, `jpg`, `copy` and its German form `kopie` …) and pure numbers.
+- Sorted by df descending by default, switchable to alphabetical; terms that often occur together (e.g. `italy` + `rome`) are suggested as a refinement when one of them is selected.
 - Users can hide or rename terms; these rules are stored in the settings.
 
 **5. Incremental maintenance:** tokens are written per file during indexing; df values per collection are maintained in the database and, for folder or search views, computed in memory from the column store (histogram over the token IDs of the visible matches, < 20 ms for 100,000 files).
@@ -277,14 +277,14 @@ Search and filters run against an in-memory column store that is loaded from SQL
 
 | Filter | Operation | Examples |
 | --- | --- | --- |
-| Date | Quick choices in the menu; "Individuell" (custom) opens the date picker (years › months › days, click or drag). Same for "Aufgenommen" (captured; only files with a capture date) | Today, last 7 days, 2024, Aug 2024 |
-| Size | Levels in the menu, free via search (`Größe:>10mb`) | < 1 MB, 1–10 MB, > 100 MB |
-| Name | Text field, substring, wildcards `*` `?` | `urlaub*`, `*_edit` |
+| Date | Quick choices in the menu; "Custom" opens the date picker (years › months › days, click or drag). Same for "Captured" (only files with a capture date) | Today, last 7 days, 2024, Aug 2024 |
+| Size | Levels in the menu, free via search (`Size:>10mb`) | < 1 MB, 1–10 MB, > 100 MB |
+| Name | Text field, substring, wildcards `*` `?` | `vacation*`, `*_edit` |
 | Resolution | Levels and megapixels | < HD, HD, Full HD, 4K, > 20 MP |
 | Orientation | Portrait, landscape, square, panorama (> 2:1) |  |
 | Type | Folder, image, video, PDF, Photoshop, Illustrator, other file; extension via search | JPG, PNG, WebP, AVIF, MP4, PDF, PSD, AI |
 | Camera & lens | Facet list from EXIF | Fujifilm X-T5, 35 mm |
-| Recognized terms | Chips from pattern recognition, by frequency | `rom`, `hochzeit`, Screenshot |
+| Recognized terms | Chips from pattern recognition, by frequency | `rome`, `wedding`, Screenshot |
 | More | Duration (video), rating, with/without GPS, duplicates |  |
 
 Every facet value shows the number of matches under the currently active other filters, so empty results are avoided.
@@ -292,16 +292,16 @@ Every facet value shows the number of matches under the currently active other f
 **Query syntax in the search field** (optional, free text is enough)
 
 ```text
-rom urlaub                       terms, combined with AND
-"hochzeit anna"                  exact phrase
-Breite:>3000 Höhe:>2000          width / height
+rome vacation                    terms, combined with AND
+"wedding anna"                   exact phrase
+Width:>3000 Height:>2000         width / height
 Megapixel:>=20                   megapixels
-Größe:>10mb                      file size
-Datum:2024-08..2024-09           time range (capture date, otherwise name/modification date)
-Aufgenommen:2024                 only files with a capture date
-Endung:jpg,png  Typ:Video        extension, type
-Kamera:x-t5                      camera
-Dauer:>60s                       video duration
+Size:>10mb                       file size
+Date:2024-08..2024-09            time range (capture date, otherwise name/modification date)
+Captured:2024                    only files with a capture date
+Extension:jpg,png  Type:Video    extension, type
+Camera:x-t5                      camera
+Duration:>60s                    video duration
 -screenshot                      exclusion
 
 Short forms still valid: w: h: mp: size: date: taken: ext: type: cam: dur:
@@ -323,10 +323,10 @@ A single window with header, filter bar, grid and status bar; the sidebar on the
 
 **Main window**
 
-- **Header (Mica):** sidebar on/off, back/forward/up, reload, path bar, search field on the right. Typing anywhere focuses the search; clicking into the search field shows the search parameters below it as blue pills (Breite, Höhe, Größe, Datum, Aufgenommen, Dauer, Endung, Kamera – width, height, size, date, captured, duration, extension, camera) and the last 10 searches (deletable individually or all at once). Double-click selects the whole search text.
-- **Filter bar:** one row of pills (type including PDF/Photoshop/Illustrator, date, captured, size, resolution, orientation, source, pattern, subfolders) and recognized terms. Date and captured additionally offer "Individuell" (custom): a date picker in the style of the menus (years › months › days, click or drag for a range, with match counts). "Unterordner" (subfolders) is switched off when changing folders.
-- **Sort:** always at the far right of the filter bar: name, date, size, resolution, type, captured, direction, and at the very bottom "Gruppieren" (group) – the view then gets group headers matching the sort criterion (initial letter, today/yesterday/month, size classes, resolution classes, file type; folders always as their own group).
-- **Sidebar on the left (`F9`, animated):** quick access with the **Merkliste** (bookmarks; add items via the context menu with a star or by dragging; own bar with "create contact sheet …" and "clear bookmarks"; when leaving, peek returns to the exact position), collections (sortable by dragging), drives. At the bottom left, the "Einstellungen" (settings) button.
+- **Header (Mica):** sidebar on/off, back/forward/up, reload, path bar, search field on the right. Typing anywhere focuses the search; clicking into the search field shows the search parameters below it as blue pills (width, height, size, date, captured, duration, extension, camera) and the last 10 searches (deletable individually or all at once). Double-click selects the whole search text.
+- **Filter bar:** one row of pills (type including PDF/Photoshop/Illustrator, date, captured, size, resolution, orientation, source, pattern, subfolders) and recognized terms. Date and captured additionally offer "Custom": a date picker in the style of the menus (years › months › days, click or drag for a range, with match counts). "Subfolders" is switched off when changing folders.
+- **Sort:** always at the far right of the filter bar: name, date, size, resolution, type, captured, direction, and at the very bottom "Group" – the view then gets group headers matching the sort criterion (initial letter, today/yesterday/month, size classes, resolution classes, file type; folders always as their own group).
+- **Sidebar on the left (`F9`, animated):** quick access with the **Bookmarks** (add items via the context menu with a star or by dragging; own bar with "create contact sheet …" and "clear bookmarks"; when leaving, peek returns to the exact position), collections (sortable by dragging), drives. At the bottom left, the "Settings" button.
 - **Thumbnail view (default):** tiles without border lines. Images, videos, PDF (first page), Photoshop and Illustrator with thumbnails – documents with the icon of their default app at the bottom right, shown as a large file icon until the thumbnail is ready –, all others with their file type icon; folders from 96 px with the thumbnail of a contained file; videos with a duration badge; bookmarked items with a white star at the top left. Names are wrapped in full.
 - **Details view:** sortable list with the columns name, date, type, size, resolution. Clicking a column header sorts, column widths can be dragged at the edge (never narrower than the header and the longest content; double-click: default width). Values are single-line and only clipped at the window edge.
 - **Image cloud (since 1.3):** third view between tiles and list, all items as a spatial pile (details below).
@@ -334,14 +334,14 @@ A single window with header, filter bar, grid and status bar; the sidebar on the
 - **Middle mouse button:** automatic scrolling as in a browser – hold and drag, or click briefly and scroll until the next click.
 - **Info panel on the right (animated):** via the i icon at the bottom right or `Ctrl+I`; shows preview, type, size, resolution, duration, page count (PDF), capture/modification date, camera, lens, aperture, exposure and ISO (read on demand from the file header in the sandbox, not stored in the index; since 1.6.2), source, name pattern and folder of the selection; for multiple selections a summary.
 - **Status bar (without border lines):** number of items; for the selection resolution, type and size; on the right status and index progress, then in fixed order zoom (minus – slider – plus, only in tile view), tile/list view and at the far right the i icon. Icons are white in dark mode and almost black in light mode.
-- **Animations (since 1.6.6):** drop-down menus, path lists, the "…" menu, the date picker and submenus (e.g. "Öffnen mit" in the context menu) slide in vertically (120 ms) and out (90 ms) from the edge they open at; context menus themselves appear and disappear without animation. The bar at the top of the image viewer slides in and out (80 ms; a single click toggles it after the double-click time, so that a double-click can zoom), the search history list under the search field slides as well (120 ms).
-- **Menus:** all drop-downs, path lists and context menus as separate popup windows with acrylic background and rounded corners, match counts or keyboard shortcuts on the right, app icons on the left (e.g. "Öffnen mit"/open with) and real **submenus** (open on hover, clearly visible arrow); keyboard operable, long lists scroll. Context menu with open with, Explorer, copy, copy path, paste, recycle bin, bookmarks, collection, contact sheet and (for folders) tile texture. Double-clicking a button acts like two clicks.
+- **Animations (since 1.6.6):** drop-down menus, path lists, the "…" menu, the date picker and submenus (e.g. "Open with" in the context menu) slide in vertically (120 ms) and out (90 ms) from the edge they open at; context menus themselves appear and disappear without animation. The bar at the top of the image viewer slides in and out (80 ms; a single click toggles it after the double-click time, so that a double-click can zoom), the search history list under the search field slides as well (120 ms).
+- **Menus:** all drop-downs, path lists and context menus as separate popup windows with acrylic background and rounded corners, match counts or keyboard shortcuts on the right, app icons on the left (e.g. "Open with") and real **submenus** (open on hover, clearly visible arrow); keyboard operable, long lists scroll. Context menu with open with, Explorer, copy, copy path, paste, recycle bin, bookmarks, collection, contact sheet and (for folders) tile texture. Double-clicking a button acts like two clicks.
 
 **Folder navigation**
 
 - **Path bar (not an input field):** clicking a segment opens the folder; the arrow after a segment drops down its subfolders as a list.
 - Double-click or `Enter` opens a folder; `Alt+↑` goes up one level; `Backspace`/`Alt+←` back; the mouse forward/back buttons move through the history.
-- The "Unterordner" (subfolders) switch (`Ctrl+R`) shows all files of the subtree flat.
+- The "Subfolders" switch (`Ctrl+R`) shows all files of the subtree flat.
 - Folders that are not indexed yet are shown immediately via a structure scan; metadata fills in in the background.
 
 **Built-in image viewer**
@@ -352,40 +352,40 @@ A single window with header, filter bar, grid and status bar; the sidebar on the
 - The info panel is also available in the viewer (button or `I`) and shows the data of the current image; it is linked to the panel of the overview.
 - Double-click toggles between fit and 100 %. Zoom with the mouse wheel, smoothly animated around a fixed point (no arc movement), `0` fit, `1` = 100 %, `R` rotates the display. Small images are shown at original size or fitted to the view, depending on the setting. `Del` moves the image to the recycle bin (brief notice at the top; the viewer stays open and shows the next or last image).
 - Navigation arrows at the far left and right edges, visible only after mouse movement and hidden again after 2 seconds; also arrow keys and the mouse forward/back buttons.
-- **Crop:** via the icon in the bar (image fitted slightly smaller) or directly by dragging with the middle mouse button; handles at corners and edges, rule-of-thirds lines, pixel size, bar with "Abbrechen" (cancel) and "Speichern" (save) (Enter/Esc). JPEG, PNG, BMP and TIFF are overwritten (original to the recycle bin, JPEG at 95 % with metadata), WebP, AVIF, HEIC, GIF and ICO saved as a PNG copy.
+- **Crop:** via the icon in the bar (image fitted slightly smaller) or directly by dragging with the middle mouse button; handles at corners and edges, rule-of-thirds lines, pixel size, bar with "Cancel" and "Save" (Enter/Esc). JPEG, PNG, BMP and TIFF are overwritten (original to the recycle bin, JPEG at 95 % with metadata), WebP, AVIF, HEIC, GIF and ICO saved as a PNG copy.
 - First the thumbnail from the cache, then the full image; neighboring images (±2) are decoded in advance.
-- **Smoothing:** in the context menu "Beim Vergrößern glätten" (smooth when enlarging): on = cubic interpolation when enlarging, off (default) = sharp pixels from 3× size. Also applies in compare.
+- **Smoothing:** in the context menu "Smooth when enlarging": on = cubic interpolation when enlarging, off (default) = sharp pixels from 3× size. Also applies in compare.
 - **SVG:** base image at 2048–4096 px; when the view is at rest and the base image is coarser than the screen, resvg renders the visible section in the background at screen resolution (sharp at every zoom level). Crop is hidden for SVG.
 - Future stages: tiling of very large images (over 16,384 px), animated GIF/WebP, color management via ICC profiles, HDR on HDR displays. If another app changes the folder, the viewer stays open.
 
-**Videos and documents external:** peek never plays videos itself. Double-click/`Enter` on a video, a PDF, Photoshop or Illustrator file or any other non-image file calls `ShellExecuteExW` with the verb `open` – this starts the default app configured in Windows. "Öffnen mit" (open with) lets you choose the other registered apps (`SHAssocEnumHandlers`, "choose another app" via `SHOpenWithDialog`).
+**Videos and documents external:** peek never plays videos itself. Double-click/`Enter` on a video, a PDF, Photoshop or Illustrator file or any other non-image file calls `ShellExecuteExW` with the verb `open` – this starts the default app configured in Windows. "Open with" lets you choose the other registered apps (`SHAssocEnumHandlers`, "choose another app" via `SHOpenWithDialog`).
 
 **Drag & drop**
 
-- **In (since 1.6.6):** dropping never opens anything in peek – opening is done via "Open with peek" in the Explorer context menu. Files or folders dropped onto the empty space of the file view are copied or moved into the folder shown (from any app and from another peek window; same rules as onto folders, the target is highlighted in the path bar; not in the bookmarks or collections view, and not within the same window). Folders dropped onto the empty space of the sidebar are added as collections; onto "Merkliste" → add to bookmarks.
+- **In (since 1.6.6):** dropping never opens anything in peek – opening is done via "Open with peek" in the Explorer context menu. Files or folders dropped onto the empty space of the file view are copied or moved into the folder shown (from any app and from another peek window; same rules as onto folders, the target is highlighted in the path bar; not in the bookmarks or collections view, and not within the same window). Folders dropped onto the empty space of the sidebar are added as collections; onto "Bookmarks" → add to bookmarks.
 - **Onto folders:** dragging files or folders onto a folder in the view, a folder/drive/collection in the sidebar or a segment of the path bar copies or moves them there (same drive: move, otherwise copy; `Ctrl` = copy, `Shift` = move; the target is highlighted) – also from within peek and between peek windows. Executed via `IFileOperation` with progress dialog and undo; the view is then updated without jumping.
 - **Out:** `SHDoDragDrop` with the shell items of the selection; targets such as Explorer, mail programs or image editors receive real file paths.
 - Additionally: `Ctrl+C` copies files to the clipboard, `Ctrl+Shift+C` the path, `Ctrl+V` pastes files from the clipboard into the current folder (cut files are moved).
 
 **File operations (deliberately minimal):** new folder (context menu of the empty space, `Ctrl+Shift+N`, then rename directly; since 1.6.2), delete to the recycle bin (`Del`, `IFileOperation`), "show in Explorer" (`Ctrl+E`), copy/move/paste, crop in the image viewer, contact sheet as PDF, tile texture from a PNG sequence, rename (`F2`) and the Explorer properties dialog (`Alt+Enter`).
 
-**Languages (since 1.6):** the interface is available in German and English. By default peek follows the Windows display language (`GetUserDefaultUILanguage`: German → German, otherwise English); "Sprache" (language) in the settings switches it without a restart, `--lang=de|en` sets it for a single start. The German texts in the code are also the keys of the translation (`core/lang.h`: `T()`, `TF()` with placeholders `{0}` so word order can differ, `TC()` for context-dependent texts); the English texts are in `core/lang_en.cpp`, compiled into the EXE (no extra files, stays portable). Dates, numbers, month names and sizes follow the language (`17.08.2024` / `17 Aug 2024`, `1.234` / `1,234`, `1,5 MB` / `1.5 MB`). Search parameters are always accepted in both languages (`Breite:` and `width:` …), the suggestions below the search field appear in the chosen language. File type names come from the Windows shell and follow the Windows language. The CI step `tools/check-lang.py` checks that every marked text has a translation, that placeholders match and that no unmarked German text is left in the interface code.
+**Languages (since 1.6):** the interface is available in German and English. By default peek follows the Windows display language (`GetUserDefaultUILanguage`: German → German, otherwise English); "Language" in the settings switches it without a restart, `--lang=de|en` sets it for a single start. The German texts in the code are also the keys of the translation (`core/lang.h`: `T()`, `TF()` with placeholders `{0}` so word order can differ, `TC()` for context-dependent texts); the English texts are in `core/lang_en.cpp`, compiled into the EXE (no extra files, stays portable). Dates, numbers, month names and sizes follow the language (`17.08.2024` / `17 Aug 2024`, `1.234` / `1,234`, `1,5 MB` / `1.5 MB`). Search parameters are always accepted in both languages (e.g. `width:` and its German form), the suggestions below the search field appear in the chosen language. File type names come from the Windows shell and follow the Windows language. The CI step `tools/check-lang.py` checks that every marked text has a translation, that placeholders match and that no unmarked German text is left in the interface code.
 
-**Keyboard:** full operation without a mouse; all shortcuts are listed on their own settings page ("Tastenkombinationen"/keyboard shortcuts). The mouse back button closes settings, contact sheet and tile texture. `Ctrl+1`/`Ctrl+2`/`Ctrl+3` switch between tiles, list and image cloud. A command palette (`Ctrl+K`) is planned for a later version.
+**Keyboard:** full operation without a mouse; all shortcuts are listed on their own settings page ("Keyboard shortcuts"). The mouse back button closes settings, contact sheet and tile texture. `Ctrl+1`/`Ctrl+2`/`Ctrl+3` switch between tiles, list and image cloud. A command palette (`Ctrl+K`) is planned for a later version.
 
-**Settings page (scrollable):** "Darstellung" (appearance) with language, color mode, "Bildbetrachter im Vollbild" (image viewer in full screen; off: frameless over the work area, the taskbar stays visible; since 1.6.2) (system, light, dark) and "Kleine Bilder im Betrachter" (small images in the viewer: original size or fit to view); "Tastenkombinationen" (keyboard shortcuts) as its own page; index with data folder and location, number of indexed files and thumbnails, disk usage, collections and index status (actions: open data folder, re-index, delete index); "Über peek" (about) with logo and wordmark (light and dark variant as SVG), version and build. The Windows text scaling (Accessibility › Text size) enlarges the whole interface.
+**Settings page (scrollable):** "Appearance" with language, color mode, "Image viewer in full screen" (off: frameless over the work area, the taskbar stays visible; since 1.6.2) (system, light, dark) and "Small images in the viewer" (original size or fit to view); "Keyboard shortcuts" as its own page; index with data folder and location, number of indexed files and thumbnails, disk usage, collections and index status (actions: open data folder, re-index, delete index); "About peek" with logo and wordmark (light and dark variant as SVG), version and build. The Windows text scaling (Accessibility › Text size) enlarges the whole interface.
 
-**Contact sheet (PDF, since 1.1):** right-click on one or more images or a folder → "Kontaktabzug erstellen …" (create contact sheet), likewise from the bookmarks (selected or all items) and for the current folder via the context menu of the empty space. Only image files are included; for folders the contained images (subfolders only if "Unterordner" is active).
+**Contact sheet (PDF, since 1.1):** right-click on one or more images or a folder → "Create contact sheet …", likewise from the bookmarks (selected or all items) and for the current folder via the context menu of the empty space. Only image files are included; for folders the contained images (subfolders only if "Subfolders" is active).
 
 - **Own page in the window** (like the settings), WYSIWYG: at the top a toolbar with count ("18 of 20 images · 2 pages"), "cancel" and "create PDF …"; below it an options row (A4 portrait/landscape, columns and rows 1–8 each, file names on/off, file extensions on/off, quality small/medium/high); in the middle always exactly one page with paging (arrows, Page↑/↓, mouse wheel); at the bottom a horizontal strip with all images.
-- **Edit directly on the page:** type the heading with a click (applies to all pages, prefilled with "folder name DD.MM.YYYY" or "Kontaktabzug DD.MM.YYYY", the date is normal text); untick images via checkboxes (the rest move up); reorder images by dragging, also onto other pages when hovering over a paging arrow.
+- **Edit directly on the page:** type the heading with a click (applies to all pages, prefilled with "folder name DD.MM.YYYY" or "Contact sheet DD.MM.YYYY", the date is normal text); untick images via checkboxes (the rest move up); reorder images by dragging, also onto other pages when hovering over a paging arrow.
 - **Image strip:** all images in PDF order; unticked images faded with an empty checkbox. Dragging within the strip reorders; dragging from the strip onto the page inserts there and ticks the image; clicking an image pages to its page.
 - **Page layout (A4):** 12 mm margin, heading centered at the top (Segoe UI Bold 14 pt), "page x of y" centered at the bottom (Segoe UI Regular 9 pt), grid with 4 mm spacing, images fitted (EXIF orientation, transparency white; with file names aligned to the bottom so the name sits directly below the image), file names below (Segoe UI Regular 8 pt, shortened in the middle). Text always black, no lines. The page calculation lives in the platform-independent core (`core/sheetlayout`, with tests).
 - **Quality:** small 150 dpi / JPEG 80 %, **medium 220 dpi / 85 % (default)**, high 300 dpi / 92 %, relative to the printed image size.
 - **PDF creation:** own PDF writer without a third-party library (`pdfsheet.cpp`); images as JPEG (DCTDecode), Segoe UI Regular and Bold embedded as subsets (Type0/CIDFontType2, Identity-H, ToUnicode; Windows Font Subsetting API `CreateFontPackage`), searchable text; embedding permission is checked, otherwise Arial. Preview and PDF use the same page calculation and the same glyphs and character widths (DirectWrite glyph runs). A manually started workflow "pdftest" produces sample PDFs for review.
 - **Saving:** Windows save dialog, suggesting "<heading>.pdf" in the images' folder (invalid characters replaced by "-"). Created in the background with progress and cancel; afterwards the page closes and the PDF opens in the default app. Options are saved.
 
-**Tile texture (PNG, since 1.2):** right-click on exactly one folder → "Kacheltextur erstellen …" (create tile texture), or on empty space → "tile texture from this folder …". All PNG files directly in the folder (without subfolders) are assembled into a single PNG file in which every tile matches its source image exactly. Intended for various uses (sprite sheets, flipbooks, shaders, archiving).
+**Tile texture (PNG, since 1.2):** right-click on exactly one folder → "Create tile texture …", or on empty space → "tile texture from this folder …". All PNG files directly in the folder (without subfolders) are assembled into a single PNG file in which every tile matches its source image exactly. Intended for various uses (sprite sheets, flipbooks, shaders, archiving).
 
 - **Order:** strictly by file name, naturally sorted as in Explorer (`StrCmpLogicalW`: `f2` before `f10`); row by row from the top left.
 - **Own page in the window** like the contact sheet: toolbar with folder name, count, "cancel" and "create PNG …"; options row with columns and rows (−/+, arrow keys) and the final texture size ("texture size: 1,280 × 1,280 px · 24 images of 256 × 256 · RGBA 8 bit · 1 empty cell"); below it a preview of the whole texture from the thumbnails (checkerboard for transparency, pixel art stays sharp when enlarged). On hover: number, file name, column/row and pixel position of the tile.
@@ -405,11 +405,11 @@ A single window with header, filter bar, grid and status bar; the sidebar on the
 - **Selection:** a click moves the camera in front of the image, cards in front of it glide out of view, everything else is dimmed; white frame and a docked info box (name without extension, type, size, resolution, date) that slides out at the bottom. A second click or `Enter` opens; clicking elsewhere, `Esc`, dragging or the mouse wheel cancel the selection. `←`/`→` jump from item to item. Up close, the image is loaded at full resolution and released again as soon as it gets smaller.
 - **Keyboard and spacing (since 1.6.5):** arrow keys move the camera (with an image selected, ← / → step to the previous / next image, ↑ / ↓ deselect and move). `Ctrl+mouse wheel` changes the spacing of all cards (positions and depth are stretched, the cards keep their size; the camera stretches along), `Ctrl+0` restores the default spacing; switching to the cloud always starts with the default spacing. File names appear only on near cards (from 90 px card height, faded in up to 125 px).
 - **Large clouds (since 1.6.5):** only moving cards are animated; once the cloud rests, a grid over x/y with cards sorted by depth limits drawing, evading and the search for the card in the center to what can be in view. Off-screen cards are checked for the atlas in portions (3,000 per frame), freshly arrived thumbnails first. File names wrap in fixed width steps (25 % apart, with hysteresis), new layouts get a time budget of about 1.5 ms per frame, and distant cards release them again.
-- **Groups (since 1.6.3):** with "Gruppieren" switched on (sort menu), the cloud is split into vertical strips side by side, at most 6. Starting point are the groups of the other views: more than 6 are merged with their neighbors so that the strips hold roughly equal counts (names e.g. "A–C", dates e.g. "January – March 2025" or "2019 – 2021"); with fewer than 6, large groups are split further by the sort value and titled as a range (names only by their first character, e.g. digits "0–3", "4–9", so titles never get longer than "A–C"; periods "3. – 9. März 2025", sizes, megapixels; not by file type). Special groups (folders, no date, empty …) keep a strip of their own; small views get fewer strips (at least 4 items each). Strip width follows the count but is always wide enough for the title to stay readable in the overview; the strips are separated by a clear gap and fine vertical lines. Title and count sit in a bar at the top, styled like the group headers of the other views; they only move horizontally with the camera. Clicking a title moves the camera onto that strip.
+- **Groups (since 1.6.3):** with "Group" switched on (sort menu), the cloud is split into vertical strips side by side, at most 6. Starting point are the groups of the other views: more than 6 are merged with their neighbors so that the strips hold roughly equal counts (names e.g. "A–C", dates e.g. "January – March 2025" or "2019 – 2021"); with fewer than 6, large groups are split further by the sort value and titled as a range (names only by their first character, e.g. digits "0–3", "4–9", so titles never get longer than "A–C"; periods "March 3 – 9, 2025", sizes, megapixels; not by file type). Special groups (folders, no date, empty …) keep a strip of their own; small views get fewer strips (at least 4 items each). Strip width follows the count but is always wide enough for the title to stay readable in the overview; the strips are separated by a clear gap and fine vertical lines. Title and count sit in a bar at the top, styled like the group headers of the other views; they only move horizontally with the camera. Clicking a title moves the camera onto that strip.
 - **Rearranging:** when filters, search or sort order change, every card gets a new target and moves there; if the count changes, the camera moves back to show the whole pile; filtered-out cards sink to the back and fade out, new ones fly in from the back.
 - **Drawing (`cloud.cpp`):** thumbnails are rendered into atlas textures (2048² px; cells of 64 px and 16 px for distant cards, corners rounded transparently within the cell). Cards are drawn back to front as Direct2D sprite batches; placeholders and darkening are sprites from a white cell with a color. peek draws near cards (from about 150 px) directly from the thumbnail or the full resolution. The atlas is re-sorted by rank as needed so that neighboring cards lie in the same texture (few draw calls).
 
-**Compare images (since 1.4):** with exactly two images selected, the context menu offers "Bilder vergleichen …" (compare images). Own full-screen view in the style of the viewer (`compare.cpp`), without info panel and without crop.
+**Compare images (since 1.4):** with exactly two images selected, the context menu offers "Compare images …". Own full-screen view in the style of the viewer (`compare.cpp`), without info panel and without crop.
 
 - **Top bar:** name, resolution, size and type per image; on the right the mode toggle (`Tab`/`M`) and the close cross. Own context menu for the image under the mouse pointer (open with, Explorer, copy, mode, fit, smoothing, bookmarks, recycle bin, properties).
 - **Side by side:** each image fitted into one half; mouse wheel zoom (the point under the mouse pointer stays fixed) and panning apply to both at once.
@@ -454,7 +454,7 @@ Everything that reads the content of untrusted files runs in helper processes `p
 - **Flow:** the main process opens the file, duplicates the read handle into the worker and sends the job over a named pipe with a random name (single client only, no remote access). The pixels come back via shared memory; the main process checks the worker's size information before accepting anything. The decoders read exclusively via the handle (`fileinput.cpp`: own position, reads at fixed offsets, free-threaded for WinRT and Media Foundation).
 - **Errors:** time limits per job (15–60 s). If a worker crashes or hangs, peek terminates it; the file gets no thumbnail, the next job starts a new worker. The interface stays responsive.
 - **Pool:** 3–9 workers (one more than thumbnail threads), one prewarmed at startup; jobs for the same file preferably go to the same worker (SVG cache while zooming), otherwise to one that already has the matching decoder loaded (Media Foundation, PDF, resvg). Measured in CI: 0.5–1.5 ms more per image than in-process; one-time per worker 0.3–0.5 s for the first video or PDF and about 1.8 s for the system fonts on the first SVG with text (fonts are loaded only for that); about 40 MB of memory, of which 12 MB is private per worker.
-- **Fallbacks:** if no AppContainer can be started, the worker runs at low integrity level (cannot change anything, but can read); if that fails too, peek decodes in its own process. The active mode is shown under "Über peek" (about).
+- **Fallbacks:** if no AppContainer can be started, the worker runs at low integrity level (cannot change anything, but can read); if that fails too, peek decodes in its own process. The active mode is shown under "About peek".
 - **Deliberately in the main process:** crop and tile texture (triggered by the user, they write files), shell file icons and peek's own thumbnails from the cache.
 - **Consequences for SVG:** embedded external images are not shown, text uses only system fonts (not fonts installed only for the user).
 - **CI check:** `peek.exe --sandbox-test` decodes test files (JPEG, PNG, GIF, BMP, TIFF, SVG, PDF, MP4, WMV, broken and crafted files) isolated and in-process, compares the results, requires AppContainer mode, checks that the worker cannot open a file by its path, and that the profile is removed afterwards. The fallbacks are checked the same way with `PEEK_SANDBOX=low` and `off` (honored only in test mode).
@@ -474,7 +474,7 @@ peek deliberately has no update function (no network). A vulnerability in a libr
 - **Encrypted:** paths, file names, camera models and thumbnails are stored only in encrypted form in `index.db` and `thumbs.db` (`cachecrypt.cpp`). The key (`index.key`) is bound to the Windows user account with the Windows Data Protection API (DPAPI): on another PC, under another account or after a password reset it cannot be read, and peek starts with an empty index (it is only a cache). Paths are encrypted deterministically per folder and name (synthetic IV from HMAC-SHA256, AES-256-CTR) so that queries for "everything below a folder" keep working; only the nesting and the approximate name length remain visible. Thumbnails: random IV, AES-256-CTR, HMAC-SHA256. Numbers (size, times, dimensions, capture date) remain readable. Old, unencrypted files are deleted on first start. Measured: 20,000 entries load in about 60 ms, 2,000 thumbnails read in about 15 ms, a little over 400 bytes per entry.
 - **Cleanup:** when peek deletes, moves or renames a file or folder, its entries and thumbnails disappear immediately. When a folder is read, entries of files that no longer exist there are removed (including those deleted outside peek); the indexer also cleans up the thumbnails in collections.
 - **Overwriting:** `PRAGMA secure_delete` overwrites deleted data in the database, and on exit the WAL file is truncated. On SSDs the firmware may still keep old blocks for a while; only the encryption helps against that.
-- "Index löschen" (delete index) removes everything; in portable mode no traces remain on the host except possibly the system thumbnail cache, which peek does not use. The settings, including collections, bookmarks and search history, are also stored encrypted in `einstellungen.dat` (same key); an old `peek.ini` is migrated once and deleted. Consequence: on another PC or after a password reset, peek starts with default settings. In portable mode each PC creates its own key; when switching between PCs, index and settings therefore start fresh on each.
+- "Delete index" removes everything; in portable mode no traces remain on the host except possibly the system thumbnail cache, which peek does not use. The settings, including collections, bookmarks and search history, are also stored encrypted in `einstellungen.dat` (same key); an old `peek.ini` is migrated once and deleted. Consequence: on another PC or after a password reset, peek starts with default settings. In portable mode each PC creates its own key; when switching between PCs, index and settings therefore start fresh on each.
 
 **File safety:** peek opens media files read-only (`FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE`), writes no metadata into files and deletes only to the recycle bin.
 

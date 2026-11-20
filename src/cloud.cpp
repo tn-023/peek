@@ -77,6 +77,7 @@ void App::SetViewMode(int mode) {
     if (mode == 2) {
         cloud_.version = ~0ull;
         cloud_.camInit = false;
+        cloud_.spread = 1;   // immer mit dem Standardabstand beginnen
     } else if (old == 2) {
         CloudReleaseGpu();
         cloud_.cards.clear();
@@ -192,6 +193,7 @@ void App::CloudTargets() {
         c.R = std::max(W, H) / 2;
         float f = (vh / 2) / kTanHalfFov;
         c.fit = std::max((H / 2 + 0.7f) * f / (vh / 2 * 0.94f), (W / 2 + 0.7f) * f / (vw / 2 * 0.94f));
+        ApplySpread();
         return;
     }
     float sva = std::sqrt(va);
@@ -217,6 +219,61 @@ void App::CloudTargets() {
     float halfW = c.R * sva + 0.7f, halfH = c.R / sva + 0.7f;
     float f = (vh / 2) / kTanHalfFov;
     c.fit = std::max(halfH * f / (vh / 2 * 0.94f), halfW * f / (vw / 2 * 0.94f));
+    ApplySpread();
+}
+
+// Abstand der Karten: alle Lagen (auch die Tiefe) und die Masse des Haufens strecken, die Karten selbst bleiben
+// gleich gross. Aus Sicht der Kamera werden so die Luecken groesser bzw. kleiner.
+void App::ApplySpread() {
+    auto& c = cloud_;
+    const float s = c.spread;
+    if (s == 1.0f) return;
+    for (int ci : c.order) {
+        CloudCard& k = c.cards[ci];
+        k.tx *= s;
+        k.ty *= s;
+        k.tz *= s;
+    }
+    for (auto& st : c.strips) {
+        st.x0 *= s;
+        st.x1 *= s;
+    }
+    c.stripH *= s;
+    c.R *= s;
+    c.D *= s;
+    c.fit *= s;
+}
+
+void App::CloudSetSpread(float spread) {
+    auto& c = cloud_;
+    spread = std::clamp(spread, 0.7f, 4.0f);
+    if (std::fabs(spread - c.spread) < 1e-4f || c.order.empty()) return;
+    const float r = spread / c.spread;
+    c.spread = spread;
+    CloudTargets();
+    // Kamera mitstrecken: der Blick bleibt auf derselben Stelle des Haufens
+    c.tcx *= r;
+    c.tcy *= r;
+    c.tcz *= r;
+    c.tau = 230;   // wie die Karten
+    StartAnimation();
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+// Pfeiltasten: Kamera seitlich bzw. senkrecht verschieben, um einen Anteil der sichtbaren Breite
+void App::CloudPan(float fx, float fy) {
+    auto& c = cloud_;
+    float vw = std::max(50.0f, c.view.right - c.view.left), vh = std::max(50.0f, c.view.bottom - c.view.top);
+    float f = (vh / 2) / kTanHalfFov;
+    float d = std::max(1.0f, c.focusZ - c.tcz);   // Abstand zur betrachteten Ebene
+    float halfW = vw / 2 / f * d, halfH = vh / 2 / f * d;
+    float lim = c.R + 1.0f;
+    c.tcx = std::clamp(c.tcx + fx * halfW * 0.35f, -lim, lim);
+    c.tcy = std::clamp(c.tcy + fy * halfH * 0.35f, -lim, lim);
+    c.tau = 120;
+    c.camUser = true;
+    c.haveBefore = false;
+    StartAnimation();
 }
 
 void App::CloudFit(bool immediate) {
@@ -774,7 +831,11 @@ void App::CloudDrawFace(ID2D1DeviceContext* dc, const CloudCard& k, const D2D1_R
         if (m > lim) { sx *= lim / m; sy *= lim / m; }
     }
     float cxr = (rc.left + rc.right) / 2, cyr = (rc.top + rc.bottom) / 2;
-    if (large && rh >= 44) {
+    // Dateiname erst auf nahen Karten (ab 90 px Kartenhoehe), weich eingeblendet bis 125 px; das Symbol rueckt dabei
+    // gleitend nach oben
+    constexpr float kNameFrom = 90.0f, kNameFull = 125.0f;
+    if (large && rh >= kNameFrom) {
+        const float vis = std::clamp((rh - kNameFrom) / (kNameFull - kNameFrom), 0.0f, 1.0f);
         // Ordner und Dateien ohne Vorschau: Symbol etwas hoeher, Name darunter (hoechstens zwei Zeilen).
         // Das Text-Layout entsteht einmal in einer Bezugsgroesse und wird nur skaliert gezeichnet: beim Zoomen
         // bleibt es gleich, es wird also nicht in jedem Bild neu gemessen.
@@ -841,7 +902,7 @@ void App::CloudDrawFace(ID2D1DeviceContext* dc, const CloudCard& k, const D2D1_R
                 cloud_.nameMoving = true;
             }
             float th = k.nameHs * scale;
-            cyr -= th * 0.55f;
+            cyr -= th * 0.55f * vis;
             float ty = cyr + sy / 2 + fs * 0.45f;
             D2D1_MATRIX_3X2_F old;
             dc->GetTransform(&old);
@@ -849,7 +910,7 @@ void App::CloudDrawFace(ID2D1DeviceContext* dc, const CloudCard& k, const D2D1_R
             // aufgezeichnete Glyphenlaeufe statt DrawTextLayout: dieselben Pixel (siehe --render-check), aber ohne
             // das Layout in jedem Bild erneut zu durchlaufen
             (void)lay;
-            DrawGlyphRuns(dc, k.nameRuns, r_.Brush(dark_ ? D2D1::ColorF(1, 1, 1, 0.9f) : D2D1::ColorF(0, 0, 0, 0.85f)), 1);
+            DrawGlyphRuns(dc, k.nameRuns, r_.Brush(dark_ ? D2D1::ColorF(1, 1, 1, 0.9f * vis) : D2D1::ColorF(0, 0, 0, 0.85f * vis)), 1);
             dc->SetTransform(old);
         }
     }
@@ -1635,6 +1696,10 @@ bool App::CloudKey(WPARAM vk) {
     case VK_LEFT:
     case VK_RIGHT: {
         if (c.order.empty()) return true;
+        if (c.sel < 0) {   // ohne Auswahl: bewegen
+            CloudPan(vk == VK_RIGHT ? 1.0f : -1.0f, 0);
+            return true;
+        }
         int r = c.sel >= 0 ? c.cards[c.sel].rank : -1;
         r = vk == VK_RIGHT ? r + 1 : (r < 0 ? 0 : r - 1);
         r = std::clamp(r, 0, static_cast<int>(c.order.size()) - 1);
@@ -1651,6 +1716,9 @@ bool App::CloudKey(WPARAM vk) {
     }
     case VK_UP:
     case VK_DOWN:
+        if (c.sel >= 0) CloudDeselect();
+        CloudPan(0, vk == VK_DOWN ? 1.0f : -1.0f);
+        return true;
     case VK_PRIOR:
     case VK_NEXT:
     case VK_END:

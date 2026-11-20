@@ -854,7 +854,8 @@ void App::OnWheel(float x, float y, int delta, WPARAM keys) {
         return;
     }
     if (settings_.viewMode == 2 && Inside(gridRc_, x, y)) {
-        CloudWheel(x, y, delta);
+        if (keys & MK_CONTROL) CloudSetSpread(cloud_.spread * (delta > 0 ? 1.12f : 1.0f / 1.12f));   // Abstand der Karten
+        else CloudWheel(x, y, delta);
         return;
     }
     if ((keys & MK_CONTROL) && settings_.viewMode == 0) {
@@ -1025,6 +1026,10 @@ bool App::OnKeyDown(WPARAM vk) {
         std::vector<std::wstring> sel = SelectedPaths();
         if (sel.empty() && focus_ >= 0 && focus_ < static_cast<int>(visible_.size())) sel.push_back(entries_[visible_[focus_]].path);
         ShowProperties(sel);
+        return true;
+    }
+    if (settings_.viewMode == 2 && ctrl && !alt && !shift && (vk == '0' || vk == VK_NUMPAD0)) {
+        CloudSetSpread(1.0f);   // Standardabstand
         return true;
     }
     if (settings_.viewMode == 2 && !ctrl && !alt && CloudKey(vk)) {

@@ -349,6 +349,7 @@ private:
         float f = 1;                                   // Brennweite in DIP
         int groupKey = -1;                             // Gruppierung beim letzten Anordnen (-1 = keine Streifen)
         std::vector<CloudStrip> strips;                // leer = Wolke ohne Gruppen (wie bisher)
+        float spread = 1;                              // Abstand der Karten (Strg+Mausrad), beim Wechsel zur Wolke 1
         // Grosse Wolken: nur bewegte Karten animieren, im Ruhezustand nur sichtbare Karten anfassen
         std::vector<int> active;                       // Karten, die sich noch bewegen
         bool allActive = true;                         // alle pruefen (neue Ziele, Auswahl geaendert)
@@ -414,6 +415,9 @@ private:
     // rad > 0: Karte selbst mit runden Ecken fuellen (ohne Zwischenebene), sonst liefert die Ebene die Ecken
     void CloudFillIcons(ID2D1DeviceContext* dc);
     void CloudBuildGrid();
+    void CloudSetSpread(float spread);
+    void ApplySpread();
+    void CloudPan(float fx, float fy);
     void CloudMarkVisible();
     void CloudDrawFace(ID2D1DeviceContext* dc, const CloudCard& c, const D2D1_RECT_F& rc, bool large, float rad = 0);
     void CloudReleaseGpu();

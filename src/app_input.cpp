@@ -650,14 +650,8 @@ void App::OnLButtonUp(float x, float y) {
         return;
     }
     if (viewer_.open) {
-        // einfacher Klick: Leiste oben sofort ein/aus. Wird daraus ein Doppelklick (Zoomen), nimmt OnDoubleClick
-        // das Umschalten wieder zurueck.
-        if (viewer_.dragging && !viewer_.moved) {
-            viewer_.bar = !viewer_.bar;
-            if (!viewer_.shell) settings_.viewerBar = viewer_.bar;   // fuer das naechste Oeffnen merken
-            viewer_.barToggled = GetTickCount();
-            InvalidateRect(hwnd_, nullptr, FALSE);
-        }
+        // einfacher Klick: Leiste oben ein/aus (verzoegert, damit Doppelklick zoomen kann)
+        if (viewer_.dragging && !viewer_.moved) SetTimer(hwnd_, kTimerViewerClick, GetDoubleClickTime(), nullptr);
         viewer_.dragging = false;
         return;
     }
@@ -716,12 +710,6 @@ void App::OnDoubleClick(float x, float y) {
     if (viewer_.open && viewer_.crop) return;
     if (viewer_.open) {
         KillTimer(hwnd_, kTimerViewerClick);
-        // der erste Klick hat die Leiste umgeschaltet: zuruecknehmen
-        if (viewer_.barToggled && GetTickCount() - viewer_.barToggled <= GetDoubleClickTime()) {
-            viewer_.bar = !viewer_.bar;
-            if (!viewer_.shell) settings_.viewerBar = viewer_.bar;
-            viewer_.barToggled = 0;
-        }
         if (const Hit* h = HitAt(x, y)) {
             // schnelles Doppelklicken auf Zurueck/Weiter blaettert zweimal
             if (h->type == HitType::ViewerPrev) ViewerStep(-1);

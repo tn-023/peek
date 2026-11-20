@@ -115,6 +115,13 @@ bool Renderer::CreateTarget() {
     return true;
 }
 
+void Renderer::SetOffset(float xPx, float yPx) {
+    if (!visual_ || !dcomp_) return;
+    visual_->SetOffsetX(xPx);
+    visual_->SetOffsetY(yPx);
+    dcomp_->Commit();
+}
+
 void Renderer::Resize() {
     if (!swap_) return;
     RECT rc;

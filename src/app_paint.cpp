@@ -701,6 +701,17 @@ void App::PaintPerfHud(ID2D1DeviceContext* dc, double paintStart) {
         DrawText(dc, buf2, D2D1::RectF(rc.left + 10, rc.top + 22, rc.right - 6, rc.bottom), r_.Text(12), D2D1::ColorF(1, 1, 1, 0.95f));
 }
 
+static float EaseOut(float u) { return 1.0f - (1.0f - u) * (1.0f - u) * (1.0f - u); }
+
+bool App::UiAnim(float& v, bool on, float ms) {
+    float target = on ? 1.0f : 0.0f;
+    if (v == target) return false;
+    float step = static_cast<float>(RefreshPeriodMs()) / ms;
+    v = on ? std::min(1.0f, v + step) : std::max(0.0f, v - step);
+    uiAnimPending_ = true;   // naechstes Bild anfordern
+    return true;
+}
+
 void App::Paint() {
     if (!r_.BeginDraw()) return;
     if (r_.deviceLost()) ClearBitmaps();
@@ -764,7 +775,15 @@ void App::Paint() {
         PaintTopBar(dc);
         PaintChips(dc);
         PaintStatus(dc);
-        if (showHistory_ && searchFocus_) PaintSearchHistory(dc);
+        {   // Liste unter dem Suchfeld: schiebt sich herein und hinaus
+            const bool on = showHistory_ && searchFocus_;
+            UiAnim(histAnim_, on, 120.0f);
+            if (histAnim_ > 0) {
+                size_t h0 = hits_.size();
+                PaintSearchHistory(dc);
+                if (!on) hits_.resize(h0);   // beim Hinausschieben nicht mehr anklickbar
+            }
+        }
         if (autoScroll_) {
             D2D1_POINT_2F a = autoAnchor_;
             dc->FillEllipse(D2D1::Ellipse(a, 15, 15), r_.Brush(dark_ ? D2D1::ColorF(0.2f, 0.2f, 0.2f, 0.92f)
@@ -786,6 +805,10 @@ void App::Paint() {
         else SetTimer(hwnd_, kTimerAnim, r_.framePaced() ? 100 : 8, nullptr);
     }
     if (!thumbBacklog_.empty()) InvalidateRect(hwnd_, nullptr, FALSE);   // restliche Vorschaubilder im naechsten Bild
+    if (uiAnimPending_) {   // laufende Ein-/Ausblendung: naechstes Bild
+        uiAnimPending_ = false;
+        InvalidateRect(hwnd_, nullptr, FALSE);
+    }
     if (r_.deviceLost()) {
         ClearBitmaps();
         InvalidateRect(hwnd_, nullptr, FALSE);
@@ -1154,6 +1177,19 @@ void App::PaintSearchHistory(ID2D1DeviceContext* dc) {
     float listH = h.empty() ? 0 : 8 + rowH * (h.size() + 1) + 9;
     D2D1_RECT_F rc = D2D1::RectF(left, searchRc_.bottom + 4, left + width, pillsBottom + listH);
     histRc_ = rc;
+    // Hereinschieben: von oben unter dem Suchfeld hervor (begrenzt auf den Bereich darunter)
+    const float ha = EaseOut(histAnim_);
+    struct Slide {
+        ID2D1DeviceContext* dc;
+        D2D1_MATRIX_3X2_F old;
+        ~Slide() {
+            dc->SetTransform(old);
+            dc->PopAxisAlignedClip();
+        }
+    } slide{dc, {}};
+    dc->GetTransform(&slide.old);
+    dc->PushAxisAlignedClip(D2D1::RectF(rc.left - 4, searchRc_.bottom + 2, rc.right + 4, rc.bottom + 6), D2D1_ANTIALIAS_MODE_ALIASED);
+    dc->SetTransform(D2D1::Matrix3x2F::Translation(0, -(1.0f - ha) * (rc.bottom - rc.top + 8)) * slide.old);
     hits_.push_back({rc, HitType::None, 0});
     dc->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(rc.left - 1, rc.top - 1, rc.right + 1, rc.bottom + 2), 8, 8),
                              r_.Brush(D2D1::ColorF(0, 0, 0, 0.18f)));
@@ -2264,19 +2300,23 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
     // aus dem Explorer geoeffnet: grosser "Zurueck"-Knopf in der Ecke links oben (wie das X rechts)
     const float backW = viewer_.shell ? 56.0f : 0.0f;
     if (backW > 0) nameW = std::max(80.0f, nameW - backW + 4);
-    if (viewer_.bar) {
+    UiAnim(viewer_.barAnim, viewer_.bar && !viewer_.crop, 140.0f);   // Leiste gleitet herein bzw. hinaus
+    const float ba = EaseOut(viewer_.barAnim);
+    if (viewer_.bar || ba > 0) {
         nameH = r_.MeasureWrapped(e.name, fnw, nameW);
         barH = std::max(48.0f, nameH + 28);
     }
+    const float by = -(1.0f - ba) * barH;   // Verschiebung der Leiste nach oben
     if (InfoWidth() > 0.5f) {
-        float panelTop = viewer_.bar ? barH : 48.0f;
-        if (!viewer_.bar)
-            dc->FillRectangle(D2D1::RectF(VW, 0, W_, panelTop), r_.Brush(D2D1::ColorF(0.11f, 0.11f, 0.11f, 0.96f)));
+        float panelTop = 48.0f + (barH - 48.0f) * ba;
+        if (panelTop > ba * barH)   // Teil oben, den die Leiste (gerade) nicht bedeckt
+            dc->FillRectangle(D2D1::RectF(VW, ba * barH, W_, panelTop), r_.Brush(D2D1::ColorF(0.11f, 0.11f, 0.11f, 0.96f)));
         PaintInfoPanel(dc, D2D1::RectF(VW, panelTop, W_, H_), InfoSelection(), true);
     }
 
+    float btnY = 0;
     auto topButton = [&](HitType type, wchar_t glyph, float left, float right, float height, bool danger, bool active) {
-        D2D1_RECT_F rc = D2D1::RectF(left, 0, right, height);
+        D2D1_RECT_F rc = D2D1::RectF(left, btnY, right, btnY + height);
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({rc, type, 0});
         if (hoverHit_ == idx) dc->FillRectangle(rc, r_.Brush(danger ? D2D1::ColorF(0.77f, 0.17f, 0.11f, 1)
@@ -2307,12 +2347,13 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
                                               std::min(1.0f, sa.b * 1.15f + 0.05f), 1);
         FillRound(dc, save, 5, sa);
         DrawText(dc, T(L"Speichern"), save, bf, D2D1::ColorF(1, 1, 1, 1));
-    } else if (viewer_.bar) {
-        dc->FillRectangle(D2D1::RectF(0, 0, W_, barH), r_.Brush(D2D1::ColorF(0, 0, 0, 0.45f)));
+    } else if (ba > 0.001f) {
+        btnY = by;
+        dc->FillRectangle(D2D1::RectF(0, by, W_, by + barH), r_.Brush(D2D1::ColorF(0, 0, 0, 0.45f)));
         float nameX = 20;
         if (backW > 0) {
             // grosser "Zurueck"-Knopf links fuehrt in die Ordneransicht: nur das Symbol, bis in die Ecke
-            D2D1_RECT_F rc = D2D1::RectF(0, 0, backW, 44);
+            D2D1_RECT_F rc = D2D1::RectF(0, by, backW, by + 44);
             int bi = static_cast<int>(hits_.size());
             hits_.push_back({rc, HitType::ViewerBack, 0});
             if (hoverHit_ == bi) dc->FillRectangle(rc, r_.Brush(D2D1::ColorF(1, 1, 1, 0.14f)));
@@ -2320,7 +2361,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
             DrawText(dc, gb, rc, r_.Icon(18), white);
             nameX = backW + 16;
         }
-        r_.DrawWrapped(e.name, nameX, (barH - nameH) / 2, nameW, fnw, white);
+        r_.DrawWrapped(e.name, nameX, by + (barH - nameH) / 2, nameW, fnw, white);
         int imgIndex = 0, imgCount = 0;
         for (int p = 0; p < n; ++p) {
             const FileEntry& x = entries_[visible_[p]];
@@ -2336,10 +2377,11 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         IDWriteTextFormat* fi = r_.TextWrap(12.5f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
         float infoW = std::max(60.0f, W_ - 152 - (nameX + nameW + 16));
         float infoH = r_.MeasureWrapped(info, fi, infoW);
-        r_.DrawWrapped(info, W_ - 152 - infoW, (barH - infoH) / 2, infoW, fi, dim);
+        r_.DrawWrapped(info, W_ - 152 - infoW, by + (barH - infoH) / 2, infoW, fi, dim);
         if (e.ext != L"svg" && e.ext != L"tga") topButton(HitType::ViewerCrop, 0xE7A8, W_ - 144, W_ - 96, 44, false, false);
         topButton(HitType::ViewerInfo, 0xE946, W_ - 96, W_ - 48, 44, false, settings_.viewerInfo);
         topButton(HitType::ViewerClose, 0xE8BB, W_ - 48, W_, 44, true, false);
+        btnY = 0;
     } else if (viewer_.corner) {
         topButton(HitType::ViewerClose, 0xE8BB, W_ - 48, W_, 44, true, false);
     }
@@ -2348,7 +2390,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
     if (!viewer_.toast.empty() && now < viewer_.toastUntil) {
         IDWriteTextFormat* ft = r_.Text(13.5f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
         float tw = std::min(VW - 40, r_.MeasureText(viewer_.toast, ft) + 56);
-        float ty = (viewer_.bar ? 56.0f : 16.0f);
+        float ty = 16.0f + 40.0f * ba;
         D2D1_RECT_F tr = D2D1::RectF(VW / 2 - tw / 2, ty, VW / 2 + tw / 2, ty + 38);
         dc->FillRoundedRectangle(D2D1::RoundedRect(tr, 8, 8), r_.Brush(D2D1::ColorF(0.12f, 0.12f, 0.12f, 0.92f)));
         wchar_t gd[2] = {0xE74D, 0};

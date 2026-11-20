@@ -33,6 +33,7 @@ class Renderer {
 public:
     bool Init(HWND hwnd);
     void Resize();
+    void SetOffset(float xPx, float yPx);   // Inhalt im Fenster verschieben (Pixel; fuer Einblend-Animationen)
     void SetDpi(float dpi);
     bool UpdateTextScale();   // Windows-Textskalierung neu lesen; true = geaendert
     bool BeginDraw();

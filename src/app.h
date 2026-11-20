@@ -94,6 +94,7 @@ struct ViewerState {
     POINT dragStart{};
     D2D1_POINT_2F panStart{};
     bool bar = true;        // transparente Leiste oben
+    float barAnim = 0;      // Leiste oben: 0 = ausgeblendet, 1 = ganz da (gleitet von oben herein)
     bool shell = false;     // aus dem Explorer geoeffnet: Leiste immer sichtbar, links "Zurueck" zum Ordner, X beendet peek
     bool corner = false;    // Mauszeiger in der Ecke oben rechts -> Schliessen-Knopf
     DWORD controlsUntil = 0;// Blaetter-Pfeile sichtbar bis
@@ -758,7 +759,11 @@ private:
     WINDOWPLACEMENT prevPlacement_{sizeof(WINDOWPLACEMENT)};
     RECT prevRect_{};   // tatsaechliche Fensterlage (auch bei angedocktem Fenster)
     bool animating_ = false;
-    bool animFresh_ = false;        // Animation gerade gestartet: erster Schritt = eine Bildperiode
+    bool animFresh_ = false;
+    // kurze Ein-/Ausblendungen (Leiste im Betrachter, Liste unter dem Suchfeld): v laeuft linear in ms gegen 0 bzw. 1
+    bool UiAnim(float& v, bool on, float ms);
+    bool uiAnimPending_ = false;
+    float histAnim_ = 0;        // Animation gerade gestartet: erster Schritt = eine Bildperiode
     float FrameDt(double rawMs);    // Zeitschritt am Takt des Bildschirms ausrichten
     double RefreshPeriodMs();
     // Messanzeige (Strg+Umschalt+F12): Bildabstaende und Rechenzeit der letzten Bilder

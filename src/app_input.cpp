@@ -138,7 +138,33 @@ void App::SortByColumn(int col) {
         settings_.sortKey = key;
         settings_.sortDesc = key == 1 || key == 2 || key == 3;   // Datum/Groesse/Aufloesung: groesste zuerst
     }
+    RememberSort();
     Refilter();
+}
+
+std::wstring App::SortStoreKey() const {
+    if (collectionsView_) return L"::collections";
+    if (bookmarksView_) return L"::bookmarks";
+    return ToLower(path_);
+}
+
+void App::ApplyFolderSort() {
+    if (sortFromCli_) {   // Befehlszeile (z. B. --group fuer Bildschirmfotos) gilt fuer den ersten Ordner
+        sortFromCli_ = false;
+        return;
+    }
+    int v = settings_.FolderSort(SortStoreKey());
+    if (v < 0) v = 0;   // Standard: Name aufsteigend, nicht gruppiert
+    settings_.sortKey = std::clamp(v & 15, 0, 5);
+    settings_.sortDesc = (v & 16) != 0;
+    settings_.group = (v & 32) != 0;
+}
+
+void App::RememberSort() {
+    if (!collectionsView_ && !bookmarksView_ && path_.empty()) return;
+    int v = settings_.sortKey | (settings_.sortDesc ? 16 : 0) | (settings_.group ? 32 : 0);
+    settings_.SetFolderSort(SortStoreKey(), v);
+    settings_.Save();
 }
 
 void App::UpdateMarquee() {
@@ -329,10 +355,12 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         if (const Hit* h = HitAt(x, y)) {
             switch (h->type) {
             case HitType::ViewerClose:
-                if (viewer_.shell) PostMessageW(hwnd_, WM_CLOSE, 0, 0);   // aus dem Explorer geoeffnet: peek beenden
-                else CloseViewer();
+            case HitType::ViewerBack:
+                // erst beim Loslassen: schliesst sich das Fenster schon beim Druecken, landet das Loslassen im
+                // Fenster dahinter (dort z. B. auf dessen X)
+                viewerPress_ = h->type;
+                SetCapture(hwnd_);
                 return;
-            case HitType::ViewerBack: CloseViewer(); return;   // zur Ordneransicht
             case HitType::ViewerPrev: ViewerStep(-1); return;
             case HitType::ViewerNext: ViewerStep(1); return;
             case HitType::ViewerInfo:
@@ -637,6 +665,18 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
 
 void App::OnLButtonUp(float x, float y) {
     settingsScrollDrag_ = false;
+    if (viewerPress_ != HitType::None) {
+        HitType p = viewerPress_;
+        viewerPress_ = HitType::None;
+        if (GetCapture() == hwnd_) ReleaseCapture();
+        const Hit* h = viewer_.open ? HitAt(x, y) : nullptr;
+        if (h && h->type == p) {   // nur, wenn die Maus noch ueber dem Knopf ist
+            if (p == HitType::ViewerBack) CloseViewer();                          // zur Ordneransicht
+            else if (viewer_.shell) PostMessageW(hwnd_, WM_CLOSE, 0, 0);         // aus dem Explorer geoeffnet: beenden
+            else CloseViewer();
+        }
+        return;
+    }
     if (sheet_.open) { SheetMouseUp(); return; }
     if (atlas_.open) return;
     if (compare_.open) { CompareMouseUp(); return; }
@@ -1380,7 +1420,7 @@ void App::ShowSortMenu(const D2D1_RECT_F& rc) {
     InvalidateRect(hwnd_, nullptr, FALSE);
     if (cmd == 300) {
         settings_.group = !settings_.group;
-        settings_.Save();
+        RememberSort();
         Layout();
         if (focus_ >= 0) ScrollToPos(focus_);
         InvalidateRect(hwnd_, nullptr, FALSE);
@@ -1390,6 +1430,7 @@ void App::ShowSortMenu(const D2D1_RECT_F& rc) {
     else if (cmd == 201) settings_.sortDesc = true;
     else if (cmd >= 100 && cmd < 106) settings_.sortKey = static_cast<int>(cmd) - 100;
     else return;
+    RememberSort();
     Refilter();
 }
 

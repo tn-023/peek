@@ -146,7 +146,7 @@ bool App::Init(HINSTANCE inst, int show) {
             if (a == L"--info") { settings_.infoPanel = settings_.viewerInfo = true; infoAnim_ = 1.0f; continue; }
             if (a == L"--settings") { openSettings = true; continue; }
             if (a == L"--theme=dark" || a == L"--theme=light") { settings_.theme = a == L"--theme=dark" ? 2 : 1; ApplyTheme(); continue; }
-            if (a == L"--group") { settings_.group = true; continue; }
+            if (a == L"--group") { settings_.group = true; sortFromCli_ = true; continue; }
             if (a == L"--sheet") { openSheet = true; continue; }
             if (a == L"--crop") { pendingCrop_ = true; continue; }
             if (a == L"--atlas") { openAtlas = true; continue; }
@@ -739,6 +739,7 @@ void App::Navigate(const std::wstring& raw, bool history, const std::wstring& se
     path_ = p;
     collectionsView_ = false;
     bookmarksView_ = false;
+    ApplyFolderSort();
     pendingSelect_ = select;
     keepSelection_.clear();
     keepScroll_ = -1;
@@ -761,6 +762,7 @@ void App::ShowAllCollections(bool history) {
     collectionsView_ = true;
     bookmarksView_ = false;
     path_.clear();
+    ApplyFolderSort();
     pendingSelect_.clear();
     keepSelection_.clear();
     keepScroll_ = -1;
@@ -844,6 +846,7 @@ void App::ShowBookmarks(bool history) {
     bookmarksView_ = true;
     collectionsView_ = false;
     path_.clear();
+    ApplyFolderSort();
     StartView();
     // Merkliste: Eintraege direkt aus den gespeicherten Pfaden (nur lokale, vorhandene Dateien)
     for (auto& p : settings_.bookmarks) {

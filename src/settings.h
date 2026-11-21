@@ -31,6 +31,11 @@ struct Settings {
     int viewerSmall = 0;         // kleine Bilder im Betrachter: 0 = 100 %, 1 = eingepasst (vergroessert)
     std::vector<std::wstring> collections;
     std::vector<std::wstring> bookmarks;       // Merkliste
+    // Sortierung je Ordner (Schluessel: Pfad in Kleinbuchstaben bzw. "::collections"/"::bookmarks"),
+    // Wert: Sortierschluessel | 16 absteigend | 32 gruppiert. Fehlt ein Ordner: Name aufsteigend, nicht gruppiert.
+    std::vector<std::pair<std::wstring, int>> folderSort;   // zuletzt geaenderte am Ende, hoechstens 2000
+    int FolderSort(const std::wstring& key) const;          // -1 = nicht gespeichert
+    void SetFolderSort(const std::wstring& key, int value); // 0 (Standard) entfernt den Eintrag
     std::vector<std::wstring> searchHistory;   // bis zu 10 Sucheingaben
     std::wstring lastFolder;
     std::wstring lastVersion;    // zuletzt gestartete Version (Symbol-Cache von Windows auffrischen)

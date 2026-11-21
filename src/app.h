@@ -548,6 +548,11 @@ private:
     D2D1_RECT_F ItemRect(int pos) const;    // Inhaltskoordinaten (ohne Bildlauf)
     void UpdateMarquee();
     void SortByColumn(int col);
+    std::wstring SortStoreKey() const;   // Schluessel fuer die Sortierung je Ordner
+    void ApplyFolderSort();             // gespeicherte Sortierung des Ordners (sonst Name aufsteigend)
+    void RememberSort();                // aktuelle Sortierung fuer diesen Ordner merken
+    bool sortFromCli_ = false;          // Sortierung per Befehlszeile vorgegeben: beim Start nicht ueberschreiben
+    HitType viewerPress_ = HitType::None;   // Betrachter: Knopf, der beim Loslassen ausgeloest wird
     void ShowSortMenu(const D2D1_RECT_F& rc);
     void StopAutoScroll();
     void ScrollToPos(int pos);

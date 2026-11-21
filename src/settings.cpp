@@ -184,6 +184,13 @@ void Settings::Load() {
         std::wstring p = ReadStr(L"Bookmarks", key.c_str());
         if (!p.empty()) bookmarks.push_back(p);
     }
+    folderSort.clear();
+    int nf = ReadInt(L"FolderSort", L"Count", 0);
+    for (int i = 0; i < nf && i < 2000; ++i) {
+        std::wstring p = ReadStr(L"FolderSort", (L"P" + std::to_wstring(i)).c_str());
+        int v = ReadInt(L"FolderSort", (L"V" + std::to_wstring(i)).c_str(), 0);
+        if (!p.empty() && v > 0 && v < 64 && (v & 15) <= 5) folderSort.push_back({p, v});
+    }
     searchHistory.clear();
     for (int i = 0; i < 10; ++i) {
         std::wstring key = L"H" + std::to_wstring(i);
@@ -254,6 +261,11 @@ void Settings::Save() const {
         std::wstring key = L"H" + std::to_wstring(i);
         WriteStr(L"Search", key.c_str(), searchHistory[i]);
     }
+    WriteInt(L"FolderSort", L"Count", static_cast<int>(folderSort.size()));
+    for (size_t i = 0; i < folderSort.size(); ++i) {
+        WriteStr(L"FolderSort", (L"P" + std::to_wstring(i)).c_str(), folderSort[i].first);
+        WriteInt(L"FolderSort", (L"V" + std::to_wstring(i)).c_str(), folderSort[i].second);
+    }
 
     WriteInt(L"Window", L"Valid", hasWindow ? 1 : 0);
     WriteInt(L"Window", L"Left", window.left);
@@ -284,3 +296,24 @@ void Settings::Save() const {
 }
 
 } // namespace peek
+
+namespace peek {
+
+int Settings::FolderSort(const std::wstring& key) const {
+    for (const auto& f : folderSort)
+        if (f.first == key) return f.second;
+    return -1;
+}
+
+void Settings::SetFolderSort(const std::wstring& key, int value) {
+    for (size_t i = 0; i < folderSort.size(); ++i)
+        if (folderSort[i].first == key) {
+            folderSort.erase(folderSort.begin() + static_cast<std::ptrdiff_t>(i));
+            break;
+        }
+    if (value == 0) return;   // Standard: nicht speichern
+    folderSort.push_back({key, value});
+    if (folderSort.size() > 2000) folderSort.erase(folderSort.begin());   // aelteste Eintraege fallen weg
+}
+
+}  // namespace peek

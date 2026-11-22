@@ -24,6 +24,7 @@ namespace peek {
 extern const wchar_t* const kThemeNames[3];
 extern const wchar_t* const kViewerSmallNames[2];
 extern const wchar_t* const kViewerFullscreenNames[2];   // 0 = Vollbild, 1 = Taskleiste sichtbar
+extern const wchar_t* const kSingleClickNames[2];        // 0 = Doppelklick (Standard), 1 = ein Klick
 const wchar_t* LanguageName(int setting);   // 0 wie Windows, 1 Deutsch, 2 English
 
 enum class HitType {
@@ -33,7 +34,7 @@ enum class HitType {
     ViewerClose, ViewerBack, ViewerPrev, ViewerNext, ViewerInfo, ViewerCrop, CropSave, CropCancel,
     ClearBookmarks, SearchHistItem, SearchHistDel, SearchHistClear, SearchParam,
     ViewCloud,
-    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen,
+    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen, SettingsSingleClick,
     SheetCancel, SheetCreate, SheetOrient, SheetColsMinus, SheetColsPlus, SheetRowsMinus, SheetRowsPlus, SheetNames,
     SheetExts, SheetQuality, SheetPrev, SheetNext, SheetHeadline, SheetCheck, SheetCell, SheetStripCheck, SheetStrip,
     SheetOpenPdf, BookmarkSheet,
@@ -666,6 +667,8 @@ private:
     bool lDown_ = false;
     POINT downPt_{};
     int downPos_ = -1;
+    bool downPlain_ = false;          // Maustaste ohne Strg/Umschalt gedrueckt (Oeffnen mit einem Klick)
+    DWORD noDblUntil_ = 0;            // nach Oeffnen mit einem Klick: folgenden Doppelklick ignorieren
     bool scrollDrag_ = false;
     float scrollDragOffset_ = 0;
     bool selectOnUp_ = false;
@@ -741,6 +744,7 @@ private:
     void ShowViewerSmallMenu(const D2D1_RECT_F& rc);
     void ShowLanguageMenu(const D2D1_RECT_F& rc);
     void ShowViewerFullscreenMenu(const D2D1_RECT_F& rc);
+    void ShowSingleClickMenu(const D2D1_RECT_F& rc);
     int settingsPage_ = 0;          // 0 Einstellungen, 1 Tastenkombinationen
     float settingsScroll_ = 0, settingsContentH_ = 0;
     bool settingsScrollDrag_ = false;   // Bildlaufleiste der Einstellungen wird gezogen

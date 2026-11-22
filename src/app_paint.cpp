@@ -2462,7 +2462,7 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
     DrawText(dc, T(L"Darstellung"), D2D1::RectF(x0, y, x1, y + 28), fh, t.text);
     y += 34;
     {
-        D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 8 + 4 * 56);
+        D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 8 + 5 * 56);
         FillRound(dc, rc, 8, t.chip);
         auto dropRow = [&](float ry, const wchar_t* label, HitType type, const std::wstring& cur) {
             DrawText(dc, label, D2D1::RectF(x0 + 20, ry, x1 - 260, ry + 56), r_.Text(13), t.text);
@@ -2485,6 +2485,9 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
         dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 172), D2D1::Point2F(x1 - 16, rc.top + 172), r_.Brush(t.stroke), 1.0f);
         dropRow(rc.top + 172, T(L"Kleine Bilder im Betrachter"), HitType::SettingsViewerSmall,
                 T(kViewerSmallNames[std::clamp(settings_.viewerSmall, 0, 1)]));
+        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 228), D2D1::Point2F(x1 - 16, rc.top + 228), r_.Brush(t.stroke), 1.0f);
+        dropRow(rc.top + 228, T(L"Ordner und Dateien öffnen"), HitType::SettingsSingleClick,
+                T(kSingleClickNames[settings_.singleClick ? 1 : 0]));
         y = rc.bottom + 28;
     }
 

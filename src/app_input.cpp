@@ -412,6 +412,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         case HitType::SettingsTheme: ShowThemeMenu(h->rc); break;
         case HitType::SettingsLanguage: ShowLanguageMenu(h->rc); break;
         case HitType::SettingsViewerFullscreen: ShowViewerFullscreenMenu(h->rc); break;
+        case HitType::SettingsSingleClick: ShowSingleClickMenu(h->rc); break;
         case HitType::SettingsViewerSmall: ShowViewerSmallMenu(h->rc); break;
         case HitType::SettingsShortcuts:
             settingsPage_ = 1;
@@ -633,6 +634,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
     lDown_ = true;
     downPt_ = pt;
     downPos_ = pos;
+    downPlain_ = !(keys & (MK_CONTROL | MK_SHIFT));
     selectOnUp_ = false;
     // Detailansicht neben dem Namen: Auswahlrechteck. Auf einer bereits ausgewaehlten Zeile (ohne Strg/Umschalt)
     // dagegen ueberall die Auswahl ziehen, nicht nur am Dateinamen.
@@ -739,6 +741,25 @@ void App::OnLButtonUp(float x, float y) {
         selected_.clear();
         selected_.insert(visible_[downPos_]);
     }
+    // Oeffnen mit einem Klick (Einstellung): Klick ohne Strg/Umschalt, ohne Ziehen, auf demselben Element
+    if (settings_.singleClick && lDown_ && downPlain_ && downPos_ >= 0 && downPos_ < static_cast<int>(visible_.size()) &&
+        settings_.viewMode != 2) {
+        POINT up;
+        GetCursorPos(&up);
+        ScreenToClient(hwnd_, &up);
+        bool still = std::abs(up.x - downPt_.x) <= GetSystemMetrics(SM_CXDRAG) &&
+                     std::abs(up.y - downPt_.y) <= GetSystemMetrics(SM_CYDRAG);
+        if (still && GridPosAt(x, y) == downPos_) {
+            int pos = downPos_;
+            lDown_ = false;
+            selectOnUp_ = false;
+            rowMarquee_ = false;
+            rowMarqueeBase_.clear();
+            noDblUntil_ = GetTickCount() + GetDoubleClickTime();   // zweiter Klick eines Doppelklicks: nichts mehr oeffnen
+            OpenPos(pos);
+            return;
+        }
+    }
     lDown_ = false;
     selectOnUp_ = false;
     rowMarquee_ = false;
@@ -794,6 +815,7 @@ void App::OnDoubleClick(float x, float y) {
         return;
     }
     int pos = GridPosAt(x, y);
+    if (settings_.singleClick && GetTickCount() < noDblUntil_) return;   // schon mit dem ersten Klick geoeffnet
     if (pos >= 0) {
         lDown_ = false;
         selectOnUp_ = false;
@@ -1681,6 +1703,22 @@ void App::ShowViewerFullscreenMenu(const D2D1_RECT_F& rc) {
     UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
     if (cmd < 100 || cmd > 101) return;
     settings_.viewerFullscreen = cmd == 100;
+    settings_.Save();
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void App::ShowSingleClickMenu(const D2D1_RECT_F& rc) {
+    std::vector<MenuItem> items;
+    for (int i = 0; i < 2; ++i) {
+        MenuItem m;
+        m.id = 100 + i;
+        m.text = T(kSingleClickNames[i]);
+        m.checked = (settings_.singleClick ? 1 : 0) == i;
+        items.push_back(m);
+    }
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
+    if (cmd < 100 || cmd > 101) return;
+    settings_.singleClick = cmd == 101;
     settings_.Save();
     InvalidateRect(hwnd_, nullptr, FALSE);
 }

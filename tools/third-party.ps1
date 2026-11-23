@@ -64,31 +64,36 @@ foreach ($p in $ports) {
 # Rust packages of resvg
 if (-not (Test-Path $Rust)) { throw "Rust license data missing: $Rust" }
 # parsed with System.Text.Json (PowerShell's ConvertFrom-Json treats a top-level array inconsistently)
+$kind = [System.Text.Json.JsonValueKind]
 $doc = [System.Text.Json.JsonDocument]::Parse((Get-Content $Rust -Raw))
 $root = $doc.RootElement
-if ($root.ValueKind -eq [System.Text.Json.JsonValueKind]::Object -and $root.TryGetProperty('value', [ref]$null)) {
-    $root = $root.GetProperty('value')
+if ($root.ValueKind -eq $kind::Object) {   # {"value": [...], "Count": n} from older PowerShell
+    foreach ($prop in $root.EnumerateObject()) { if ($prop.Name -eq 'value') { $root = $prop.Value } }
 }
-function Json-Str($el, [string]$name) {
-    $v = $null
-    if ($el.TryGetProperty($name, [ref]$v) -and $v.ValueKind -eq [System.Text.Json.JsonValueKind]::String) { return $v.GetString() }
+function Json-Props($el) {
+    $h = @{}
+    if ($el.ValueKind -eq $kind::Object) { foreach ($prop in $el.EnumerateObject()) { $h[$prop.Name] = $prop.Value } }
+    return $h
+}
+function Json-Str($h, [string]$name) {
+    if ($h.ContainsKey($name) -and $h[$name].ValueKind -eq $kind::String) { return $h[$name].GetString() }
     return ''
 }
 $rust = New-Object System.Collections.Generic.List[object]
 foreach ($el in $root.EnumerateArray()) {
+    $h = Json-Props $el
     $files = New-Object System.Collections.Generic.List[object]
-    $fv = $null
-    if ($el.TryGetProperty('files', [ref]$fv)) {
-        $items = if ($fv.ValueKind -eq [System.Text.Json.JsonValueKind]::Array) { @($fv.EnumerateArray()) } else { @($fv) }
+    if ($h.ContainsKey('files')) {
+        $fv = $h['files']
+        $items = if ($fv.ValueKind -eq $kind::Array) { @($fv.EnumerateArray()) } else { @($fv) }
         foreach ($f in $items) {
-            if ($f.ValueKind -eq [System.Text.Json.JsonValueKind]::Object) {
-                $files.Add([pscustomobject]@{ name = (Json-Str $f 'name'); text = (Json-Str $f 'text') })
-            }
+            $fh = Json-Props $f
+            if ($fh.Count -gt 0) { $files.Add([pscustomobject]@{ name = (Json-Str $fh 'name'); text = (Json-Str $fh 'text') }) }
         }
     }
     $rust.Add([pscustomobject]@{
-        name = (Json-Str $el 'name'); version = (Json-Str $el 'version'); license = (Json-Str $el 'license')
-        repository = (Json-Str $el 'repository'); files = $files.ToArray() })
+        name = (Json-Str $h 'name'); version = (Json-Str $h 'version'); license = (Json-Str $h 'license')
+        repository = (Json-Str $h 'repository'); files = $files.ToArray() })
 }
 if ($rust.Count -lt 2) { throw "Rust license data looks wrong ($($rust.Count) packages): $Rust" }
 foreach ($p in $rust) {

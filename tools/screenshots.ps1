@@ -145,6 +145,25 @@ for ($pi = 0; $pi -lt $places.Count; $pi++) {
 }
 Shot 'wolke-gruppen.png' @("`"$grp`"", $dark, '--view=cloud', '--group', $size) -wait 22
 
+# Zeitleiste: dieselben Landschaften, ueber anderthalb Jahre verteilt (ungleich viele je Monat, Datum der Datei)
+$tl = Join-Path (Split-Path -Parent $Root) (N 'Zeitleiste' 'Timeline')
+New-Item -ItemType Directory -Force -Path $tl | Out-Null
+$perMonth = @(14, 6, 22, 9, 3, 17, 11, 25, 8, 12, 5, 19, 7, 15, 10, 4, 13, 20)
+$rt = New-Object System.Random(5)
+$base = Get-Date -Year 2025 -Month 11 -Day 1 -Hour 12 -Minute 0 -Second 0
+$k = 0
+for ($m = 0; $m -lt $perMonth.Count; $m++) {
+    $month = $base.AddMonths(-$m)
+    $days = [DateTime]::DaysInMonth($month.Year, $month.Month)
+    for ($j = 0; $j -lt $perMonth[$m]; $j++) {
+        $f = Join-Path $tl (((N 'Foto' 'Photo') + '_{0:D3}.jpg') -f $k)
+        Copy-Item $src[$k % $src.Count].FullName $f
+        (Get-Item $f).LastWriteTime = $month.AddDays($rt.Next(0, $days - 1)).AddMinutes($rt.Next(0, 600))
+        $k++
+    }
+}
+Shot 'zeitleiste.png' @("`"$tl`"", $dark, '--view=timeline', $size) -wait 14
+
 # Kamerafahrt durch die Wolke als Video und animiertes Bild (README): peek startet die Fahrt selbst
 # (--cloud-tour), legt eine Markerdatei an, sobald alles geladen ist, und faehrt los, wenn "<Marker>.go" existiert.
 function Record-Tour([string]$folder, [string]$name) {

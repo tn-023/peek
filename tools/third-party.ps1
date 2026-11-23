@@ -126,5 +126,11 @@ for ($i = 0; $i -lt $texts.Count; $i++) {
 }
 Set-Content -Path $Out -Value $sb.ToString() -Encoding UTF8
 Write-Host ("vcpkg ports: " + (($ports | ForEach-Object Name) -join ', '))
+# Groesste Texte (zur Kontrolle im Build-Protokoll)
+for ($i = 0; $i -lt $texts.Count; $i++) {
+    $first = ($texts[$i] -split "`n" | Where-Object { $_.Trim() } | Select-Object -First 1)
+    Write-Host ("  [{0}] {1,7:N0} chars  {2}" -f ($i + 1), $texts[$i].Length, $first.Trim().Substring(0, [Math]::Min(60, $first.Trim().Length)))
+}
+Write-Host ("  components: {0:N0} chars" -f $components.Length)
 Write-Host ("THIRD-PARTY.txt written ({0:N0} characters, {1} vcpkg ports, {2} Rust packages, {3} distinct license texts)" -f
     $sb.Length, $ports.Count, $crates.Count, $texts.Count)

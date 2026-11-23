@@ -16,6 +16,7 @@ namespace peek {
 // Auswahllisten der Einstellungen
 const wchar_t* const kThemeNames[3] = {N_(L"System (Standard)"), N_(L"Hell"), N_(L"Dunkel")};
 const wchar_t* const kSingleClickNames[2] = {N_(L"Doppelklick (Standard)"), N_(L"Einfacher Klick")};
+const wchar_t* const kCheckBoxNames[2] = {N_(L"Aus (Standard)"), N_(L"Ein")};
 const wchar_t* const kViewerFullscreenNames[2] = {N_(L"Ein (Standard)"), N_(L"Aus \u2013 Taskleiste bleibt sichtbar")};
 const wchar_t* const kViewerSmallNames[2] = {N_(L"Originalgr\u00f6\u00dfe (100 %)"), N_(L"An die Ansicht anpassen")};
 

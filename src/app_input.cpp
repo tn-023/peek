@@ -25,7 +25,7 @@ const Hit* App::HitAt(float x, float y) const {
 }
 
 // Nur Treffer auf einem Element; Zwischenraeume gelten als leere Flaeche (Auswahlrechteck)
-// Auswahlkaestchen (Oeffnen mit einem Klick): wie Strg+Klick, mit Umschalt alle Elemente vom Anker bis hier dazu
+// Auswahlkaestchen (Einstellung): wie Strg+Klick, mit Umschalt alle Elemente vom Anker bis hier dazu
 void App::ToggleCheck(int pos, bool shift) {
     if (pos < 0 || pos >= static_cast<int>(visible_.size())) return;
     uint32_t idx = visible_[pos];
@@ -433,6 +433,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         case HitType::SettingsLanguage: ShowLanguageMenu(h->rc); break;
         case HitType::SettingsViewerFullscreen: ShowViewerFullscreenMenu(h->rc); break;
         case HitType::SettingsSingleClick: ShowSingleClickMenu(h->rc); break;
+        case HitType::SettingsCheckBoxes: ShowCheckBoxMenu(h->rc); break;
         case HitType::SettingsViewerSmall: ShowViewerSmallMenu(h->rc); break;
         case HitType::SettingsShortcuts:
             settingsPage_ = 1;
@@ -1758,6 +1759,22 @@ void App::ShowSingleClickMenu(const D2D1_RECT_F& rc) {
     UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
     if (cmd < 100 || cmd > 101) return;
     settings_.singleClick = cmd == 101;
+    settings_.Save();
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void App::ShowCheckBoxMenu(const D2D1_RECT_F& rc) {
+    std::vector<MenuItem> items;
+    for (int i = 0; i < 2; ++i) {
+        MenuItem m;
+        m.id = 100 + i;
+        m.text = T(kCheckBoxNames[i]);
+        m.checked = (settings_.checkBoxes ? 1 : 0) == i;
+        items.push_back(m);
+    }
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
+    if (cmd < 100 || cmd > 101) return;
+    settings_.checkBoxes = cmd == 101;
     settings_.Save();
     InvalidateRect(hwnd_, nullptr, FALSE);
 }

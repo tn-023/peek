@@ -1587,8 +1587,8 @@ void App::PaintTile(ID2D1DeviceContext* dc, int pos, const D2D1_RECT_F& cell) {
     // Merkliste: kleiner weisser Stern oben links (mit dunklem Schatten, damit er auf hellen Bildern sichtbar bleibt)
     if (!bookmarkSet_.empty() && bookmarkSet_.count(ToLower(e.path))) {
         float sz = std::clamp(tileS_ * 0.1f, 12.0f, 18.0f);
-        // bei Oeffnen mit einem Klick liegt oben links das Auswahlkaestchen: Stern dann oben rechts
-        D2D1_RECT_F sr = settings_.singleClick
+        // mit Auswahlkaestchen liegt oben links das Kaestchen: Stern dann oben rechts
+        D2D1_RECT_F sr = settings_.checkBoxes
                              ? D2D1::RectF(shown.right - 8 - sz, shown.top + 4, shown.right - 4, shown.top + 4 + sz + 4)
                              : D2D1::RectF(shown.left + 4, shown.top + 4, shown.left + 4 + sz + 4, shown.top + 4 + sz + 4);
         wchar_t g[2] = {0xE735, 0};
@@ -1597,8 +1597,8 @@ void App::PaintTile(ID2D1DeviceContext* dc, int pos, const D2D1_RECT_F& cell) {
         DrawText(dc, g, sr, fi, D2D1::ColorF(1, 1, 1, 1));
     }
 
-    // Oeffnen mit einem Klick: Auswahlkaestchen oben links (beim Ueberfahren, bei ausgewaehlten Elementen immer)
-    if (settings_.singleClick && (sel || hov)) {
+    // Auswahlkaestchen (Einstellung): oben links (beim Ueberfahren, bei ausgewaehlten Elementen immer)
+    if (settings_.checkBoxes && (sel || hov)) {
         D2D1_RECT_F cb = CheckRect(pos);
         float dx = cell.left - ItemRect(pos).left, dy = cell.top - ItemRect(pos).top;
         cb.left += dx; cb.right += dx; cb.top += dy; cb.bottom += dy;
@@ -1665,10 +1665,10 @@ void App::PhotoDetailRows(const FileEntry& e, const std::function<void(const std
     if (number(parts[3], d)) row(L"ISO", std::to_wstring(static_cast<long long>(std::llround(d))));
 }
 
-// Oeffnen mit einem Klick: schmale feste Spalte mit Auswahlkaestchen links vor dem Namen
+// Auswahlkaestchen (Einstellung): schmale feste Spalte mit Auswahlkaestchen links vor dem Namen
 static constexpr float kCheckColW = 30;
 
-float App::ListX0() const { return gridRc_.left + 8 + (settings_.singleClick ? kCheckColW : 0); }
+float App::ListX0() const { return gridRc_.left + 8 + (settings_.checkBoxes ? kCheckColW : 0); }
 
 D2D1_RECT_F App::CheckRect(int pos) const {
     D2D1_RECT_F rc = ItemRect(pos);
@@ -1680,7 +1680,7 @@ D2D1_RECT_F App::CheckRect(int pos) const {
 }
 
 bool App::OnCheck(int pos, float x, float y) const {
-    if (!settings_.singleClick || settings_.viewMode == 2 || pos < 0 || pos >= static_cast<int>(visible_.size())) return false;
+    if (!settings_.checkBoxes || settings_.viewMode == 2 || pos < 0 || pos >= static_cast<int>(visible_.size())) return false;
     D2D1_RECT_F cb = CheckRect(pos);
     float cy = y - gridRc_.top + scroll_;
     if (settings_.viewMode == 1)   // Detailansicht: die ganze Spalte in Zeilenhoehe
@@ -1736,7 +1736,7 @@ void App::PaintListHeader(ID2D1DeviceContext* dc) {
     Theme t = MakeTheme(dark_, backdrop_);
     IDWriteTextFormat* f = r_.Text(12, DWRITE_FONT_WEIGHT_SEMI_BOLD);
     float x = ListX0();
-    if (settings_.singleClick) {
+    if (settings_.checkBoxes) {
         // Kaestchen vor "Name": alle Elemente der Liste auswaehlen bzw. die Auswahl aufheben
         int n = static_cast<int>(visible_.size()), cnt = 0;
         if (!selected_.empty())
@@ -1792,7 +1792,7 @@ void App::PaintListRow(ID2D1DeviceContext* dc, int pos, const D2D1_RECT_F& row) 
         dc->DrawRoundedRectangle(D2D1::RoundedRect(inner, 4, 4), r_.Brush(accent_), 1.5f);
     }
 
-    if (settings_.singleClick && (sel || pos == hoverPos_)) {
+    if (settings_.checkBoxes && (sel || pos == hoverPos_)) {
         D2D1_RECT_F cb = CheckRect(pos);
         float dy = row.top - ItemRect(pos).top;
         cb.top += dy;
@@ -2532,7 +2532,7 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
     DrawText(dc, T(L"Darstellung"), D2D1::RectF(x0, y, x1, y + 28), fh, t.text);
     y += 34;
     {
-        D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 8 + 5 * 56);
+        D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 8 + 6 * 56);
         FillRound(dc, rc, 8, t.chip);
         auto dropRow = [&](float ry, const wchar_t* label, HitType type, const std::wstring& cur) {
             DrawText(dc, label, D2D1::RectF(x0 + 20, ry, x1 - 260, ry + 56), r_.Text(13), t.text);
@@ -2558,6 +2558,9 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
         dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 228), D2D1::Point2F(x1 - 16, rc.top + 228), r_.Brush(t.stroke), 1.0f);
         dropRow(rc.top + 228, T(L"Ordner und Dateien öffnen"), HitType::SettingsSingleClick,
                 T(kSingleClickNames[settings_.singleClick ? 1 : 0]));
+        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 284), D2D1::Point2F(x1 - 16, rc.top + 284), r_.Brush(t.stroke), 1.0f);
+        dropRow(rc.top + 284, T(L"Auswahlkästchen"), HitType::SettingsCheckBoxes,
+                T(kCheckBoxNames[settings_.checkBoxes ? 1 : 0]));
         y = rc.bottom + 28;
     }
 

@@ -24,6 +24,7 @@ namespace peek {
 extern const wchar_t* const kThemeNames[3];
 extern const wchar_t* const kViewerSmallNames[2];
 extern const wchar_t* const kViewerFullscreenNames[2];   // 0 = Vollbild, 1 = Taskleiste sichtbar
+extern const wchar_t* const kCheckBoxNames[2];           // 0 = aus (Standard), 1 = Auswahlkaestchen anzeigen
 extern const wchar_t* const kSingleClickNames[2];        // 0 = Doppelklick (Standard), 1 = ein Klick
 const wchar_t* LanguageName(int setting);   // 0 wie Windows, 1 Deutsch, 2 English
 
@@ -34,7 +35,7 @@ enum class HitType {
     ViewerClose, ViewerBack, ViewerPrev, ViewerNext, ViewerInfo, ViewerCrop, CropSave, CropCancel,
     ClearBookmarks, SearchHistItem, SearchHistDel, SearchHistClear, SearchParam,
     ViewCloud,
-    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen, SettingsSingleClick, SelectAll,
+    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen, SettingsSingleClick, SettingsCheckBoxes, SelectAll,
     SheetCancel, SheetCreate, SheetOrient, SheetColsMinus, SheetColsPlus, SheetRowsMinus, SheetRowsPlus, SheetNames,
     SheetExts, SheetQuality, SheetPrev, SheetNext, SheetHeadline, SheetCheck, SheetCell, SheetStripCheck, SheetStrip,
     SheetOpenPdf, BookmarkSheet,
@@ -193,9 +194,9 @@ private:
     std::wstring TypeName(const FileEntry& e);
     std::wstring CellText(const FileEntry& e, int col);
     int ColumnMinWidth(int col);
-    float ListX0() const;                 // Detailansicht: linker Rand der Namensspalte (bei Oeffnen mit einem Klick hinter der Spalte mit den Auswahlkaestchen)
+    float ListX0() const;                 // Detailansicht: linker Rand der Namensspalte (mit Auswahlkaestchen hinter deren Spalte)
     D2D1_RECT_F CheckRect(int pos) const; // Auswahlkaestchen eines Elements (Koordinaten wie ItemRect)
-    bool OnCheck(int pos, float x, float y) const;   // Maus ueber dem Auswahlkaestchen (nur bei Oeffnen mit einem Klick)
+    bool OnCheck(int pos, float x, float y) const;   // Maus ueber dem Auswahlkaestchen (nur mit der Einstellung Auswahlkaestchen)
     void ToggleCheck(int pos, bool shift);
     void PaintCheck(ID2D1DeviceContext* dc, const D2D1_RECT_F& rc, int state, bool hot);   // 0 leer, 1 Haken, 2 teilweise
     float ListNameW() const;              // Detailansicht: Namensspalte fuellt die Breite, die uebrigen Spalten haengen rechts
@@ -751,6 +752,7 @@ private:
     void ShowLanguageMenu(const D2D1_RECT_F& rc);
     void ShowViewerFullscreenMenu(const D2D1_RECT_F& rc);
     void ShowSingleClickMenu(const D2D1_RECT_F& rc);
+    void ShowCheckBoxMenu(const D2D1_RECT_F& rc);
     int settingsPage_ = 0;          // 0 Einstellungen, 1 Tastenkombinationen
     float settingsScroll_ = 0, settingsContentH_ = 0;
     bool settingsScrollDrag_ = false;   // Bildlaufleiste der Einstellungen wird gezogen

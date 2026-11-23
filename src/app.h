@@ -34,7 +34,7 @@ enum class HitType {
     ViewerClose, ViewerBack, ViewerPrev, ViewerNext, ViewerInfo, ViewerCrop, CropSave, CropCancel,
     ClearBookmarks, SearchHistItem, SearchHistDel, SearchHistClear, SearchParam,
     ViewCloud,
-    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen, SettingsSingleClick,
+    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen, SettingsSingleClick, SelectAll,
     SheetCancel, SheetCreate, SheetOrient, SheetColsMinus, SheetColsPlus, SheetRowsMinus, SheetRowsPlus, SheetNames,
     SheetExts, SheetQuality, SheetPrev, SheetNext, SheetHeadline, SheetCheck, SheetCell, SheetStripCheck, SheetStrip,
     SheetOpenPdf, BookmarkSheet,
@@ -193,6 +193,11 @@ private:
     std::wstring TypeName(const FileEntry& e);
     std::wstring CellText(const FileEntry& e, int col);
     int ColumnMinWidth(int col);
+    float ListX0() const;                 // Detailansicht: linker Rand der Namensspalte (bei Oeffnen mit einem Klick hinter der Spalte mit den Auswahlkaestchen)
+    D2D1_RECT_F CheckRect(int pos) const; // Auswahlkaestchen eines Elements (Koordinaten wie ItemRect)
+    bool OnCheck(int pos, float x, float y) const;   // Maus ueber dem Auswahlkaestchen (nur bei Oeffnen mit einem Klick)
+    void ToggleCheck(int pos, bool shift);
+    void PaintCheck(ID2D1DeviceContext* dc, const D2D1_RECT_F& rc, int state, bool hot);   // 0 leer, 1 Haken, 2 teilweise
     float ListNameW() const;              // Detailansicht: Namensspalte fuellt die Breite, die uebrigen Spalten haengen rechts
     float ListColsRight() const;          // rechter Rand der Spalten
     bool OverListLabel(int pos, float x);   // Symbol und Name einer Zeile (Ziehen = Dateien ziehen)
@@ -660,6 +665,7 @@ private:
     std::vector<SidebarItem> sidebar_;
     std::vector<std::wstring> crumbPaths_;
     int hoverPos_ = -1;
+    bool hoverCheck_ = false;         // Maus ueber dem Auswahlkaestchen des Elements unter hoverPos_
     int hoverHit_ = -1;
     bool hoverScrollbar_ = false;
 

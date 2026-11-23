@@ -1587,11 +1587,22 @@ void App::PaintTile(ID2D1DeviceContext* dc, int pos, const D2D1_RECT_F& cell) {
     // Merkliste: kleiner weisser Stern oben links (mit dunklem Schatten, damit er auf hellen Bildern sichtbar bleibt)
     if (!bookmarkSet_.empty() && bookmarkSet_.count(ToLower(e.path))) {
         float sz = std::clamp(tileS_ * 0.1f, 12.0f, 18.0f);
-        D2D1_RECT_F sr = D2D1::RectF(shown.left + 4, shown.top + 4, shown.left + 4 + sz + 4, shown.top + 4 + sz + 4);
+        // bei Oeffnen mit einem Klick liegt oben links das Auswahlkaestchen: Stern dann oben rechts
+        D2D1_RECT_F sr = settings_.singleClick
+                             ? D2D1::RectF(shown.right - 8 - sz, shown.top + 4, shown.right - 4, shown.top + 4 + sz + 4)
+                             : D2D1::RectF(shown.left + 4, shown.top + 4, shown.left + 4 + sz + 4, shown.top + 4 + sz + 4);
         wchar_t g[2] = {0xE735, 0};
         IDWriteTextFormat* fi = r_.Icon(sz);
         DrawText(dc, g, D2D1::RectF(sr.left + 1, sr.top + 1.5f, sr.right + 1, sr.bottom + 1.5f), fi, D2D1::ColorF(0, 0, 0, 0.55f));
         DrawText(dc, g, sr, fi, D2D1::ColorF(1, 1, 1, 1));
+    }
+
+    // Oeffnen mit einem Klick: Auswahlkaestchen oben links (beim Ueberfahren, bei ausgewaehlten Elementen immer)
+    if (settings_.singleClick && (sel || hov)) {
+        D2D1_RECT_F cb = CheckRect(pos);
+        float dx = cell.left - ItemRect(pos).left, dy = cell.top - ItemRect(pos).top;
+        cb.left += dx; cb.right += dx; cb.top += dy; cb.bottom += dy;
+        PaintCheck(dc, cb, sel ? 1 : 0, hov && hoverCheck_);
     }
 
     // Name: vollstaendig, auf mehrere Zeilen umbrochen
@@ -1654,16 +1665,55 @@ void App::PhotoDetailRows(const FileEntry& e, const std::function<void(const std
     if (number(parts[3], d)) row(L"ISO", std::to_wstring(static_cast<long long>(std::llround(d))));
 }
 
+// Oeffnen mit einem Klick: schmale feste Spalte mit Auswahlkaestchen links vor dem Namen
+static constexpr float kCheckColW = 30;
+
+float App::ListX0() const { return gridRc_.left + 8 + (settings_.singleClick ? kCheckColW : 0); }
+
+D2D1_RECT_F App::CheckRect(int pos) const {
+    D2D1_RECT_F rc = ItemRect(pos);
+    if (settings_.viewMode == 1) {
+        float x = gridRc_.left + 8 + (kCheckColW - 16) / 2;
+        return D2D1::RectF(x, rc.top + 9, x + 16, rc.top + 25);
+    }
+    return D2D1::RectF(rc.left + 9, rc.top + 9, rc.left + 29, rc.top + 29);   // Kachel: oben links in der Ecke
+}
+
+bool App::OnCheck(int pos, float x, float y) const {
+    if (!settings_.singleClick || settings_.viewMode == 2 || pos < 0 || pos >= static_cast<int>(visible_.size())) return false;
+    D2D1_RECT_F cb = CheckRect(pos);
+    float cy = y - gridRc_.top + scroll_;
+    if (settings_.viewMode == 1)   // Detailansicht: die ganze Spalte in Zeilenhoehe
+        return x >= gridRc_.left + 4 && x < gridRc_.left + 8 + kCheckColW && cy >= cb.top - 8 && cy <= cb.bottom + 8;
+    return x >= cb.left - 5 && x <= cb.right + 5 && cy >= cb.top - 5 && cy <= cb.bottom + 5;
+}
+
+// Auswahlkaestchen im Stil von Windows 11: leer mit Rahmen, ausgewaehlt in Akzentfarbe mit Haken
+void App::PaintCheck(ID2D1DeviceContext* dc, const D2D1_RECT_F& rc, int state, bool hot) {
+    Theme t = MakeTheme(dark_, backdrop_);
+    float s = rc.right - rc.left;
+    if (state == 0) {
+        D2D1_COLOR_F bg = dark_ ? D2D1::ColorF(0.12f, 0.12f, 0.12f, hot ? 0.95f : 0.8f) : D2D1::ColorF(1, 1, 1, hot ? 1.0f : 0.9f);
+        FillRound(dc, rc, 4, bg);
+        D2D1_RECT_F in = D2D1::RectF(rc.left + 0.5f, rc.top + 0.5f, rc.right - 0.5f, rc.bottom - 0.5f);
+        dc->DrawRoundedRectangle(D2D1::RoundedRect(in, 3.5f, 3.5f), r_.Brush(hot ? t.text : t.text2), 1.0f);
+        return;
+    }
+    FillRound(dc, rc, 4, hot ? WithAlpha(accent_, 0.9f) : accent_);
+    wchar_t g[2] = {static_cast<wchar_t>(state == 1 ? 0xE73E : 0xE738), 0};
+    DrawText(dc, g, rc, r_.Icon(s * 0.6f), t.onAccent);
+}
+
 // Namensspalte: der Platz, den die uebrigen Spalten am rechten Rand frei lassen (mindestens 200)
 float App::ListNameW() const {
     float rest = 0;
     for (int c = 1; c < 5; ++c) rest += static_cast<float>(settings_.colW[c]);
-    float avail = (gridRc_.right - 14) - (gridRc_.left + 8);
+    float avail = (gridRc_.right - 14) - ListX0();
     return std::max(200.0f, avail - rest);
 }
 
 float App::ListColsRight() const {
-    float r = gridRc_.left + 8 + ListNameW();
+    float r = ListX0() + ListNameW();
     for (int c = 1; c < 5; ++c) r += static_cast<float>(settings_.colW[c]);
     return r;
 }
@@ -1671,7 +1721,7 @@ float App::ListColsRight() const {
 // Symbol und (umbrochener) Name einer Zeile; daneben beginnt Ziehen ein Auswahlrechteck
 bool App::OverListLabel(int pos, float x) {
     if (pos < 0 || pos >= static_cast<int>(visible_.size())) return false;
-    float x0 = gridRc_.left + 8;
+    float x0 = ListX0();
     float nameW = ListNameW() - 48.0f;
     const FileEntry& e = entries_[visible_[pos]];
     std::vector<std::pair<uint32_t, uint32_t>> lines;
@@ -1685,7 +1735,20 @@ bool App::OverListLabel(int pos, float x) {
 void App::PaintListHeader(ID2D1DeviceContext* dc) {
     Theme t = MakeTheme(dark_, backdrop_);
     IDWriteTextFormat* f = r_.Text(12, DWRITE_FONT_WEIGHT_SEMI_BOLD);
-    float x = headerRc_.left + 8;
+    float x = ListX0();
+    if (settings_.singleClick) {
+        // Kaestchen vor "Name": alle Elemente der Liste auswaehlen bzw. die Auswahl aufheben
+        int n = static_cast<int>(visible_.size()), cnt = 0;
+        if (!selected_.empty())
+            for (uint32_t i : visible_) cnt += selected_.count(i) ? 1 : 0;
+        int state = cnt == 0 ? 0 : cnt == n ? 1 : 2;
+        float cx = headerRc_.left + 8 + (kCheckColW - 16) / 2, cy = std::round((headerRc_.top + headerRc_.bottom) / 2 - 8);
+        D2D1_RECT_F cb = D2D1::RectF(cx, cy, cx + 16, cy + 16);
+        int idx = static_cast<int>(hits_.size());
+        hits_.push_back({D2D1::RectF(headerRc_.left + 4, headerRc_.top + 2, headerRc_.left + 8 + kCheckColW, headerRc_.bottom - 2),
+                         HitType::SelectAll, 0});
+        PaintCheck(dc, cb, n == 0 ? 0 : state, hoverHit_ == idx);
+    }
     for (int c = 0; c < 5; ++c) {
         float w = c == 0 ? ListNameW() : static_cast<float>(settings_.colW[c]);
         D2D1_RECT_F rc = D2D1::RectF(x, headerRc_.top + 2, x + w, headerRc_.bottom - 2);
@@ -1729,7 +1792,14 @@ void App::PaintListRow(ID2D1DeviceContext* dc, int pos, const D2D1_RECT_F& row) 
         dc->DrawRoundedRectangle(D2D1::RoundedRect(inner, 4, 4), r_.Brush(accent_), 1.5f);
     }
 
-    float x = gridRc_.left + 8;
+    if (settings_.singleClick && (sel || pos == hoverPos_)) {
+        D2D1_RECT_F cb = CheckRect(pos);
+        float dy = row.top - ItemRect(pos).top;
+        cb.top += dy;
+        cb.bottom += dy;
+        PaintCheck(dc, cb, sel ? 1 : 0, pos == hoverPos_ && hoverCheck_);
+    }
+    float x = ListX0();
     // Symbol bzw. kleines Vorschaubild
     D2D1_RECT_F ib = D2D1::RectF(x + 6, row.top + 5, x + 30, row.top + 29);
     Bmp* b = nullptr;

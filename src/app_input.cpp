@@ -25,6 +25,24 @@ const Hit* App::HitAt(float x, float y) const {
 }
 
 // Nur Treffer auf einem Element; Zwischenraeume gelten als leere Flaeche (Auswahlrechteck)
+// Auswahlkaestchen (Oeffnen mit einem Klick): wie Strg+Klick, mit Umschalt alle Elemente vom Anker bis hier dazu
+void App::ToggleCheck(int pos, bool shift) {
+    if (pos < 0 || pos >= static_cast<int>(visible_.size())) return;
+    uint32_t idx = visible_[pos];
+    if (shift && anchor_ >= 0 && anchor_ < static_cast<int>(visible_.size())) {
+        int a = std::min(anchor_, pos), b = std::max(anchor_, pos);
+        for (int p = a; p <= b; ++p) selected_.insert(visible_[p]);
+        focus_ = pos;
+    } else {
+        if (selected_.count(idx)) selected_.erase(idx);
+        else selected_.insert(idx);
+        focus_ = anchor_ = pos;
+    }
+    lDown_ = false;
+    selectOnUp_ = false;
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
 int App::GridPosAt(float x, float y) const {
     if (settings_.viewMode == 2) return -1;   // Bilderwolke: eigene Trefferbestimmung (CloudPick)
     if (!Inside(gridRc_, x, y) || x > gridRc_.right - 14 || visible_.empty()) return -1;
@@ -338,8 +356,10 @@ void App::OnMouseMove(float x, float y, WPARAM keys) {
     for (int i = static_cast<int>(hits_.size()) - 1; i >= 0; --i)
         if (hits_[i].type != HitType::None && Inside(hits_[i].rc, x, y)) { hh = i; break; }
     bool sb = !settingsOpen_ && Inside(gridRc_, x, y) && x > gridRc_.right - 14;
-    if (hp != hoverPos_ || hh != hoverHit_ || sb != hoverScrollbar_) {
+    bool hc = hp >= 0 && OnCheck(hp, x, y);
+    if (hp != hoverPos_ || hh != hoverHit_ || sb != hoverScrollbar_ || hc != hoverCheck_) {
         hoverPos_ = hp;
+        hoverCheck_ = hc;
         hoverHit_ = hh;
         hoverScrollbar_ = sb;
         InvalidateRect(hwnd_, nullptr, FALSE);
@@ -583,6 +603,17 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         case HitType::SidebarAdd:
             PickFolder();
             break;
+        case HitType::SelectAll: {
+            // Kaestchen im Spaltenkopf: sind schon alle ausgewaehlt, Auswahl aufheben, sonst alle auswaehlen
+            bool all = !visible_.empty() && selected_.size() >= visible_.size();
+            if (all)
+                for (uint32_t i : visible_)
+                    if (!selected_.count(i)) { all = false; break; }
+            selected_.clear();
+            if (!all)
+                for (uint32_t i : visible_) selected_.insert(i);
+            break;
+        }
         default:
             break;
         }
@@ -612,6 +643,10 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
     }
 
     int pos = GridPosAt(x, y);
+    if (OnCheck(pos, x, y)) {   // Auswahlkaestchen: Element zur Auswahl hinzufuegen oder entfernen, nichts oeffnen
+        ToggleCheck(pos, (keys & MK_SHIFT) != 0);
+        return;
+    }
     if (pos < 0) {
         if (Inside(gridRc_, x, y)) {
             // Auswahlrechteck auf leerer Flaeche
@@ -815,6 +850,10 @@ void App::OnDoubleClick(float x, float y) {
         return;
     }
     int pos = GridPosAt(x, y);
+    if (OnCheck(pos, x, y)) {   // schnelles Doppelklicken auf ein Auswahlkaestchen: zweimal umschalten
+        ToggleCheck(pos, false);
+        return;
+    }
     if (settings_.singleClick && GetTickCount() < noDblUntil_) return;   // schon mit dem ersten Klick geoeffnet
     if (pos >= 0) {
         lDown_ = false;

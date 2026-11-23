@@ -121,7 +121,7 @@ void App::BeginRename(int pos) {
         rc.top += dy;
         rc.bottom += dy;
         if (settings_.viewMode == 1) {
-            float x = gridRc_.left + 8 + 34;
+            float x = ListX0() + 34;
             nr = D2D1::RectF(x, rc.top + 4, x + std::max(160.0f, ListNameW() - 40.0f), rc.top + 4 + fieldH);
         } else {
             float top = rc.top + 3 + 8 + tileS_ + 2;

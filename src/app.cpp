@@ -455,6 +455,12 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             if (h && h->type == HitType::Search) cur = IDC_IBEAM;
             else if (h && h->type == HitType::ZoomSlider) cur = IDC_HAND;
             else if (colDrag_ >= 0 || (h && h->type == HitType::ListResize)) cur = IDC_SIZEWE;
+            else if (!h && settings_.singleClick && !viewer_.open && !settingsOpen_ && !marquee_ && settings_.viewMode != 2) {
+                // Oeffnen mit einem Klick: Hand wie bei einem Link im Browser (nicht ueber dem Auswahlkaestchen)
+                float cx = pt.x / s, cy = pt.y / s;
+                int pos = GridPosAt(cx, cy);
+                if (pos >= 0 && !OnCheck(pos, cx, cy) && !(showHistory_ && searchFocus_ && cx >= histRc_.left && cx < histRc_.right && cy >= histRc_.top && cy < histRc_.bottom)) cur = IDC_HAND;
+            }
             SetCursor(LoadCursorW(nullptr, cur));
             return TRUE;
         }

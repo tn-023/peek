@@ -1034,6 +1034,14 @@ void App::OnWheel(float x, float y, int delta, WPARAM keys) {
 
 bool App::OnKeyDown(WPARAM vk) {
     bool ctrl = CtrlDown(), shift = ShiftDown(), alt = AltDown();
+    if (slidePending_ >= 0) {   // Diashow blendet gerade ab: Esc bricht ab, sonst nichts
+        if (vk == VK_ESCAPE) {
+            KillTimer(hwnd_, kTimerSlideStart);
+            slidePending_ = -1;
+            InvalidateRect(hwnd_, nullptr, FALSE);
+        }
+        return true;
+    }
     if (vk == VK_F11) { ToggleFullscreen(); return true; }
     if (vk == VK_F12 && ctrl && shift && !alt) {   // Messanzeige fuer Bildzeiten (nicht dokumentiert)
         perfHud_ = !perfHud_;
@@ -1069,19 +1077,13 @@ bool App::OnKeyDown(WPARAM vk) {
             viewer_.pan.y *= s1 / s0;
         };
         auto jumpTo = [&](bool last) {
-            int n = static_cast<int>(visible_.size());
-            for (int k = 0; k < n; ++k) {
-                int i = last ? n - 1 - k : k;
-                const FileEntry& x = entries_[visible_[i]];
-                if (x.kind == Kind::Image) {
-                    viewer_.pos = i;
-                    viewer_.zoom = 0;
-                    viewer_.pan = {0, 0};
-                    viewer_.rotation = 0;
-                    ViewerPrefetch();
-                    return;
-                }
-            }
+            int i = ViewerEdge(last);
+            if (i < 0) return;
+            viewer_.pos = i;
+            viewer_.zoom = 0;
+            viewer_.pan = {0, 0};
+            viewer_.rotation = 0;
+            ViewerPrefetch();
         };
         if (viewer_.crop) {
             if (vk == VK_ESCAPE) CancelCrop();

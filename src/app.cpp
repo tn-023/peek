@@ -535,6 +535,9 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             tipShown_ = true;
             InvalidateRect(hwnd_, nullptr, FALSE);
             break;
+        case kTimerSlideStart:
+            SlideshowFromGrid();
+            break;
         case kTimerViewerUi:
             KillTimer(hwnd_, kTimerViewerUi);
             InvalidateRect(hwnd_, nullptr, FALSE);
@@ -1727,6 +1730,7 @@ void App::OpenPos(int pos) {
 void App::OpenViewer(int pos) {
     viewer_ = ViewerState{};
     viewer_.open = true;
+    viewer_.timeOrder = settings_.viewMode == 3;   // aus der Zeitleiste: blaettern wie dort
     viewer_.pos = pos;
     viewer_.bar = settings_.viewerBar;                  // Leiste oben und Infobereich wie beim letzten Mal
     infoAnim_ = settings_.viewerInfo ? 1.0f : 0.0f;     // ohne Einfahren
@@ -1801,39 +1805,105 @@ void App::CloseViewer() {
 // ---------------------------------------------------------------------------
 
 int App::SlideNext(int pos, int dir) const {
-    int n = static_cast<int>(visible_.size());
-    if (n <= 0) return pos;
-    int p = pos;
-    for (int k = 0; k < n; ++k) {
-        p = (p + (dir > 0 ? 1 : -1) + n) % n;
-        if (p == pos) return pos;
-        if (entries_[visible_[p]].kind == Kind::Image) return p;
+    int p = ViewerNext(pos, dir);
+    if (p < 0) p = ViewerEdge(dir < 0);   // am Ende wieder von vorn
+    return p < 0 ? pos : p;
+}
+
+// Reihenfolge im Betrachter: wie in der Ansicht; aus der Zeitleiste geoeffnet wie dort (neueste zuerst,
+// bei gleichem Datum in der Reihenfolge der Ansicht, wie die stabile Sortierung der Zeitleiste)
+bool App::ViewerBefore(int a, int b) const {
+    if (!viewer_.timeOrder) return a < b;
+    int64_t ta = entries_[visible_[a]].Time(), tb = entries_[visible_[b]].Time();
+    return ta != tb ? ta > tb : a < b;
+}
+
+int App::ViewerNext(int pos, int dir) const {
+    const int n = static_cast<int>(visible_.size());
+    if (pos < 0 || pos >= n) return -1;
+    if (!viewer_.timeOrder) {
+        for (int p = pos + (dir > 0 ? 1 : -1); p >= 0 && p < n; p += dir > 0 ? 1 : -1)
+            if (entries_[visible_[p]].kind == Kind::Image) return p;
+        return -1;
     }
-    return pos;
+    int best = -1;
+    for (int p = 0; p < n; ++p) {
+        if (p == pos || entries_[visible_[p]].kind != Kind::Image) continue;
+        bool after = dir > 0 ? ViewerBefore(pos, p) : ViewerBefore(p, pos);
+        if (after && (best < 0 || (dir > 0 ? ViewerBefore(p, best) : ViewerBefore(best, p)))) best = p;
+    }
+    return best;
+}
+
+int App::ViewerEdge(bool last) const {
+    int best = -1;
+    for (int p = 0; p < static_cast<int>(visible_.size()); ++p) {
+        if (entries_[visible_[p]].kind != Kind::Image) continue;
+        if (best < 0 || (last ? ViewerBefore(best, p) : ViewerBefore(p, best))) best = p;
+    }
+    return best;
+}
+
+void App::ViewerRank(int pos, int& index, int& count) const {
+    index = count = 0;
+    for (int p = 0; p < static_cast<int>(visible_.size()); ++p) {
+        if (entries_[visible_[p]].kind != Kind::Image) continue;
+        ++count;
+        if (p == pos || ViewerBefore(p, pos)) ++index;
+    }
 }
 
 void App::StartSlideshow(bool fromGrid) {
     int n = static_cast<int>(visible_.size());
     if (fromGrid) {
+        if (slidePending_ >= 0) return;
         int start = -1;
         if (focus_ >= 0 && focus_ < n && entries_[visible_[focus_]].kind == Kind::Image) start = focus_;
+        if (start < 0 && settings_.viewMode == 3) {   // Zeitleiste: mit dem neuesten Bild beginnen
+            for (int p = 0; p < n; ++p)
+                if (entries_[visible_[p]].kind == Kind::Image &&
+                    (start < 0 || entries_[visible_[p]].Time() > entries_[visible_[start]].Time()))
+                    start = p;
+        }
         for (int p = 0; p < n && start < 0; ++p)
             if (entries_[visible_[p]].kind == Kind::Image) start = p;
         if (start < 0) {
             SetStatus(T(L"Keine Bilder in dieser Ansicht."));
             return;
         }
-        OpenViewer(start);
+        // erst die Ordneransicht langsam nach Schwarz abblenden; der Betrachter (und damit ein Wechsel der
+        // Fenstergroesse fuer das Vollbild) kommt erst danach, unsichtbar im Schwarz
+        slidePending_ = start;
+        slidePendingEnd_ = NowMs() + 800;
+        SetTimer(hwnd_, kTimerSlideStart, 800, nullptr);
+        InvalidateRect(hwnd_, nullptr, FALSE);
+        return;
     }
+    BeginSlideshow(false, true);
+}
+
+// Abblenden vorbei: Betrachter oeffnen und die Diashow im Schwarz beginnen
+void App::SlideshowFromGrid() {
+    KillTimer(hwnd_, kTimerSlideStart);
+    int start = slidePending_;
+    slidePending_ = -1;
+    if (start < 0 || start >= static_cast<int>(visible_.size())) { InvalidateRect(hwnd_, nullptr, FALSE); return; }
+    OpenViewer(start);
+    BeginSlideshow(true, false);
+}
+
+void App::BeginSlideshow(bool fromGrid, bool intro) {
+    int n = static_cast<int>(visible_.size());
     if (!viewer_.open || viewer_.pos < 0 || viewer_.pos >= n) return;
     if (viewer_.crop) CancelCrop();
     auto& v = viewer_;
     v.slide = true;
     v.slidePaused = false;
     v.slideFromGrid = fromGrid;
-    // erst langsam nach Schwarz abblenden (Ordneransicht bzw. Betrachter), dann blendet das erste Bild ein
-    v.slideIntroEnd = NowMs() + 800;
-    v.slideT0 = v.slideIntroEnd;
+    // im Betrachter gestartet: erst langsam nach Schwarz abblenden, dann blendet das erste Bild ein
+    double now = NowMs();
+    v.slideIntroEnd = intro ? now + 800 : now;
+    v.slideT0 = intro ? v.slideIntroEnd : now + 150;   // kurz Schwarz halten (Fenster hat evtl. gerade gewechselt)
     v.slidePrev = -1;
     v.bar = false;   // Leiste ausblenden (die Einstellung bleibt, wie sie ist)
     v.zoom = 0;
@@ -1902,14 +1972,8 @@ void App::ViewerStep(int delta) {
     if (!viewer_.open) return;
     if (viewer_.slide) { SlideAdvance(delta); return; }
     if (viewer_.crop) CancelCrop();
-    int n = static_cast<int>(visible_.size());
-    int p = viewer_.pos;
-    for (;;) {
-        p += delta > 0 ? 1 : -1;
-        if (p < 0 || p >= n) return;
-        const FileEntry& e = entries_[visible_[p]];
-        if (e.kind == Kind::Image) break;
-    }
+    int p = ViewerNext(viewer_.pos, delta);
+    if (p < 0) return;
     viewer_.pos = p;
     viewer_.zoom = 0;
     viewer_.pan = {0, 0};
@@ -1930,17 +1994,14 @@ void App::ViewerDeleteCurrent() {
     entries_[idx].gone = true;
     selected_.erase(idx);
     int pos = viewer_.pos;
+    // naechstes Bild (sonst vorheriges) in der Reihenfolge des Betrachters, vor dem Entfernen bestimmt
+    int next = ViewerNext(pos, 1);
+    if (next < 0) next = ViewerNext(pos, -1);
     visible_.erase(visible_.begin() + pos);
     ++visibleVersion_;
     focus_ = anchor_ = -1;
     fullBmps_.erase(path);
-    // naechstes Bild (sonst vorheriges); keins mehr -> Betrachter schliessen
-    int next = -1;
-    for (int p = pos; p < static_cast<int>(visible_.size()); ++p)
-        if (entries_[visible_[p]].kind == Kind::Image) { next = p; break; }
-    if (next < 0)
-        for (int p = pos - 1; p >= 0; --p)
-            if (entries_[visible_[p]].kind == Kind::Image) { next = p; break; }
+    if (next > pos) --next;   // hinter dem entfernten Eintrag ruecken alle eins nach vorn
     // kein Bild mehr: Betrachter bleibt offen und zeigt einen Hinweis
     viewer_.pos = next;
     viewer_.zoom = 0;
@@ -1962,9 +2023,11 @@ void App::ViewerPrefetch() {
     const int ahead = IsNetworkPath(entries_[visible_[viewer_.pos]].path) ? 1 : 2;   // Netzlaufwerk: sparsamer
     for (int dir : {1, -1}) {
         int found = 0;
-        for (int p = viewer_.pos + dir; p >= 0 && p < n && found < ahead; p += dir) {
-            const FileEntry& e = entries_[visible_[p]];
-            if (e.kind == Kind::Image && !e.offline) {   // Nachbarn nur, wenn sie schon auf dem PC liegen (kein Download)
+        int p = viewer_.pos;
+        for (int guard = 0; found < ahead && guard < 32; ++guard) {
+            p = ViewerNext(p, dir);
+            if (p < 0) break;
+            if (!entries_[visible_[p]].offline) {   // Nachbarn nur, wenn sie schon auf dem PC liegen (kein Download)
                 wanted.push_back({p, 1});
                 ++found;
             }

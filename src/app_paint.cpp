@@ -738,7 +738,7 @@ void App::Paint() {
 
     if (compare_.open) {
         PaintCompare(dc);
-    } else if (viewer_.open && !(viewer_.slide && viewer_.slideFromGrid && NowMs() < viewer_.slideIntroEnd)) {
+    } else if (viewer_.open) {
         PaintViewer(dc);
     } else if (viewerStart_) {
         dc->Clear(D2D1::ColorF(0, 0, 0, 1));   // Start mit einer Bilddatei: dunkel, bis der Betrachter offen ist
@@ -793,8 +793,8 @@ void App::Paint() {
             DrawText(dc, up, D2D1::RectF(a.x - 10, a.y - 14, a.x + 10, a.y - 2), r_.Icon(8), t.text);
             DrawText(dc, dn, D2D1::RectF(a.x - 10, a.y + 2, a.x + 10, a.y + 14), r_.Icon(8), t.text);
         }
-        if (viewer_.open) {   // Diashow aus der Ordneransicht gestartet: die Ansicht blendet langsam nach Schwarz ab
-            float k = static_cast<float>(1.0 - std::clamp((viewer_.slideIntroEnd - NowMs()) / 800.0, 0.0, 1.0));
+        if (slidePending_ >= 0) {   // Diashow aus der Ordneransicht gestartet: die Ansicht blendet langsam nach Schwarz ab
+            float k = static_cast<float>(1.0 - std::clamp((slidePendingEnd_ - NowMs()) / 800.0, 0.0, 1.0));
             dc->FillRectangle(D2D1::RectF(0, 0, W_, H_), r_.Brush(D2D1::ColorF(0, 0, 0, k * k * (3 - 2 * k))));
             hits_.clear();
             InvalidateRect(hwnd_, nullptr, FALSE);
@@ -1948,7 +1948,7 @@ void App::PaintStatus(ID2D1DeviceContext* dc) {
     // rechts: i-Symbol, Zoom (Plus/Regler/Minus), Ansicht, Status
     float rx = W_ - 8;
     // eigene Symbole (Linien, 16 Einheiten): 0 Bilderwolke = drei leere Kacheln wie eine Wolke verteilt,
-    // 1 Zeitleiste = duenner Pfeil mit kleinen Kacheln oben und unten
+    // 1 Zeitleiste = Strahl oben mit drei daran haengenden Kacheln
     auto drawSymbol = [&](const D2D1_RECT_F& rc, int which, const D2D1_COLOR_F& c) {
         const float u = 17.0f / 16.0f;
         const float bx = std::round((rc.left + rc.right) / 2 - 8.5f), by = std::round((rc.top + rc.bottom) / 2 - 8.5f);
@@ -1984,19 +1984,17 @@ void App::PaintStatus(ID2D1DeviceContext* dc) {
             if (layer) dc->PopLayer();
             sq(fx, fy, fw, fr);
         } else {
-            // duenner Pfeil als Zeitstrahl, kleine Kacheln oben und unten an kurzen Linien
+            // Strahl oben (duenner Pfeil), daran haengen drei gleich grosse abgerundete Rechtecke
             auto ln = [&](float x1, float y1, float x2, float y2) {
                 dc->DrawLine(D2D1::Point2F(bx + x1 * u, by + y1 * u), D2D1::Point2F(bx + x2 * u, by + y2 * u), br, 0.9f);
             };
-            ln(0.5f, 8.0f, 15.5f, 8.0f);
-            ln(13.0f, 5.8f, 15.5f, 8.0f);
-            ln(13.0f, 10.2f, 15.5f, 8.0f);
-            sq(1.0f, 0.5f, 4.0f, 1.1f);
-            ln(3.0f, 4.5f, 3.0f, 8.0f);
-            sq(5.5f, 11.5f, 4.0f, 1.1f);
-            ln(7.5f, 8.0f, 7.5f, 11.5f);
-            sq(9.5f, 1.5f, 3.5f, 1.0f);
-            ln(11.25f, 5.0f, 11.25f, 8.0f);
+            ln(0.5f, 4.5f, 15.5f, 4.5f);
+            ln(13.3f, 2.5f, 15.5f, 4.5f);
+            ln(13.3f, 6.5f, 15.5f, 4.5f);
+            for (float cx : {2.75f, 7.25f, 11.75f}) {
+                ln(cx, 4.5f, cx, 8.5f);
+                sq(cx - 2.0f, 8.5f, 4.0f, 1.1f);
+            }
         }
     };
     auto iconButton = [&](HitType type, wchar_t glyph, float size, bool active, int symbol = -1) {
@@ -2548,15 +2546,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
 
     // Blaettern: ganz am Rand, nur kurz nach einer Mausbewegung sichtbar (nicht beim Zuschneiden)
     if (!viewer_.crop && GetTickCount() < viewer_.controlsUntil) {
-        bool hasPrev = false, hasNext = false;
-        for (int p = viewer_.pos - 1; p >= 0 && !hasPrev; --p) {
-            const FileEntry& x = entries_[visible_[p]];
-            hasPrev = x.kind == Kind::Image;
-        }
-        for (int p = viewer_.pos + 1; p < n && !hasNext; ++p) {
-            const FileEntry& x = entries_[visible_[p]];
-            hasNext = x.kind == Kind::Image;
-        }
+        bool hasPrev = ViewerNext(viewer_.pos, -1) >= 0, hasNext = ViewerNext(viewer_.pos, 1) >= 0;
         float my = H_ / 2;
         auto arrow = [&](HitType type, wchar_t glyph, float x) {
             D2D1_RECT_F rc = D2D1::RectF(x, my - 64, x + 48, my + 64);
@@ -2650,13 +2640,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
             nameX = backW + 16;
         }
         int imgIndex = 0, imgCount = 0;
-        for (int p = 0; p < n; ++p) {
-            const FileEntry& x = entries_[visible_[p]];
-            if (x.kind == Kind::Image) {
-                ++imgCount;
-                if (p <= viewer_.pos) imgIndex = imgCount;
-            }
-        }
+        ViewerRank(viewer_.pos, imgIndex, imgCount);
         // rechts: Diashow, Zuschneiden, Info, dann X bzw. die Windows-Knoepfe
         const float bRight = W_ - closeW;
         const float textRight = bRight - 3 * 48 - 8;

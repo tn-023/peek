@@ -258,7 +258,7 @@ float App::TimelineShrink(float x, float s, float& fog) const {
     float d = std::clamp(std::fabs(cx - vw / 2) / (vw / 2), 0.0f, 1.0f);
     float f = d * d;
     fog = (dark_ ? 0.66f : 0.56f) * f;
-    return 1.0f - 0.24f * f;
+    return 1.0f - 0.19f * f;
 }
 
 D2D1_RECT_F App::TimelineRect(float x, float y, float s, float k) const {
@@ -638,10 +638,13 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
         }
         bool sel = selected_.count(visible_[it.pos]) != 0;
         darken();
-        if (it.pos == hoverPos_) FillRound(dc, rc, rad, D2D1::ColorF(1, 1, 1, 0.12f));
+        // wie in der Wolke: unter der Maus ein Rahmen in Akzentfarbe, ausgewaehlt ein weisser Rahmen
         if (sel) {
-            D2D1_RECT_F in = D2D1::RectF(rc.left + 1.25f, rc.top + 1.25f, rc.right - 1.25f, rc.bottom - 1.25f);
-            dc->DrawRoundedRectangle(D2D1::RoundedRect(in, rad - 1, rad - 1), r_.Brush(accent_), 2.5f);
+            D2D1_RECT_F fr = D2D1::RectF(rc.left - 1.5f, rc.top - 1.5f, rc.right + 1.5f, rc.bottom + 1.5f);
+            dc->DrawRoundedRectangle(D2D1::RoundedRect(fr, rad + 1.5f, rad + 1.5f), r_.Brush(D2D1::ColorF(1, 1, 1, 0.95f)), 2.5f);
+        } else if (it.pos == hoverPos_) {
+            D2D1_RECT_F hr = D2D1::RectF(rc.left - 1, rc.top - 1, rc.right + 1, rc.bottom + 1);
+            dc->DrawRoundedRectangle(D2D1::RoundedRect(hr, rad + 1, rad + 1), r_.Brush(accent_), 2.0f);
         } else if (it.pos == focus_ && !moving) {
             D2D1_RECT_F in = D2D1::RectF(rc.left + 0.5f, rc.top + 0.5f, rc.right - 0.5f, rc.bottom - 0.5f);
             dc->DrawRoundedRectangle(D2D1::RoundedRect(in, rad, rad), r_.Brush(text2), 1.0f);

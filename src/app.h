@@ -121,6 +121,7 @@ struct ViewerState {
     std::wstring toast;     // kurzer Hinweis oben (z. B. "In den Papierkorb verschoben")
     DWORD toastUntil = 0;
     // Diashow: Bilder blenden langsam ineinander ueber, jedes zoomt dabei leicht heran
+    bool timeOrder = false;  // aus der Zeitleiste geoeffnet: Reihenfolge wie dort (Datum absteigend)
     bool slide = false;
     bool slidePaused = false;
     bool slideFromGrid = false;  // aus der Ordneransicht gestartet: Esc fuehrt dorthin zurueck
@@ -194,9 +195,17 @@ private:
     void DeleteSelection();
     void ToggleFullscreen(bool workArea = false);   // workArea: rahmenlos ueber dem Arbeitsbereich (Taskleiste bleibt sichtbar)
     void StartSlideshow(bool fromGrid);
+    void SlideshowFromGrid();
+    void BeginSlideshow(bool fromGrid, bool intro);
+    int slidePending_ = -1;             // Diashow aus der Ordneransicht: Startbild, waehrend nach Schwarz abgeblendet wird
+    double slidePendingEnd_ = 0;
     void StopSlideshow(bool keepViewer);
     void ToggleSlidePause();
-    int SlideNext(int pos, int dir) const;     // naechstes Bild in der Ansicht (am Ende wieder von vorn)
+    int SlideNext(int pos, int dir) const;
+    bool ViewerBefore(int a, int b) const;     // Bild a kommt im Betrachter vor b
+    int ViewerNext(int pos, int dir) const;    // naechstes/vorheriges Bild oder -1
+    int ViewerEdge(bool last) const;           // erstes/letztes Bild oder -1
+    void ViewerRank(int pos, int& index, int& count) const;     // naechstes Bild in der Ansicht (am Ende wieder von vorn)
     void SlideAdvance(int dir);
     void PaintSlides(ID2D1DeviceContext* dc, float VW);
     struct SlideCache {                        // Bild in Bildschirmaufloesung (einmal hochwertig gefiltert)
@@ -915,7 +924,8 @@ constexpr UINT_PTR kTimerViewerClick = 6;
 constexpr UINT_PTR kTimerMetaHold = 47;
 constexpr UINT_PTR kTimerToast = 48;
 constexpr UINT_PTR kTimerDocMenu = 49;   // Dokumentation: Filtermenue verzoegert oeffnen
-constexpr UINT_PTR kTimerTip = 51;           // Hinweis nach kurzem Verweilen zeigen
+constexpr UINT_PTR kTimerTip = 51;
+constexpr UINT_PTR kTimerSlideStart = 52;     // Diashow: nach dem Abblenden den Betrachter oeffnen           // Hinweis nach kurzem Verweilen zeigen
 constexpr UINT_PTR kTimerViewerStart = 50;   // Start mit einer Bilddatei: Notausgang, falls der Ordner nicht laedt
 constexpr UINT WM_APP_FILEOP = WM_APP + 20;
 constexpr UINT WM_APP_SHEET = WM_APP + 21;   // Fortschritt/Ende der PDF-Erstellung (Kontaktabzug)

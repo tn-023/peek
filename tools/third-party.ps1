@@ -63,14 +63,36 @@ foreach ($p in $ports) {
 
 # Rust packages of resvg
 if (-not (Test-Path $Rust)) { throw "Rust license data missing: $Rust" }
-# read as one object (no enumeration), then take the list; also accepts {"value": [...]} from older PowerShell
-$data = Get-Content $Rust -Raw | ConvertFrom-Json -NoEnumerate
-if ($data -is [System.Array]) { $rust = $data }
-elseif ($null -ne $data.value) { $rust = @($data.value) }
-else { $rust = @($data) }
+# parsed with System.Text.Json (PowerShell's ConvertFrom-Json treats a top-level array inconsistently)
+$doc = [System.Text.Json.JsonDocument]::Parse((Get-Content $Rust -Raw))
+$root = $doc.RootElement
+if ($root.ValueKind -eq [System.Text.Json.JsonValueKind]::Object -and $root.TryGetProperty('value', [ref]$null)) {
+    $root = $root.GetProperty('value')
+}
+function Json-Str($el, [string]$name) {
+    $v = $null
+    if ($el.TryGetProperty($name, [ref]$v) -and $v.ValueKind -eq [System.Text.Json.JsonValueKind]::String) { return $v.GetString() }
+    return ''
+}
+$rust = New-Object System.Collections.Generic.List[object]
+foreach ($el in $root.EnumerateArray()) {
+    $files = New-Object System.Collections.Generic.List[object]
+    $fv = $null
+    if ($el.TryGetProperty('files', [ref]$fv)) {
+        $items = if ($fv.ValueKind -eq [System.Text.Json.JsonValueKind]::Array) { @($fv.EnumerateArray()) } else { @($fv) }
+        foreach ($f in $items) {
+            if ($f.ValueKind -eq [System.Text.Json.JsonValueKind]::Object) {
+                $files.Add([pscustomobject]@{ name = (Json-Str $f 'name'); text = (Json-Str $f 'text') })
+            }
+        }
+    }
+    $rust.Add([pscustomobject]@{
+        name = (Json-Str $el 'name'); version = (Json-Str $el 'version'); license = (Json-Str $el 'license')
+        repository = (Json-Str $el 'repository'); files = $files.ToArray() })
+}
 if ($rust.Count -lt 2) { throw "Rust license data looks wrong ($($rust.Count) packages): $Rust" }
 foreach ($p in $rust) {
-    Add-Component "$($p.name) $($p.version)" $p.license $p.repository @($p.files)
+    Add-Component "$($p.name) $($p.version)" $p.license $p.repository $p.files
 }
 
 $sb = New-Object System.Text.StringBuilder

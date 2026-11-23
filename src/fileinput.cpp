@@ -189,7 +189,6 @@ private:
 }  // namespace
 
 void SetInputSandboxed(bool on) { g_sandboxed = on; }
-bool InputSandboxed() { return g_sandboxed; }
 
 ScopedInput::ScopedInput(const std::wstring& path, HANDLE h) {
     t_input.path = &path;

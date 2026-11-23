@@ -418,4 +418,15 @@ float Renderer::MeasureText(const std::wstring& s, IDWriteTextFormat* fmt) {
     return m.widthIncludingTrailingWhitespace;
 }
 
+float Renderer::Baseline(const std::wstring& s, IDWriteTextFormat* fmt) {
+    if (!fmt || s.empty()) return 0;
+    ComPtr<IDWriteTextLayout> layout;
+    if (FAILED(dwrite_->CreateTextLayout(s.c_str(), static_cast<UINT32>(s.size()), fmt, 10000.0f, 1000.0f, &layout)))
+        return 0;
+    DWRITE_LINE_METRICS lm{};
+    UINT32 n = 0;
+    if (FAILED(layout->GetLineMetrics(&lm, 1, &n)) || n == 0) return 0;
+    return lm.baseline;
+}
+
 } // namespace peek

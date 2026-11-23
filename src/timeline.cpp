@@ -103,6 +103,7 @@ void App::TimelineSync() {
     t.items.clear();
     t.groups.clear();
     t.cols.clear();
+    t.groupOf.assign(visible_.size(), -1);
 
     // Bilder und Videos nach Datum, neueste zuerst
     std::vector<int> order;
@@ -128,13 +129,11 @@ void App::TimelineSync() {
         }
         if (groups <= kTlMaxGroups) { level = lv; break; }
     }
-    t.level = level;
 
     // Kachelgroesse: die erste Spalte einer Gruppe fasst zwei bis drei Kacheln
     const float availH = std::max(80.0f, vh - kTlSlider - kTlTop - 8);
     const int r0 = availH >= 420 ? 3 : 2;
     const float s0 = std::clamp((availH - (r0 - 1) * kTlGap) / r0, 64.0f, 260.0f);
-    t.s0 = s0;
     t.maxS = s0;
     IDWriteTextFormat* fBig = r_.Text(kTlBig, kTlWeight);
     IDWriteTextFormat* fSmall = r_.Text(kTlSmall, DWRITE_FONT_WEIGHT_NORMAL);
@@ -178,6 +177,18 @@ void App::TimelineSync() {
             g.sub = std::wstring(MonthName(static_cast<unsigned>(d.m))) + L" " + std::to_wstring(d.y);
             g.full = FormatDay(d.y, static_cast<unsigned>(d.m), static_cast<unsigned>(d.d));
         }
+        // Diashow (aus der Zeitleiste): dieselbe Zeitangabe in Versalien ueber dem ersten Bild der Gruppe
+        if (d.y != 0) {
+            if (lvl == 0)
+                g.caps = LangEn() ? std::wstring(MonthName(static_cast<unsigned>(d.m))) + L" " + std::to_wstring(d.d) + L", " +
+                                        std::to_wstring(d.y)
+                                  : std::to_wstring(d.d) + L". " + MonthName(static_cast<unsigned>(d.m)) + L" " +
+                                        std::to_wstring(d.y);
+            else
+                g.caps = g.big + (g.sub.empty() ? L"" : L" " + g.sub);
+            CharUpperBuffW(g.caps.data(), static_cast<DWORD>(g.caps.size()));
+        }
+        for (size_t k = i; k < j; ++k) t.groupOf[order[k]] = static_cast<int>(t.groups.size());
         g.x0 = x;
         g.firstItem = static_cast<int>(t.items.size());
         g.collapsed = g.count > kTlCollapse && !t.expanded.count(gk);
@@ -376,7 +387,6 @@ void App::TimelineToggle(int group) {
     const size_t n = t.items.size();
     t.from.assign(n, D2D1_RECT_F{});
     t.delay.assign(n, 0.0f);
-    t.emerge.assign(n, 0);
     int rank = 0;
     for (size_t i = 0; i < n; ++i) {
         const auto& it = t.items[i];
@@ -384,7 +394,6 @@ void App::TimelineToggle(int group) {
         bool inGroup = t.groups[it.group].key == k;
         if (expanding && inGroup && haveStack) {
             t.from[i] = stackRc;
-            t.emerge[i] = 1;
             t.delay[i] = static_cast<float>(std::min(kTlStaggerMax, rank * kTlStaggerMs));
             ++rank;
         } else {
@@ -410,10 +419,10 @@ void App::TimelineToggle(int group) {
 // Uebersicht unten: der angeklickte Zeitpunkt kommt in die Mitte (wie eine Bildlaufleiste, absolut)
 void App::TimelineScrubAt(float x, bool immediate) {
     auto& t = tl_;
-    float w = std::max(1.0f, t.trackHalf);   // Breite der Uebersicht
+    float w = std::max(1.0f, t.chartW);   // Breite der Uebersicht
     float vw = gridRc_.right - gridRc_.left;
     float maxScroll = std::max(0.0f, t.contentW - vw);
-    float wx = std::clamp((x - t.trackMid) / w, 0.0f, 1.0f) * t.contentW;
+    float wx = std::clamp((x - t.chartL) / w, 0.0f, 1.0f) * t.contentW;
     t.target = std::clamp(wx - vw / 2, 0.0f, maxScroll);
     if (immediate) t.scroll = t.target;
     StartAnimation();
@@ -746,8 +755,8 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
     //    darueber der sichtbare Ausschnitt; Klicken oder Ziehen springt dorthin. Darunter die Jahre.
     const float cl = area.left + 20, cr = area.right - 20, cw = std::max(1.0f, cr - cl);
     const float barTop = area.bottom - kTlSlider + 10, barBottom = area.bottom - 22;
-    t.trackMid = cl;   // linker Rand und Breite der Uebersicht (fuer TimelineScrubAt)
-    t.trackHalf = cw;
+    t.chartL = cl;   // linker Rand und Breite der Uebersicht (fuer TimelineScrubAt)
+    t.chartW = cw;
     hits_.push_back({D2D1::RectF(cl - 6, barTop - 6, cr + 6, area.bottom), HitType::TimelineScrub, 0});
     const float kx = cw / std::max(1.0f, t.contentW);
     int maxCount = 1;

@@ -82,11 +82,6 @@ bool ThumbService::Pop(ThumbRequest& out) {
     return false;
 }
 
-size_t ThumbService::Backlog() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return queues_[0].size() + queues_[1].size() + queues_[2].size();
-}
-
 std::vector<ThumbResult> ThumbService::Take() {
     posted_ = false;
     std::lock_guard<std::mutex> lock(resultMutex_);

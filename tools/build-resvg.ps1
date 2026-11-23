@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $Out = [System.IO.Path]::GetFullPath($Out)
-if ((Test-Path "$Out/lib/resvg.lib") -and (Test-Path "$Out/include/resvg.h") -and (Test-Path "$Out/THIRD-PARTY-rust.txt") -and (Test-Path "$Out/THIRD-PARTY-rust.txt") -and
+if ((Test-Path "$Out/lib/resvg.lib") -and (Test-Path "$Out/include/resvg.h") -and (Test-Path "$Out/rust-licenses.json") -and
     ((Get-Content "$Out/version.txt" -ErrorAction SilentlyContinue) -eq $Version)) {
     Write-Host "resvg $Version bereits vorhanden: $Out"
     exit 0
@@ -40,44 +40,29 @@ cargo rustc --locked --profile production --target x86_64-pc-windows-msvc --mani
 
 New-Item -ItemType Directory -Force -Path "$Out/lib", "$Out/include" | Out-Null
 
-# Lizenzen aller mitgelinkten Rust-Pakete sammeln (fuer THIRD-PARTY.txt)
+# Licenses of all linked Rust packages (for THIRD-PARTY.txt, assembled by tools/third-party.ps1):
+# name, version, license expression, repository and the text of each license file
 $meta = cargo metadata --locked --format-version 1 --manifest-path "$src/crates/c-api/Cargo.toml" `
     --filter-platform x86_64-pc-windows-msvc --no-default-features `
     --features "text,system-fonts,memmap-fonts,raster-images" | ConvertFrom-Json
 $used = @{}
 foreach ($node in $meta.resolve.nodes) { $used[$node.id] = $true }
-$sb = New-Object System.Text.StringBuilder
-$seen = @{}
-$count = 0
+$list = New-Object System.Collections.Generic.List[object]
 foreach ($pkg in ($meta.packages | Where-Object { $used[$_.id] } | Sort-Object name)) {
     $dir = Split-Path $pkg.manifest_path -Parent
-    $count++
-    [void]$sb.AppendLine(('=' * 78))
-    [void]$sb.AppendLine("$($pkg.name) $($pkg.version)  -  Lizenz: $($pkg.license)")
-    if ($pkg.repository) { [void]$sb.AppendLine($pkg.repository) }
-    [void]$sb.AppendLine(('=' * 78))
     $files = Get-ChildItem -Path $dir -File | Where-Object { $_.Name -match '^(LICEN[CS]E|COPYING|COPYRIGHT|NOTICE|UNLICENSE)' }
     if (-not $files) {
-        # Workspace-Pakete (resvg, usvg, ...): Lizenzdateien im Wurzelverzeichnis
+        # workspace packages (resvg, usvg, ...): license files in the repository root
         $files = Get-ChildItem -Path $src -File | Where-Object { $_.Name -match '^(LICEN[CS]E|COPYING|NOTICE)' }
     }
-    foreach ($f in $files) {
-        # gleiche Lizenztexte nur einmal ausschreiben (z. B. Apache-2.0 bei vielen Paketen)
-        $text = (Get-Content $f.FullName -Raw)
-        $norm = ($text -replace '\s+', ' ').Trim()
-        if ($seen.ContainsKey($norm)) {
-            [void]$sb.AppendLine("--- $($f.Name): Wortlaut wie bei $($seen[$norm]) ---")
-        } else {
-            $seen[$norm] = "$($pkg.name) ($($f.Name))"
-            [void]$sb.AppendLine("--- $($f.Name) ---")
-            [void]$sb.AppendLine($text)
-        }
-    }
-    [void]$sb.AppendLine()
+    $texts = @()
+    foreach ($f in ($files | Sort-Object Name)) { $texts += [pscustomobject]@{ name = $f.Name; text = (Get-Content $f.FullName -Raw) } }
+    $list.Add([pscustomobject]@{
+        name = $pkg.name; version = $pkg.version; license = $pkg.license; repository = $pkg.repository; files = $texts })
 }
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
-Set-Content -Path "$Out/THIRD-PARTY-rust.txt" -Value $sb.ToString() -Encoding UTF8
-Write-Host "Rust-Pakete mit Lizenzhinweis: $count"
+ConvertTo-Json -InputObject $list.ToArray() -Depth 6 | Set-Content -Path "$Out/rust-licenses.json" -Encoding UTF8
+Write-Host "Rust packages with license notices: $($list.Count)"
 
 Copy-Item "$src/target/x86_64-pc-windows-msvc/production/resvg.lib" "$Out/lib/resvg.lib" -Force
 Copy-Item "$src/crates/c-api/resvg.h" "$Out/include/resvg.h" -Force

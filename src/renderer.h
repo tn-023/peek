@@ -64,6 +64,7 @@ public:
     IDWriteTextFormat* TextWrap(float size, DWRITE_FONT_WEIGHT weight = DWRITE_FONT_WEIGHT_NORMAL,
                                 DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING);
     float MeasureText(const std::wstring& s, IDWriteTextFormat* fmt);
+    float Baseline(const std::wstring& s, IDWriteTextFormat* fmt);   // Abstand Oberkante -> Grundlinie der ersten Zeile
     float MeasureWrapped(const std::wstring& s, IDWriteTextFormat* fmt, float width);
     float DrawWrapped(const std::wstring& s, float x, float y, float width, IDWriteTextFormat* fmt,
                       const D2D1_COLOR_F& color);

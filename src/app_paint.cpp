@@ -2211,11 +2211,11 @@ void App::PaintSlides(ID2D1DeviceContext* dc, float VW) {
         if (tit != bmps_.end() && tit->second.bmp) return &tit->second;
         return nullptr;
     };
-    auto drawSlide = [&](int pos, double t0, float alpha) {
-        if (pos < 0 || pos >= n || alpha <= 0.002f) return;
+    auto drawSlide = [&](int pos, double t0, float alpha) -> D2D1_RECT_F {   // gezeichnete Flaeche (leer: nichts)
+        if (pos < 0 || pos >= n || alpha <= 0.002f) return D2D1_RECT_F{};
         const FileEntry& e = entries_[visible_[pos]];
         Bmp* b = bitmapFor(e);
-        if (!b) return;
+        if (!b) return D2D1_RECT_F{};
         float iw, ih;
         float fit = ViewerScale(e, iw, ih);
         float age = static_cast<float>(std::clamp((t - t0) / (kShow + 2 * kFade), 0.0, 1.0));
@@ -2258,6 +2258,7 @@ void App::PaintSlides(ID2D1DeviceContext* dc, float VW) {
         D2D1_RECT_F dst = D2D1::RectF(VW / 2 - dw / 2, H_ / 2 - dh / 2, VW / 2 + dw / 2, H_ / 2 + dh / 2);
         if (c && c->bmp) dc->DrawBitmap(c->bmp.Get(), dst, alpha, D2D1_INTERPOLATION_MODE_LINEAR);
         else dc->DrawBitmap(b->bmp.Get(), dst, alpha, D2D1_INTERPOLATION_MODE_LINEAR);
+        return dst;
     };
 
     float u = static_cast<float>(std::clamp((t - v.slideT0) / kFade, 0.0, 1.0));
@@ -2265,32 +2266,23 @@ void App::PaintSlides(ID2D1DeviceContext* dc, float VW) {
     dc->PushAxisAlignedClip(D2D1::RectF(0, 0, VW, H_), D2D1_ANTIALIAS_MODE_ALIASED);
     dc->FillRectangle(D2D1::RectF(0, 0, VW, H_), r_.Brush(D2D1::ColorF(0, 0, 0, 1)));   // ueber Schwarz
     if (v.slidePrev >= 0 && u < 1) drawSlide(v.slidePrev, v.slidePrevT0, 1.0f - a * a);
-    drawSlide(v.pos, v.slideT0, a);   // auch das erste Bild blendet langsam aus dem Schwarz ein
-    if (!v.slideCaption.empty()) {
-        // Datum in Versalien, gross und duenn: zieht waehrend der ganzen Zeit des Bildes sehr sanft von rechts
-        // nach links, blendet dabei ein und wieder aus
+    const D2D1_RECT_F cur = drawSlide(v.pos, v.slideT0, a);   // auch das erste Bild blendet aus dem Schwarz ein
+    if (!v.slideCaption.empty() && cur.right > cur.left + 1 && cur.bottom > cur.top + 1) {
+        // Zeitangabe der Gruppe in Versalien, gross und duenn: steht genau auf der Unterkante des Bildes und faehrt
+        // waehrend der ganzen Zeit des Bildes einmal ganz von rechts nach links durch; nur auf dem Bild sichtbar
         const double age = t - v.slideT0, dur = kFade + kShow + kFade;
         if (age >= 0 && age < dur) {
             float p = static_cast<float>(age / dur);
-            auto smooth = [](float e0, float e1, float x) {
-                float k = std::clamp((x - e0) / (e1 - e0), 0.0f, 1.0f);
-                return k * k * (3 - 2 * k);
-            };
-            float alpha = smooth(0.0f, 0.2f, p) * (1.0f - smooth(0.72f, 1.0f, p));
-            float fs = std::round(std::clamp(VW * 0.075f, 40.0f, 128.0f));
-            IDWriteTextFormat* fc = r_.Text(fs, DWRITE_FONT_WEIGHT_LIGHT);
+            float fs = std::round(std::clamp((cur.bottom - cur.top) * 0.2f, 32.0f, 220.0f));
+            IDWriteTextFormat* fc = r_.TextWrap(fs, DWRITE_FONT_WEIGHT_LIGHT);
             float w = r_.MeasureText(v.slideCaption, fc);
-            if (w > VW * 0.8f) {   // passt nicht: kleiner
-                fs = std::max(24.0f, std::floor(fs * VW * 0.8f / w));
-                fc = r_.Text(fs, DWRITE_FONT_WEIGHT_LIGHT);
-                w = r_.MeasureText(v.slideCaption, fc);
-            }
-            float cx = VW * (0.62f - 0.24f * p);
-            float cy = H_ * 0.7f;
-            D2D1_RECT_F tr = D2D1::RectF(cx - w / 2, cy - fs * 0.75f, cx + w / 2 + 12, cy + fs * 0.75f);
-            DrawText(dc, v.slideCaption, D2D1::RectF(tr.left + 2, tr.top + 2, tr.right + 2, tr.bottom + 2), fc,
-                     D2D1::ColorF(0, 0, 0, 0.35f * alpha));
-            DrawText(dc, v.slideCaption, tr, fc, D2D1::ColorF(1, 1, 1, 0.92f * alpha));
+            float base = r_.Baseline(v.slideCaption, fc);
+            float x = cur.right - p * (cur.right - cur.left + w);
+            D2D1_RECT_F clip = D2D1::RectF(std::max(cur.left, 0.0f), std::max(cur.top, 0.0f), std::min(cur.right, VW),
+                                           std::min(cur.bottom, H_));
+            dc->PushAxisAlignedClip(clip, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+            r_.DrawWrapped(v.slideCaption, x, cur.bottom - base, w + 40, fc, D2D1::ColorF(1, 1, 1, 0.92f * a));
+            dc->PopAxisAlignedClip();
         }
     }
     dc->PopAxisAlignedClip();

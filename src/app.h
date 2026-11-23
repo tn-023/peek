@@ -39,7 +39,7 @@ enum class HitType {
     SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen, SettingsSingleClick, SettingsCheckBoxes, SelectAll, SlideshowStart, ViewerSlideshow, InfoGeo, SettingsGeoClick, TimelineGroup, TimelineScrub, ViewTimeline,
     SheetCancel, SheetCreate, SheetOrient, SheetColsMinus, SheetColsPlus, SheetRowsMinus, SheetRowsPlus, SheetNames,
     SheetExts, SheetQuality, SheetPrev, SheetNext, SheetHeadline, SheetCheck, SheetCell, SheetStripCheck, SheetStrip,
-    SheetOpenPdf, BookmarkSheet,
+    BookmarkSheet,
     AtlasCancel, AtlasCreate, AtlasColsMinus, AtlasColsPlus, AtlasRowsMinus, AtlasRowsPlus, AtlasTile,
     CompareMode, CompareClose
 };
@@ -174,7 +174,6 @@ private:
     void PickFolder();
     void SortVisible();
     void UpdateFacets();
-    Bmp& BmpFor(const std::wstring& key);
     void EnsureThumb(const FileEntry& e, int prio, uint64_t frame);
     void EnsureIcon(const FileEntry& e, int prio);
     std::wstring IconKey(const FileEntry& e) const;
@@ -441,7 +440,8 @@ private:
     };
     struct TimelineGroup {
         int64_t key = 0;
-        std::wstring big, sub, full;   // Zeitangabe gross, Zusatz klein, vollstaendig (neben dem Regler)
+        std::wstring big, sub, full;   // Zeitangabe gross, Zusatz klein, vollstaendig
+        std::wstring caps;             // fuer die Diashow: "2026", "FEBRUAR 2017", "17. MAERZ 2024" (Versalien)
         int count = 0, firstItem = 0, itemCount = 0;
         bool collapsed = false;
         std::vector<int> mosaic;         // zusammengefasst: Vorschau aus den ersten Bildern
@@ -457,12 +457,12 @@ private:
         bool langEn = false, dirty = false;
         std::vector<TimelineItem> items;     // nach x geordnet
         std::vector<TimelineCol> cols;
+        std::vector<int> groupOf;            // je Position in visible_: Gruppe (-1 = nicht in der Zeitleiste)
         std::vector<float> colX, colK, colFog;   // je Spalte: Lage nach dem Aneinanderreihen, Groesse, Abdunklung
         std::vector<int> drawList;
         std::vector<TimelineGroup> groups;
         std::unordered_set<int64_t> expanded;   // aufgeklappte grosse Gruppen
-        int level = 0;                       // 0 Tage, 1 Monate, 2 Jahre
-        float scroll = 0, target = 0, contentW = 0, s0 = 0, maxS = 0;
+        float scroll = 0, target = 0, contentW = 0, maxS = 0;
         bool scrub = false, pan = false, panMoved = false;   // scrub: Ziehen in der Uebersicht unten
         int pressPos = -1;                   // gedrueckt auf diesem Element (Klick ohne Ziehen waehlt es aus)
         WPARAM pressKeys = 0;
@@ -473,8 +473,7 @@ private:
         double animT0 = 0;
         std::vector<D2D1_RECT_F> from;       // je Kachel: Lage vor dem Auf-/Zuklappen (Welt)
         std::vector<float> delay;            // ms
-        std::vector<char> emerge;            // kommt aus der Gruppenkachel
-        float panX = 0, panScroll = 0, trackMid = 0, trackHalf = 1;
+        float panX = 0, panScroll = 0, chartL = 0, chartW = 1;   // Uebersicht unten: linker Rand, Breite
     } tl_;
     void TimelineSync();
     int TimelineFirstAt(float wx) const;
@@ -673,7 +672,6 @@ private:
 
     // ---- Zustand
     HWND hwnd_ = nullptr;
-    HINSTANCE inst_ = nullptr;
     Renderer r_;
     Database db_;
     ThumbService thumbs_;
@@ -794,7 +792,7 @@ private:
     int RowEnd(int row) const { return rowFirst_[row + 1]; }
     int VerticalNeighbor(int pos, int dir) const;
     uint64_t visibleVersion_ = 0, rowsVersion_ = ~0ull;
-    float rowsCellW_ = -1, rowsTile_ = -1;
+    float rowsTile_ = -1;
     int rowsMode_ = -1, rowsCols_ = -1, rowsNameW_ = -1;
     static constexpr float kGroupH = 44.0f;   // Hoehe einer Gruppenkopf-Zeile
     D2D1_RECT_F headerRc_{};
@@ -815,7 +813,6 @@ private:
     bool sideDragActive_ = false;
     float sideDragY_ = 0;
     int sideInsert_ = -1;            // Einfuegeposition in settings_.collections
-    float sideInsertY_ = 0;
 
     // Spaltenbreite in der Detailansicht ziehen
     int colDrag_ = -1;
@@ -923,7 +920,6 @@ private:
     int grpKey_ = -2;
     D2D1_COLOR_F accent_{0.0f, 0.47f, 0.84f, 1.0f};
     std::wstring status_;
-    DWORD statusUntil_ = 0;
     bool indexBusy_ = false;
     uint64_t indexDone_ = 0, indexTotal_ = 0;
 };

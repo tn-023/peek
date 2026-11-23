@@ -28,7 +28,6 @@ ComPtr<IStream> OpenInputStream(const std::wstring& path);
 
 // Im Dekoder-Prozess: Pfadzugriffe sperren (OpenInput liefert nur noch hinterlegte Handles)
 void SetInputSandboxed(bool on);
-bool InputSandboxed();
 
 // Hinterlegt fuer den aktuellen Thread ein Handle fuer path (nicht besitzend)
 class ScopedInput {

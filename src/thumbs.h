@@ -50,7 +50,6 @@ public:
     void Request(ThumbRequest r);
     void CancelBelow(uint32_t gen);   // verwirft sichtbare/benachbarte Auftraege aelterer Ansichten
     std::vector<ThumbResult> Take();
-    size_t Backlog();
 
 private:
     void Worker();

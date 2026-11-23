@@ -271,7 +271,7 @@ void App::OnMouseMove(float x, float y, WPARAM keys) {
         bool shown = GetTickCount() < viewer_.controlsUntil;
         viewer_.controlsUntil = GetTickCount() + 2000;
         SetTimer(hwnd_, kTimerViewerUi, 2100, nullptr);
-        bool corner = x > W_ - 80 && y < 60;
+        bool corner = x > W_ - (captionless_ && !fullscreen_ ? 170 : 80) && y < 60;   // Ecke: X bzw. Windows-Knoepfe
         int hh = -1;
         for (int i = static_cast<int>(hits_.size()) - 1; i >= 0; --i)
             if (hits_[i].type != HitType::None && Inside(hits_[i].rc, x, y)) { hh = i; break; }
@@ -398,6 +398,8 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
                 return;
             case HitType::ViewerPrev: ViewerStep(-1); return;
             case HitType::ViewerNext: ViewerStep(1); return;
+            case HitType::ViewerMin: ShowWindow(hwnd_, SW_MINIMIZE); return;
+            case HitType::ViewerMax: ShowWindow(hwnd_, IsZoomed(hwnd_) ? SW_RESTORE : SW_MAXIMIZE); return;
             case HitType::ViewerInfo:
                 settings_.viewerInfo = !settings_.viewerInfo;
                 StartAnimation();
@@ -501,8 +503,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         case HitType::TimelineGroup: TimelineToggle(a); break;
         case HitType::TimelineScrub:
             tl_.scrub = true;
-            TimelineScrubAt(x);
-            StartAnimation();
+            TimelineScrubAt(x, false);
             break;
         case HitType::SortButton:
             if (!MenuJustClosed(static_cast<int>(ChipId::Sort))) ShowSortMenu(rc);
@@ -660,7 +661,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         CloudMouseDown(x, y);
         return;
     }
-    if (settings_.viewMode == 3 && Inside(gridRc_, x, y) && TimelineMouseDown(x, y)) {
+    if (settings_.viewMode == 3 && Inside(gridRc_, x, y) && TimelineMouseDown(x, y, keys)) {
         InvalidateRect(hwnd_, nullptr, FALSE);
         return;
     }
@@ -744,7 +745,7 @@ void App::OnLButtonUp(float x, float y) {
         const Hit* h = viewer_.open ? HitAt(x, y) : nullptr;
         if (h && h->type == p) {   // nur, wenn die Maus noch ueber dem Knopf ist
             if (p == HitType::ViewerBack) CloseViewer();                          // zur Ordneransicht
-            else if (viewer_.shell) PostMessageW(hwnd_, WM_CLOSE, 0, 0);         // aus dem Explorer geoeffnet: beenden
+            else if (viewer_.shell || (captionless_ && !fullscreen_)) PostMessageW(hwnd_, WM_CLOSE, 0, 0);   // Explorer bzw. Fenster: beenden
             else CloseViewer();
         }
         return;

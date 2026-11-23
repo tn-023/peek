@@ -33,7 +33,7 @@ enum class HitType {
     None, SidebarToggle, NavBack, NavForward, NavUp, Refresh, Crumb, CrumbChevron, Search, SearchClear,
     Chip, Term, ResetFilters, SidebarItem, SidebarAdd, SettingsButton, InfoToggle, ZoomSlider,
     ZoomIn, ZoomOut, ViewGrid, ViewList, SortButton, MoreFilters, ListHeader, ListResize,
-    ViewerClose, ViewerBack, ViewerPrev, ViewerNext, ViewerInfo, ViewerCrop, CropSave, CropCancel,
+    ViewerClose, ViewerBack, ViewerMin, ViewerMax, ViewerPrev, ViewerNext, ViewerInfo, ViewerCrop, CropSave, CropCancel,
     ClearBookmarks, SearchHistItem, SearchHistDel, SearchHistClear, SearchParam,
     ViewCloud,
     SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen, SettingsSingleClick, SettingsCheckBoxes, SelectAll, SlideshowStart, ViewerSlideshow, InfoGeo, SettingsGeoClick, TimelineGroup, TimelineScrub, ViewTimeline,
@@ -438,16 +438,19 @@ private:
         std::unordered_set<int64_t> expanded;   // aufgeklappte grosse Gruppen
         int level = 0;                       // 0 Tage, 1 Monate, 2 Jahre
         float scroll = 0, target = 0, contentW = 0, s0 = 0, maxS = 0;
-        float knob = 0;                      // Spulregler: -1..1 (0 = Mitte)
-        bool scrub = false, pan = false, panMoved = false;
+        bool scrub = false, pan = false, panMoved = false;   // scrub: Ziehen in der Uebersicht unten
+        int pressPos = -1;                   // gedrueckt auf diesem Element (Klick ohne Ziehen waehlt es aus)
+        WPARAM pressKeys = 0;
         float panX = 0, panScroll = 0, trackMid = 0, trackHalf = 1;
     } tl_;
     void TimelineSync();
     int TimelineFirstAt(float wx) const;
     int TimelinePick(float x, float y) const;
     void TimelineToggle(int group);
-    void TimelineScrubAt(float x);
-    bool TimelineMouseDown(float x, float y);
+    void TimelineScrubAt(float x, bool immediate);
+    bool TimelineMouseDown(float x, float y, WPARAM keys);
+    float TimelineShrink(const TimelineItem& it, float& fog) const;
+    int TimelineItemAt(float x, float y) const;
     bool TimelineMouseMove(float x, float y);
     bool TimelineMouseUp();
     void TimelineWheel(int delta);

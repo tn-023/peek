@@ -1,8 +1,9 @@
 // Zeitleiste (Ansicht 3): alle Bilder und Videos der Ansicht auf einem waagerechten Zeitstrahl, neueste links.
 // Gruppen nach Tag, Monat oder Jahr (je nach Anzahl), die Zeitangabe riesig oben hinter der ersten Kachelzeile.
 // Innerhalb einer Gruppe werden die Kacheln nach rechts kleiner; sehr grosse Gruppen liegen als eine Kachel da,
-// ein Klick klappt sie auf. Unten ein Regler zum Spulen: Auslenkung = Geschwindigkeit, losgelassen kehrt er
-// in die Mitte zurueck (keine Bildlaufleiste).
+// ein Klick klappt sie auf. Spalten neben der Bildmitte werden leicht kleiner und dunkler (wie in der Wolke).
+// Ziehen mit der Maus verschiebt ueberall die Ansicht (kein Ziehen von Dateien). Unten statt einer Bildlaufleiste
+// eine Uebersicht: Menge je Zeitraum als Balken, darauf der gerade sichtbare Ausschnitt.
 #include "app.h"
 #include "core/lang.h"
 #include "core/textutil.h"
@@ -14,18 +15,24 @@ namespace peek {
 
 namespace {
 
-constexpr float kTlSlider = 64;      // Hoehe des Spulreglers unten
-constexpr float kTlTop = 70;         // Kacheln beginnen hier; die Zeitangabe liegt dahinter
+constexpr float kTlSlider = 60;      // Hoehe der Uebersicht unten
+constexpr float kTlTop = 50;         // Kacheln beginnen hier; die Zeitangabe liegt dahinter
 constexpr float kTlGap = 6;          // Abstand der Kacheln
 constexpr float kTlGroupGap = 72;    // Abstand der Gruppen
 constexpr float kTlPad = 24;         // Rand links und rechts
-constexpr float kTlBig = 104;        // Schriftgroesse der Zeitangabe
-constexpr float kTlBigMin = 44;
-constexpr float kTlSmall = 18;       // Zusatz (Jahr bzw. Monat und Jahr)
+constexpr float kTlBig = 52;         // Schriftgroesse der Zeitangabe (duenn)
+constexpr float kTlBigMin = 26;
+constexpr float kTlSmall = 15;       // Zusatz (Jahr bzw. Monat und Jahr)
+constexpr DWRITE_FONT_WEIGHT kTlWeight = DWRITE_FONT_WEIGHT_LIGHT;
 constexpr int kTlCollapse = 400;     // ab so vielen Elementen liegt eine Gruppe als eine Kachel da
 constexpr int kTlMaxGroups = 48;     // feinste Stufe (Tag, Monat, Jahr) mit hoechstens so vielen Gruppen
 
 struct Ymd { int y = 0, m = 0, d = 0; };
+
+D2D1_COLOR_F WithAlpha(D2D1_COLOR_F c, float a) {
+    c.a = a;
+    return c;
+}
 
 bool InRect(const D2D1_RECT_F& r, float x, float y) { return x >= r.left && x < r.right && y >= r.top && y < r.bottom; }
 
@@ -113,7 +120,7 @@ void App::TimelineSync() {
     const float s0 = std::clamp((availH - (r0 - 1) * kTlGap) / r0, 64.0f, 260.0f);
     t.s0 = s0;
     t.maxS = s0;
-    IDWriteTextFormat* fBig = r_.Text(kTlBig, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    IDWriteTextFormat* fBig = r_.Text(kTlBig, kTlWeight);
     IDWriteTextFormat* fSmall = r_.Text(kTlSmall, DWRITE_FONT_WEIGHT_NORMAL);
 
     float x = kTlPad;
@@ -182,11 +189,11 @@ void App::TimelineSync() {
         // Zeitangabe: so gross wie moeglich, hoechstens so breit wie die Gruppe (aber nicht kleiner als kTlBigMin)
         g.bigW = r_.MeasureText(g.big, fBig);
         g.subW = g.sub.empty() ? 0 : r_.MeasureText(g.sub, fSmall);
-        float need = g.bigW + (g.sub.empty() ? 0 : 14 + g.subW);
+        float need = g.bigW + (g.sub.empty() ? 0 : 10 + g.subW);
         g.fs = kTlBig;
-        if (need > width && need > 0) g.fs = std::max(kTlBigMin, std::floor(kTlBig * (width - (g.sub.empty() ? 0 : 14 + g.subW)) /
+        if (need > width && need > 0) g.fs = std::max(kTlBigMin, std::floor(kTlBig * (width - (g.sub.empty() ? 0 : 10 + g.subW)) /
                                                                             std::max(1.0f, g.bigW)));
-        g.labelW = g.bigW * g.fs / kTlBig + (g.sub.empty() ? 0 : 14 + g.subW);
+        g.labelW = g.bigW * g.fs / kTlBig + (g.sub.empty() ? 0 : 10 + g.subW);
         g.x1 = x + std::max(width, g.labelW);
         x = g.x1 + kTlGroupGap;
         t.groups.push_back(std::move(g));
@@ -220,17 +227,35 @@ int App::TimelineFirstAt(float wx) const {
     return lo;
 }
 
-// Element unter dem Mauszeiger: Position in visible_ oder -1 (zusammengefasste Gruppen zaehlen nicht)
-int App::TimelinePick(float x, float y) const {
+// Spalten neben der Bildmitte: etwas kleiner (um die Ecke oben links) und abgedunkelt; k = Groesse, fog = Abdunklung
+float App::TimelineShrink(const TimelineItem& it, float& fog) const {
+    const float vw = std::max(1.0f, gridRc_.right - gridRc_.left);
+    const float cx = it.x - tl_.scroll + it.s / 2;   // Mitte der Spalte, vom linken Rand
+    float d = std::clamp(std::fabs(cx - vw / 2) / (vw / 2), 0.0f, 1.0f);
+    float f = d * d;
+    fog = (dark_ ? 0.55f : 0.45f) * f;
+    return 1.0f - 0.14f * f;
+}
+
+// Element unter dem Mauszeiger: Index in tl_.items oder -1
+int App::TimelineItemAt(float x, float y) const {
     const auto& t = tl_;
     if (y >= gridRc_.bottom - kTlSlider) return -1;
     float wx = x - gridRc_.left + t.scroll, wy = y - gridRc_.top;
     for (int i = TimelineFirstAt(wx); i < static_cast<int>(t.items.size()); ++i) {
         const auto& it = t.items[i];
         if (it.x > wx) break;
-        if (wx < it.x + it.s && wy >= it.y && wy < it.y + it.s) return it.stack ? -1 : it.pos;
+        float fog;
+        float s = it.s * TimelineShrink(it, fog);
+        if (wx >= it.x && wx < it.x + s && wy >= it.y && wy < it.y + s) return i;
     }
     return -1;
+}
+
+// Position in visible_ oder -1 (zusammengefasste Gruppen zaehlen nicht)
+int App::TimelinePick(float x, float y) const {
+    int i = TimelineItemAt(x, y);
+    return i < 0 || tl_.items[i].stack ? -1 : tl_.items[i].pos;
 }
 
 void App::TimelineToggle(int group) {
@@ -249,35 +274,42 @@ void App::TimelineToggle(int group) {
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
-void App::TimelineScrubAt(float x) {
+// Uebersicht unten: der angeklickte Zeitpunkt kommt in die Mitte (wie eine Bildlaufleiste, absolut)
+void App::TimelineScrubAt(float x, bool immediate) {
     auto& t = tl_;
-    float half = std::max(1.0f, t.trackHalf);
-    t.knob = std::clamp((x - t.trackMid) / half, -1.0f, 1.0f);
+    float w = std::max(1.0f, t.trackHalf);   // Breite der Uebersicht
+    float vw = gridRc_.right - gridRc_.left;
+    float maxScroll = std::max(0.0f, t.contentW - vw);
+    float wx = std::clamp((x - t.trackMid) / w, 0.0f, 1.0f) * t.contentW;
+    t.target = std::clamp(wx - vw / 2, 0.0f, maxScroll);
+    if (immediate) t.scroll = t.target;
+    StartAnimation();
 }
 
-bool App::TimelineMouseDown(float x, float y) {
+// Ziehen verschiebt ueberall die Ansicht; ein Klick ohne Ziehen waehlt aus (bzw. oeffnet, Einstellung "ein Klick")
+bool App::TimelineMouseDown(float x, float y, WPARAM keys) {
     auto& t = tl_;
     if (!InRect(gridRc_, x, y) || t.items.empty()) return false;
-    if (y >= gridRc_.bottom - kTlSlider) return true;   // Leiste unten: nur der Regler (Treffer) reagiert
-    if (TimelinePick(x, y) >= 0) return false;            // Element: wie in den anderen Ansichten (Auswahl, Ziehen)
-    // leere Flaeche: Zeitstrahl mit der Maus verschieben
+    if (y >= gridRc_.bottom - kTlSlider) return true;   // Uebersicht unten: nur ihr Treffer reagiert
     t.pan = true;
     t.panMoved = false;
     t.panX = x;
     t.panScroll = t.scroll;
     t.scrub = false;
+    t.pressPos = TimelinePick(x, y);
+    t.pressKeys = keys;
     return true;
 }
 
 bool App::TimelineMouseMove(float x, float /*y*/) {
     auto& t = tl_;
     if (t.scrub) {
-        TimelineScrubAt(x);
-        StartAnimation();
+        TimelineScrubAt(x, true);
         return true;
     }
     if (t.pan) {
-        if (std::fabs(x - t.panX) > 3) t.panMoved = true;
+        if (std::fabs(x - t.panX) > GetSystemMetrics(SM_CXDRAG)) t.panMoved = true;
+        if (!t.panMoved) return true;
         float maxScroll = std::max(0.0f, t.contentW - (gridRc_.right - gridRc_.left));
         t.scroll = t.target = std::clamp(t.panScroll - (x - t.panX), 0.0f, maxScroll);
         InvalidateRect(hwnd_, nullptr, FALSE);
@@ -289,13 +321,32 @@ bool App::TimelineMouseMove(float x, float /*y*/) {
 bool App::TimelineMouseUp() {
     auto& t = tl_;
     if (t.scrub) {
-        t.scrub = false;   // der Regler kehrt von selbst in die Mitte zurueck (TimelineStep)
-        StartAnimation();
+        t.scrub = false;
         return true;
     }
     if (t.pan) {
         t.pan = false;
-        if (!t.panMoved) selected_.clear();   // Klick ins Leere: Auswahl aufheben
+        if (!t.panMoved) {
+            int pos = t.pressPos;
+            if (pos < 0 || pos >= static_cast<int>(visible_.size())) {
+                selected_.clear();   // Klick ins Leere: Auswahl aufheben
+            } else {
+                uint32_t idx = visible_[pos];
+                if (t.pressKeys & MK_CONTROL) {
+                    if (selected_.count(idx)) selected_.erase(idx);
+                    else selected_.insert(idx);
+                } else {
+                    selected_.clear();
+                    selected_.insert(idx);
+                }
+                focus_ = anchor_ = pos;
+                if (settings_.singleClick && !(t.pressKeys & (MK_CONTROL | MK_SHIFT))) {
+                    noDblUntil_ = GetTickCount() + GetDoubleClickTime();
+                    OpenPos(pos);
+                    return true;
+                }
+            }
+        }
         InvalidateRect(hwnd_, nullptr, FALSE);
         return true;
     }
@@ -327,25 +378,14 @@ bool App::TimelineKey(WPARAM vk) {
     return true;
 }
 
-// Ein Animationsschritt: Spulen mit der Geschwindigkeit der Auslenkung, Regler zurueck zur Mitte, weiches Scrollen
+// Ein Animationsschritt: weiches Scrollen zum Ziel (Mausrad, Tasten, Klick in die Uebersicht)
 bool App::TimelineStep(float dt) {
     auto& t = tl_;
     bool more = false;
     float vw = gridRc_.right - gridRc_.left;
     float maxScroll = std::max(0.0f, t.contentW - vw);
-    if (t.scrub) {
-        // quadratisch: kleine Auslenkung = langsam und fein, ganz aussen sehr schnell (lange Zeitleisten schneller)
-        float vmax = std::clamp(t.contentW / 6.0f, 2400.0f, 24000.0f);   // DIP je Sekunde
-        float v = t.knob * std::fabs(t.knob) * vmax;
-        t.target = std::clamp(t.target + v * dt / 1000.0f, 0.0f, maxScroll);
-        t.scroll = t.target;
-        more = true;
-    } else if (t.knob != 0) {
-        t.knob *= std::exp(-dt / 45.0f);
-        if (std::fabs(t.knob) < 0.002f) t.knob = 0;
-        more = true;
-    }
-    if (!t.scrub && !t.pan) {
+    t.target = std::clamp(t.target, 0.0f, maxScroll);
+    if (!t.pan) {
         float d = t.target - t.scroll;
         if (std::fabs(d) < 0.5f) t.scroll = t.target;
         else {
@@ -370,7 +410,8 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
         return;
     }
     const float ox = area.left - t.scroll, oy = area.top;
-    const bool moving = t.scrub || t.pan || t.knob != 0 || t.scroll != t.target;
+    const bool moving = t.scrub || t.pan || t.scroll != t.target;
+    const D2D1_COLOR_F fogC = dark_ ? D2D1::ColorF(0.17f, 0.17f, 0.17f, 1) : D2D1::ColorF(0.975f, 0.975f, 0.975f, 1);
     const float rad = 6;
     dc->PushAxisAlignedClip(D2D1::RectF(area.left, area.top, area.right, area.bottom - kTlSlider + 6), D2D1_ANTIALIAS_MODE_ALIASED);
 
@@ -380,12 +421,12 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
         const auto& g = t.groups[gi];
         if (g.x1 + ox < area.left || g.x0 + ox > area.right) continue;
         float lx = std::clamp(area.left + kTlPad, g.x0 + ox, std::max(g.x0 + ox, g.x1 + ox - g.labelW));
-        IDWriteTextFormat* fb = r_.Text(g.fs, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        IDWriteTextFormat* fb = r_.Text(g.fs, kTlWeight);
         float bw = g.bigW * g.fs / kTlBig;
-        float top = oy + kTlTop - g.fs * 0.98f;   // unterer Teil der Ziffern verschwindet hinter den Kacheln
+        float top = oy + kTlTop - g.fs * 1.02f;   // unterer Teil der Ziffern verschwindet hinter den Kacheln
         DrawText(dc, g.big, D2D1::RectF(lx - 2, top, lx + bw + 40, top + g.fs * 1.4f), fb, text);
         if (!g.sub.empty())
-            DrawText(dc, g.sub, D2D1::RectF(lx + bw + 14, oy + kTlTop - 34, lx + bw + 14 + g.subW + 40, oy + kTlTop - 8),
+            DrawText(dc, g.sub, D2D1::RectF(lx + bw + 10, oy + kTlTop - 28, lx + bw + 10 + g.subW + 40, oy + kTlTop - 6),
                      fSmall, text2);
         // aufgeklappte grosse Gruppe: Klick auf die Zeitangabe klappt sie wieder zu
         if (g.count > kTlCollapse && !g.collapsed) {
@@ -394,7 +435,7 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
             hits_.push_back({hr, HitType::TimelineGroup, gi});
             wchar_t gc[2] = {0xE70E, 0};   // Pfeil nach oben: zuklappen
             float cx = lx + g.labelW + (g.sub.empty() ? 10 : 6);
-            DrawText(dc, gc, D2D1::RectF(cx, oy + kTlTop - 34, cx + 20, oy + kTlTop - 8), r_.Icon(12),
+            DrawText(dc, gc, D2D1::RectF(cx, oy + kTlTop - 28, cx + 20, oy + kTlTop - 6), r_.Icon(11),
                      hoverHit_ == idx ? accent_ : text2);
         }
     }
@@ -429,13 +470,18 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
         const auto& it = t.items[i];
         if (it.x > wx1) break;
         if (it.x + it.s < wx0) continue;
-        D2D1_RECT_F rc = D2D1::RectF(ox + it.x, oy + it.y, ox + it.x + it.s, oy + it.y + it.s);
+        float fog = 0;
+        const float ss = it.s * TimelineShrink(it, fog);   // neben der Mitte kleiner (um die Ecke oben links)
+        D2D1_RECT_F rc = D2D1::RectF(ox + it.x, oy + it.y, ox + it.x + ss, oy + it.y + ss);
+        auto darken = [&] {
+            if (fog > 0.01f) FillRound(dc, rc, rad, D2D1::ColorF(fogC.r, fogC.g, fogC.b, fog));
+        };
         if (it.stack) {
             // zusammengefasste Gruppe: 2 x 2 Vorschaubilder, abgedunkelt, mit Anzahl
             const auto& g = t.groups[it.group];
             int idx = static_cast<int>(hits_.size());
             hits_.push_back({rc, HitType::TimelineGroup, it.group});
-            float h = (it.s - kTlGap) / 2;
+            float h = (ss - kTlGap) / 2;
             for (int m = 0; m < 4; ++m) {
                 D2D1_RECT_F mr = D2D1::RectF(rc.left + (m % 2) * (h + kTlGap), rc.top + (m / 2) * (h + kTlGap), 0, 0);
                 mr.right = mr.left + h;
@@ -444,7 +490,7 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
                 else FillRound(dc, mr, rad, cardBg);
             }
             FillRound(dc, rc, rad, D2D1::ColorF(0, 0, 0, hoverHit_ == idx ? 0.38f : 0.5f));
-            IDWriteTextFormat* fc = r_.Text(std::round(std::clamp(it.s * 0.16f, 22.0f, 48.0f)), DWRITE_FONT_WEIGHT_SEMI_BOLD,
+            IDWriteTextFormat* fc = r_.Text(std::round(std::clamp(ss * 0.16f, 22.0f, 48.0f)), DWRITE_FONT_WEIGHT_SEMI_BOLD,
                                             DWRITE_TEXT_ALIGNMENT_CENTER);
             IDWriteTextFormat* fh = r_.Text(13, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
             float my = (rc.top + rc.bottom) / 2;
@@ -452,18 +498,20 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
                      D2D1::ColorF(1, 1, 1, 1));
             DrawText(dc, T(L"Klicken zum Aufklappen"), D2D1::RectF(rc.left + 8, my + 12, rc.right - 8, my + 34), fh,
                      D2D1::ColorF(1, 1, 1, 0.85f));
+            darken();
             continue;
         }
         const FileEntry& e = entries_[visible_[it.pos]];
         drawThumb(e, rc, rad, 0);
         if (e.kind == Kind::Video) {
-            float c = std::clamp(it.s * 0.09f, 9.0f, 15.0f);
+            float c = std::clamp(ss * 0.09f, 9.0f, 15.0f);
             D2D1_POINT_2F p = D2D1::Point2F(rc.left + c + 6, rc.bottom - c - 6);
             dc->FillEllipse(D2D1::Ellipse(p, c, c), r_.Brush(D2D1::ColorF(0, 0, 0, 0.55f)));
             wchar_t g[2] = {0xE768, 0};
             DrawText(dc, g, D2D1::RectF(p.x - c, p.y - c, p.x + c, p.y + c), r_.Icon(c * 0.8f), D2D1::ColorF(1, 1, 1, 1));
         }
         bool sel = selected_.count(visible_[it.pos]) != 0;
+        darken();
         if (it.pos == hoverPos_) FillRound(dc, rc, rad, D2D1::ColorF(1, 1, 1, 0.12f));
         if (sel) {
             D2D1_RECT_F in = D2D1::RectF(rc.left + 1.25f, rc.top + 1.25f, rc.right - 1.25f, rc.bottom - 1.25f);
@@ -482,43 +530,40 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
     }
     dc->PopAxisAlignedClip();
 
-    // 3) Spulregler: Auslenkung nach links oder rechts = Geschwindigkeit; losgelassen zurueck in die Mitte
-    const float sy = area.bottom - kTlSlider / 2 - 2;
-    t.trackMid = (area.left + area.right) / 2;
-    t.trackHalf = std::clamp(vw * 0.28f, 120.0f, 320.0f);
-    D2D1_RECT_F hit = D2D1::RectF(t.trackMid - t.trackHalf - 30, sy - 22, t.trackMid + t.trackHalf + 30, sy + 22);
-    int sIdx = static_cast<int>(hits_.size());
-    hits_.push_back({hit, HitType::TimelineScrub, 0});
-    const D2D1_COLOR_F track = dark_ ? D2D1::ColorF(1, 1, 1, 0.14f) : D2D1::ColorF(0, 0, 0, 0.12f);
-    dc->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(t.trackMid - t.trackHalf, sy - 2, t.trackMid + t.trackHalf, sy + 2), 2, 2),
-                             r_.Brush(track));
-    float kx = t.trackMid + t.knob * t.trackHalf;
-    if (t.knob != 0)   // Ausschlag in Akzentfarbe
-        dc->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(std::min(kx, t.trackMid), sy - 2, std::max(kx, t.trackMid), sy + 2), 2, 2),
-                                 r_.Brush(accent_));
-    bool hot = hoverHit_ == sIdx || t.scrub;
-    wchar_t gl[2] = {0xE76B, 0}, gr[2] = {0xE76C, 0};
-    DrawText(dc, gl, D2D1::RectF(t.trackMid - t.trackHalf - 28, sy - 12, t.trackMid - t.trackHalf - 8, sy + 12), r_.Icon(11), text2);
-    DrawText(dc, gr, D2D1::RectF(t.trackMid + t.trackHalf + 8, sy - 12, t.trackMid + t.trackHalf + 28, sy + 12), r_.Icon(11), text2);
-    dc->FillEllipse(D2D1::Ellipse(D2D1::Point2F(kx, sy), 12, 12),
-                    r_.Brush(dark_ ? D2D1::ColorF(0.3f, 0.3f, 0.3f, 1) : D2D1::ColorF(1, 1, 1, 1)));
-    dc->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(kx, sy), 12, 12), r_.Brush(track), 1.0f);
-    dc->FillEllipse(D2D1::Ellipse(D2D1::Point2F(kx, sy), hot ? 6.0f : 5.0f, hot ? 6.0f : 5.0f), r_.Brush(accent_));
-
-    // links daneben: Zeitraum in der Mitte des Bildes; darunter feine Anzeige, wo im Ganzen man ist
-    float midW = t.scroll + vw / 2;
-    for (const auto& g : t.groups)
-        if (midW <= g.x1 + kTlGroupGap / 2) {
-            IDWriteTextFormat* fl = r_.Text(13, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_TRAILING);
-            DrawText(dc, g.full, D2D1::RectF(area.left + 16, sy - 12, t.trackMid - t.trackHalf - 40, sy + 12), fl, text2);
-            break;
+    // 3) Uebersicht statt Bildlaufleiste: je Zeitraum ein Balken (Breite wie auf dem Zeitstrahl, Hoehe nach Anzahl),
+    //    darueber der sichtbare Ausschnitt; Klicken oder Ziehen springt dorthin. Darunter die Jahre.
+    const float cl = area.left + 20, cr = area.right - 20, cw = std::max(1.0f, cr - cl);
+    const float barTop = area.bottom - kTlSlider + 10, barBottom = area.bottom - 22;
+    t.trackMid = cl;   // linker Rand und Breite der Uebersicht (fuer TimelineScrubAt)
+    t.trackHalf = cw;
+    hits_.push_back({D2D1::RectF(cl - 6, barTop - 6, cr + 6, area.bottom), HitType::TimelineScrub, 0});
+    const float kx = cw / std::max(1.0f, t.contentW);
+    int maxCount = 1;
+    for (const auto& g : t.groups) maxCount = std::max(maxCount, g.count);
+    const float vx0 = cl + t.scroll * kx, vx1 = cl + std::min(t.contentW, t.scroll + vw) * kx;
+    const D2D1_COLOR_F barC = dark_ ? D2D1::ColorF(1, 1, 1, 0.26f) : D2D1::ColorF(0, 0, 0, 0.2f);
+    dc->FillRectangle(D2D1::RectF(cl, barBottom, cr, barBottom + 1), r_.Brush(barC));
+    IDWriteTextFormat* fy = r_.Text(11, DWRITE_FONT_WEIGHT_NORMAL);
+    int lastYear = -1;
+    float lastLabel = -1e9f;
+    for (const auto& g : t.groups) {
+        float x0 = cl + g.x0 * kx, x1 = cl + g.x1 * kx;
+        if (x1 - x0 < 1) x1 = x0 + 1;
+        float h = std::max(2.0f, (barBottom - barTop) * std::sqrt(static_cast<float>(g.count) / maxCount));
+        bool in = x1 >= vx0 && x0 <= vx1;
+        D2D1_RECT_F br = D2D1::RectF(x0, barBottom - h, std::max(x0 + 1, x1 - (x1 - x0 > 4 ? 1.0f : 0.0f)), barBottom);
+        dc->FillRectangle(br, r_.Brush(in ? WithAlpha(accent_, 0.85f) : barC));
+        int year = static_cast<int>(t.level == 2 ? g.key : t.level == 1 ? g.key / 100 : g.key / 10000);
+        if (year != lastYear && year > 0 && x0 - lastLabel > 40) {
+            DrawText(dc, std::to_wstring(year), D2D1::RectF(x0, barBottom + 3, x0 + 60, area.bottom - 2), fy, text2);
+            lastLabel = x0;
         }
-    float maxScroll = std::max(0.0f, t.contentW - vw);
-    if (maxScroll > 0) {
-        float bw = std::max(24.0f, vw * vw / t.contentW);
-        float bx = area.left + (vw - bw) * (t.scroll / maxScroll);
-        dc->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(bx, area.bottom - 5, bx + bw, area.bottom - 2), 1.5f, 1.5f),
-                                 r_.Brush(dark_ ? D2D1::ColorF(1, 1, 1, 0.25f) : D2D1::ColorF(0, 0, 0, 0.22f)));
+        lastYear = year;
+    }
+    if (t.contentW > vw) {
+        D2D1_RECT_F vr = D2D1::RectF(vx0, barTop - 4, std::max(vx0 + 6, vx1), barBottom + 2);
+        FillRound(dc, vr, 3, WithAlpha(accent_, 0.16f));
+        dc->DrawRoundedRectangle(D2D1::RoundedRect(vr, 3, 3), r_.Brush(WithAlpha(accent_, 0.9f)), 1.2f);
     }
     if (moving) InvalidateRect(hwnd_, nullptr, FALSE);
 }

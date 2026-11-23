@@ -76,7 +76,6 @@ void App::SetViewMode(int mode) {
     settings_.infoPanel = settings_.infoView[mode];
     if (mode == 3) {
         tl_.version = ~0ull;
-        tl_.knob = 0;
         tl_.scrub = tl_.pan = false;
     }
     if (mode == 2) {

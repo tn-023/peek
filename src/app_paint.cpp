@@ -2,6 +2,7 @@
 #include <unordered_map>
 // App: Darstellung (Direct2D)
 #include "app.h"
+#include "core/sheetlayout.h"
 #include "imaging.h"
 #include "sandbox.h"
 #include "core/textutil.h"
@@ -1921,9 +1922,31 @@ void App::PaintStatus(ID2D1DeviceContext* dc) {
                                      br, 1.2f);
         };
         if (which == 0) {
-            sq(0.5f, 8.5f, 5.5f, 1.6f);
-            sq(5.0f, 2.0f, 7.0f, 1.9f);
-            sq(11.5f, 7.5f, 4.5f, 1.4f);
+            // grosse Kachel vorn; die beiden hinteren ueberschneiden sich mit ihr und sind dort ausgespart
+            const float fx = 4.25f, fy = 1.5f, fw = 8.0f, fr = 2.0f, gap = 1.3f;
+            ComPtr<ID2D1Factory> fac;
+            dc->GetFactory(&fac);
+            ComPtr<ID2D1RectangleGeometry> all;
+            ComPtr<ID2D1RoundedRectangleGeometry> front;
+            ComPtr<ID2D1PathGeometry> mask;
+            bool layer = false;
+            if (fac && SUCCEEDED(fac->CreateRectangleGeometry(D2D1::RectF(bx - 4, by - 4, bx + 21, by + 21), &all)) &&
+                SUCCEEDED(fac->CreateRoundedRectangleGeometry(
+                    D2D1::RoundedRect(D2D1::RectF(bx + (fx - gap) * u, by + (fy - gap) * u, bx + (fx + fw + gap) * u,
+                                                  by + (fy + fw + gap) * u), (fr + gap) * u, (fr + gap) * u), &front)) &&
+                SUCCEEDED(fac->CreatePathGeometry(&mask))) {
+                ComPtr<ID2D1GeometrySink> sink;
+                if (SUCCEEDED(mask->Open(&sink)) &&
+                    SUCCEEDED(all->CombineWithGeometry(front.Get(), D2D1_COMBINE_MODE_EXCLUDE, nullptr, sink.Get())) &&
+                    SUCCEEDED(sink->Close())) {
+                    dc->PushLayer(D2D1::LayerParameters1(D2D1::InfiniteRect(), mask.Get()), nullptr);
+                    layer = true;
+                }
+            }
+            sq(0.25f, 8.5f, 5.75f, 1.5f);
+            sq(11.25f, 7.5f, 5.0f, 1.4f);
+            if (layer) dc->PopLayer();
+            sq(fx, fy, fw, fr);
         } else {
             sq(0.25f, 2.75f, 6.5f, 1.7f);
             sq(7.75f, 2.75f, 4.5f, 1.4f);
@@ -2508,19 +2531,16 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
     }   // Ende: normale Anzeige (keine Diashow)
 
     // Leiste oben ueber die ganze Breite: das X sitzt immer ganz oben rechts, das Info-Panel darunter
-    float barH = 0;
-    IDWriteTextFormat* fnw = r_.TextWrap(14, DWRITE_FONT_WEIGHT_SEMI_BOLD);
-    float nameW = std::max(120.0f, W_ * 0.45f - 24);
-    float nameH = 0;
-    // aus dem Explorer geoeffnet: grosser "Zurueck"-Knopf in der Ecke links oben (wie das X rechts)
-    const float backW = viewer_.shell ? 56.0f : 0.0f;
-    if (backW > 0) nameW = std::max(80.0f, nameW - backW + 4);
+    // Leiste immer einzeilig: reicht der Platz nicht, fallen erst die Angaben weg, dann wird der Name in der Mitte
+    // gekuerzt. Im Fenster ohne Titelleiste (kein Vollbild) rechts die drei Knoepfe von Windows, links "Zurueck".
+    const bool winCaps = captionless_ && !fullscreen_;
+    const float capW = 46;
+    const float closeW = winCaps ? 3 * capW : 48;
+    // aus dem Explorer geoeffnet bzw. im Fenster: grosser "Zurueck"-Knopf in der Ecke links oben
+    const float backW = (viewer_.shell || winCaps) ? 56.0f : 0.0f;
     UiAnim(viewer_.barAnim, viewer_.bar && !viewer_.crop, 80.0f);   // Leiste gleitet herein bzw. hinaus (sehr kurz)
     const float ba = EaseOut(viewer_.barAnim);
-    if (viewer_.bar || ba > 0) {
-        nameH = r_.MeasureWrapped(e.name, fnw, nameW);
-        barH = std::max(48.0f, nameH + 28);
-    }
+    const float barH = (viewer_.bar || ba > 0) ? 48.0f : 0.0f;
     const float by = -(1.0f - ba) * barH;   // Verschiebung der Leiste nach oben
     viewerBarRc_ = {};
     if (InfoWidth() > 0.5f) {
@@ -2576,7 +2596,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         float nameX = 20;
         if (backW > 0) {
             // grosser "Zurueck"-Knopf links fuehrt in die Ordneransicht: nur das Symbol, bis in die Ecke
-            D2D1_RECT_F rc = D2D1::RectF(0, by, backW, by + 44);
+            D2D1_RECT_F rc = D2D1::RectF(0, by, backW, by + barH);
             int bi = static_cast<int>(hits_.size());
             hits_.push_back({rc, HitType::ViewerBack, 0});
             if (hoverHit_ == bi) dc->FillRectangle(rc, r_.Brush(D2D1::ColorF(1, 1, 1, 0.14f)));
@@ -2584,7 +2604,6 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
             DrawText(dc, gb, rc, r_.Icon(18), white);
             nameX = backW + 16;
         }
-        r_.DrawWrapped(e.name, nameX, by + (barH - nameH) / 2, nameW, fnw, white);
         int imgIndex = 0, imgCount = 0;
         for (int p = 0; p < n; ++p) {
             const FileEntry& x = entries_[visible_[p]];
@@ -2593,22 +2612,56 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
                 if (p <= viewer_.pos) imgIndex = imgCount;
             }
         }
-        std::wstring info = std::to_wstring(imgIndex) + L" / " + std::to_wstring(imgCount);
-        if (e.width) info += L"   \u00b7   " + std::to_wstring(e.width) + L" \u00d7 " + std::to_wstring(e.height);
-        info += L"   \u00b7   " + FormatSize(e.size);
-        info += L"   \u00b7   " + std::to_wstring(static_cast<int>(std::round(sTarget * r_.scale() * 100))) + L" %";
-        IDWriteTextFormat* fi = r_.TextWrap(12.5f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
-        float infoW = std::max(60.0f, W_ - 200 - (nameX + nameW + 16));
-        float infoH = r_.MeasureWrapped(info, fi, infoW);
-        r_.DrawWrapped(info, W_ - 200 - infoW, by + (barH - infoH) / 2, infoW, fi, dim);
+        // rechts: Diashow, Zuschneiden, Info, dann X bzw. die Windows-Knoepfe
+        const float bRight = W_ - closeW;
+        const float textRight = bRight - 3 * 48 - 8;
+        IDWriteTextFormat* fn = r_.Text(14, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        IDWriteTextFormat* fi = r_.Text(12.5f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+        std::vector<std::wstring> parts;
+        parts.push_back(std::to_wstring(imgIndex) + L" / " + std::to_wstring(imgCount));
+        if (e.width) parts.push_back(std::to_wstring(e.width) + L" \u00d7 " + std::to_wstring(e.height));
+        parts.push_back(FormatSize(e.size));
+        parts.push_back(std::to_wstring(static_cast<int>(std::round(sTarget * r_.scale() * 100))) + L" %");
+        auto join = [&]() {
+            std::wstring r;
+            for (auto& p : parts) r += (r.empty() ? L"" : L"   \u00b7   ") + p;
+            return r;
+        };
+        const float avail = std::max(0.0f, textRight - nameX);
+        const float nameFull = r_.MeasureText(e.name, fn);
+        std::wstring info = join();
+        float infoW = r_.MeasureText(info, fi);
+        while (!parts.empty() && nameFull + 28 + infoW > avail) {   // zuerst Angaben weglassen (Zoom, Groesse, ...)
+            parts.pop_back();
+            info = join();
+            infoW = info.empty() ? 0 : r_.MeasureText(info, fi);
+        }
+        const float nameAvail = std::max(0.0f, avail - (info.empty() ? 0 : infoW + 28));
+        std::wstring nameShown = nameFull <= nameAvail
+                                 ? e.name
+                                 : MiddleEllipsis(e.name, nameAvail, [&](const std::wstring& t2) { return r_.MeasureText(t2, fn); });
+        DrawText(dc, nameShown, D2D1::RectF(nameX, by, nameX + nameAvail + 4, by + barH), fn, white);
+        if (!info.empty()) DrawText(dc, info, D2D1::RectF(textRight - infoW - 8, by, textRight, by + barH), fi, dim);
         // Diashow: Abspielen (laeuft sie, beendet derselbe Knopf sie)
-        topButton(HitType::ViewerSlideshow, viewer_.slide ? 0xE71A : 0xE768, W_ - 192, W_ - 144, 44, false, viewer_.slide);
-        if (e.ext != L"svg" && e.ext != L"tga") topButton(HitType::ViewerCrop, 0xE7A8, W_ - 144, W_ - 96, 44, false, false);
-        topButton(HitType::ViewerInfo, 0xE946, W_ - 96, W_ - 48, 44, false, settings_.viewerInfo);
-        topButton(HitType::ViewerClose, 0xE8BB, W_ - 48, W_, 44, true, false);
+        topButton(HitType::ViewerSlideshow, viewer_.slide ? 0xE71A : 0xE768, bRight - 144, bRight - 96, barH, false, viewer_.slide);
+        if (e.ext != L"svg" && e.ext != L"tga") topButton(HitType::ViewerCrop, 0xE7A8, bRight - 96, bRight - 48, barH, false, false);
+        topButton(HitType::ViewerInfo, 0xE946, bRight - 48, bRight, barH, false, settings_.viewerInfo);
+        if (winCaps) {
+            topButton(HitType::ViewerMin, 0xE921, W_ - 3 * capW, W_ - 2 * capW, barH, false, false);
+            topButton(HitType::ViewerMax, IsZoomed(hwnd_) ? 0xE923 : 0xE922, W_ - 2 * capW, W_ - capW, barH, false, false);
+            topButton(HitType::ViewerClose, 0xE8BB, W_ - capW, W_, barH, true, false);
+        } else {
+            topButton(HitType::ViewerClose, 0xE8BB, W_ - 48, W_, barH, true, false);
+        }
         btnY = 0;
     } else if (viewer_.corner) {
-        topButton(HitType::ViewerClose, 0xE8BB, W_ - 48, W_, 44, true, false);
+        if (winCaps) {
+            topButton(HitType::ViewerMin, 0xE921, W_ - 3 * capW, W_ - 2 * capW, 44, false, false);
+            topButton(HitType::ViewerMax, IsZoomed(hwnd_) ? 0xE923 : 0xE922, W_ - 2 * capW, W_ - capW, 44, false, false);
+            topButton(HitType::ViewerClose, 0xE8BB, W_ - capW, W_, 44, true, false);
+        } else {
+            topButton(HitType::ViewerClose, 0xE8BB, W_ - 48, W_, 44, true, false);
+        }
     }
 
     // kurzer Hinweis oben mittig, verschwindet von selbst
@@ -2853,7 +2906,8 @@ void App::PaintShortcuts(ID2D1DeviceContext* dc) {
          {{N_(L"← / → / Mausrad"), N_(L"Vor und zurück")},
           {N_(L"Bild↑ / Bild↓"), N_(L"Eine Fensterbreite")},
           {N_(L"Pos1 / Ende"), N_(L"Neueste / älteste Bilder")},
-          {N_(L"Regler unten"), N_(L"Spulen: je weiter zur Seite, desto schneller")}}},
+          {N_(L"Ziehen mit der Maus"), N_(L"Ansicht verschieben")},
+          {N_(L"Übersicht unten"), N_(L"Klicken oder ziehen: dorthin springen")}}},
         {N_(L"Diashow"),
          {{L"← / →", N_(L"Vorheriges / nächstes Bild")},
           {N_(L"Leertaste"), N_(L"Anhalten / fortsetzen")},

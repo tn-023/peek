@@ -11,6 +11,8 @@ struct MetaRow {
     uint32_t width = 0, height = 0, durationMs = 0;
     int64_t taken = 0;
     std::wstring camera;
+    bool hasGeo = false;   // Aufnahmeort (Grad, Norden/Osten positiv)
+    double lat = 0, lon = 0;
 };
 
 class Database {

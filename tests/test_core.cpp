@@ -301,8 +301,8 @@ static void Cat(std::vector<uint8_t>& a, const std::vector<uint8_t>& b) { a.inse
 // kleiner TIFF-Block (Little Endian): Hersteller, Modell, EXIF-Verzeichnis mit Datum, Blende, Belichtung, ISO, Objektiv
 static std::vector<uint8_t> TestTiff() {
     const char make[] = "Apple", model[] = "iPhone 15 Pro", date[] = "2024:08:17 14:30:05", lens[] = "iPhone 15 Pro back camera";
-    // Aufbau: Kopf(8) | IFD0 (2+3*12+4=42) | EXIF-IFD (2+5*12+4=66) | Daten
-    const uint32_t ifd0 = 8, exif = ifd0 + 42, data0 = exif + 66;
+    // Aufbau: Kopf(8) | IFD0 (2+4*12+4=54) | EXIF-IFD (2+5*12+4=66) | GPS-IFD (2+4*12+4=54) | Daten
+    const uint32_t ifd0 = 8, exif = ifd0 + 54, gps = exif + 66, data0 = gps + 54;
     std::vector<uint8_t> dat;
     auto add = [&](const void* p, size_t n) { uint32_t at = data0 + uint32_t(dat.size()); dat.insert(dat.end(), (const uint8_t*)p, (const uint8_t*)p + n); return at; };
     uint32_t oMake = add(make, sizeof make), oModel = add(model, sizeof model), oDate = add(date, sizeof date), oLens = add(lens, sizeof lens);
@@ -310,13 +310,18 @@ static std::vector<uint8_t> TestTiff() {
     Le32(r1, 178); Le32(r1, 100);
     Le32(r2, 1); Le32(r2, 250);
     uint32_t oF = add(r1.data(), 8), oE = add(r2.data(), 8);
+    std::vector<uint8_t> la, lo;   // 48 deg 8' 14.74" N, 11 deg 34' 31.92" E (Muenchen)
+    Le32(la, 48); Le32(la, 1); Le32(la, 8); Le32(la, 1); Le32(la, 1474); Le32(la, 100);
+    Le32(lo, 11); Le32(lo, 1); Le32(lo, 34); Le32(lo, 1); Le32(lo, 3192); Le32(lo, 100);
+    uint32_t oLa = add(la.data(), la.size()), oLo = add(lo.data(), lo.size());
     std::vector<uint8_t> v = {'I', 'I'};
     Le16(v, 42); Le32(v, ifd0);
     auto ent = [&](uint16_t tag, uint16_t type, uint32_t count, uint32_t val) { Le16(v, tag); Le16(v, type); Le32(v, count); Le32(v, val); };
-    Le16(v, 3);
+    Le16(v, 4);
     ent(271, 2, sizeof make, oMake);
     ent(272, 2, sizeof model, oModel);
     ent(34665, 4, 1, exif);
+    ent(34853, 4, 1, gps);
     Le32(v, 0);
     Le16(v, 5);
     ent(33434, 5, 1, oE);
@@ -324,6 +329,12 @@ static std::vector<uint8_t> TestTiff() {
     ent(34855, 3, 1, 125);
     ent(36867, 2, sizeof date, oDate);
     ent(42036, 2, sizeof lens, oLens);
+    Le32(v, 0);
+    Le16(v, 4);
+    ent(1, 2, 2, 'N');
+    ent(2, 5, 3, oLa);
+    ent(3, 2, 2, 'E');
+    ent(4, 5, 3, oLo);
     Le32(v, 0);
     Cat(v, dat);
     return v;
@@ -396,6 +407,33 @@ static void TestHeif() {
     CHECK(ex.exposure > 0.00399 && ex.exposure < 0.00401);
     CHECK(ex.iso == 125);
     CHECK(ex.lens == "iPhone 15 Pro back camera");
+    CHECK(ex.hasGps);
+    CHECK(ex.lat > 48.13742 && ex.lat < 48.13744);
+    CHECK(ex.lon > 11.57552 && ex.lon < 11.57554);
+
+    // JPEG: EXIF im APP1-Abschnitt hinter einem APP0
+    {
+        std::vector<uint8_t> j = {0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x04, 0x4A, 0x46};
+        std::vector<uint8_t> app1 = {'E', 'x', 'i', 'f', 0, 0};
+        Cat(app1, tiff);
+        j.push_back(0xFF); j.push_back(0xE1);
+        Be16(j, uint16_t(app1.size() + 2));
+        Cat(j, app1);
+        j.insert(j.end(), {0xFF, 0xDA, 0x00, 0x02});
+        size_t off = 0, len = 0;
+        CHECK(JpegFindExif(j.data(), j.size(), off, len));
+        CHECK(off == 18 && len == tiff.size());
+        ExifInfo jx;
+        CHECK(ExifParse(j.data() + off, len, jx) && jx.hasGps && jx.model == "iPhone 15 Pro");
+        CHECK(!JpegFindExif(j.data(), 20, off, len));        // abgeschnitten
+        CHECK(!JpegFindExif(tiff.data(), tiff.size(), off, len));   // kein JPEG
+        // Sued/West: negative Werte
+        std::vector<uint8_t> sw = tiff;
+        for (size_t i = 0; i + 1 < sw.size(); ++i)
+            if (sw[i] == 'N' && sw[i + 1] == 0 && i > 8) { sw[i] = 'S'; break; }
+        ExifInfo sx;
+        CHECK(ExifParse(sw.data(), sw.size(), sx) && sx.hasGps && sx.lat < -48.1);
+    }
 
     // abgeschnittener Kopf: meldet die benoetigte Laenge
     HeifInfo cut;
@@ -420,6 +458,8 @@ static void TestHeif() {
         for (int k = 0; k < changes; ++k) t[rnd() % t.size()] = uint8_t(rnd());
         ExifInfo e3;
         ExifParse(t.data(), rnd() % (t.size() + 1), e3);
+        size_t jo, jl;
+        JpegFindExif(t.data(), rnd() % (t.size() + 1), jo, jl);
     }
 }
 

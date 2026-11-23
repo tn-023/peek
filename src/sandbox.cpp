@@ -7,6 +7,7 @@
 #include "svgimaging.h"
 
 #include <aclapi.h>
+#include <cmath>
 #include <psapi.h>
 #include <mfapi.h>
 #include <userenv.h>
@@ -46,6 +47,8 @@ struct Reply {
     uint32_t mw = 0, mh = 0, mdur = 0;
     int64_t taken = 0;
     uint32_t cameraChars = 0;
+    uint32_t geo = 0;
+    double lat = 0, lon = 0;
 };
 
 struct Params {
@@ -508,6 +511,11 @@ bool Remote(Worker* w, Op op, const std::wstring& path, const Params& prm, Pixel
         meta->durationMs = rp.mdur;
         meta->taken = rp.taken;
         meta->camera = std::move(camera);
+        // Worker nicht blind vertrauen: nur gueltige Koordinaten
+        meta->hasGeo = rp.geo == 1 && std::isfinite(rp.lat) && std::isfinite(rp.lon) && std::fabs(rp.lat) <= 90 &&
+                       std::fabs(rp.lon) <= 180;
+        meta->lat = meta->hasGeo ? rp.lat : 0;
+        meta->lon = meta->hasGeo ? rp.lon : 0;
     }
     if (rp.ok && rp.bytes) {
         // Antwort des Workers nicht blind vertrauen: Groessen pruefen
@@ -731,6 +739,9 @@ int RunDecoderWorker(HANDLE pipe) {
         rp.mh = meta.height;
         rp.mdur = meta.durationMs;
         rp.taken = meta.taken;
+        rp.geo = meta.hasGeo ? 1 : 0;
+        rp.lat = meta.lat;
+        rp.lon = meta.lon;
         if (meta.camera.size() > kMaxCameraChars) meta.camera.resize(kMaxCameraChars);
         rp.cameraChars = static_cast<uint32_t>(meta.camera.size());
         if (!PipeWrite(pipe, &rp, sizeof(rp)) ||

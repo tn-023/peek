@@ -857,6 +857,11 @@ bool ReadImageMeta(const std::wstring& path, MetaRow& m) {
         if (hh.haveExif) {
             if (!hh.exif.dateTaken.empty()) m.taken = ParseExifDate(hh.exif.dateTaken.c_str());
             m.camera = CameraName(Utf8ToWide(hh.exif.make), Utf8ToWide(hh.exif.model));
+            if (hh.exif.hasGps) {
+                m.hasGeo = true;
+                m.lat = hh.exif.lat;
+                m.lon = hh.exif.lon;
+            }
         }
         return true;
     }
@@ -930,6 +935,21 @@ bool ReadImageMeta(const std::wstring& path, MetaRow& m) {
             PropVariantClear(&v);
         }
         m.camera = CameraName(make, model);
+    }
+    // Aufnahmeort: JPEG (APP1) und TIFF mit dem eigenen EXIF-Leser (nur der Dateianfang)
+    std::vector<uint8_t> head;
+    if (ReadInputHead(path, 256 * 1024, head) && head.size() >= 8) {
+        ExifInfo ex;
+        size_t off = 0, len = 0;
+        bool ok = false;
+        if (JpegFindExif(head.data(), head.size(), off, len)) ok = ExifParse(head.data() + off, len, ex);
+        else if ((head[0] == 'I' && head[1] == 'I') || (head[0] == 'M' && head[1] == 'M'))
+            ok = ExifParse(head.data(), head.size(), ex);
+        if (ok && ex.hasGps) {
+            m.hasGeo = true;
+            m.lat = ex.lat;
+            m.lon = ex.lon;
+        }
     }
     return true;
 }

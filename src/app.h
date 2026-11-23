@@ -24,6 +24,7 @@ namespace peek {
 extern const wchar_t* const kThemeNames[3];
 extern const wchar_t* const kViewerSmallNames[2];
 extern const wchar_t* const kViewerFullscreenNames[2];   // 0 = Vollbild, 1 = Taskleiste sichtbar
+extern const wchar_t* const kGeoClickNames[2];           // 0 = kopieren (Standard), 1 = OpenStreetMap
 extern const wchar_t* const kCheckBoxNames[2];           // 0 = aus (Standard), 1 = Auswahlkaestchen anzeigen
 extern const wchar_t* const kSingleClickNames[2];        // 0 = Doppelklick (Standard), 1 = ein Klick
 const wchar_t* LanguageName(int setting);   // 0 wie Windows, 1 Deutsch, 2 English
@@ -35,7 +36,7 @@ enum class HitType {
     ViewerClose, ViewerBack, ViewerPrev, ViewerNext, ViewerInfo, ViewerCrop, CropSave, CropCancel,
     ClearBookmarks, SearchHistItem, SearchHistDel, SearchHistClear, SearchParam,
     ViewCloud,
-    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen, SettingsSingleClick, SettingsCheckBoxes, SelectAll, SlideshowStart, ViewerSlideshow,
+    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen, SettingsSingleClick, SettingsCheckBoxes, SelectAll, SlideshowStart, ViewerSlideshow, InfoGeo, SettingsGeoClick,
     SheetCancel, SheetCreate, SheetOrient, SheetColsMinus, SheetColsPlus, SheetRowsMinus, SheetRowsPlus, SheetNames,
     SheetExts, SheetQuality, SheetPrev, SheetNext, SheetHeadline, SheetCheck, SheetCell, SheetStripCheck, SheetStrip,
     SheetOpenPdf, BookmarkSheet,
@@ -776,6 +777,9 @@ private:
     void ShowViewerFullscreenMenu(const D2D1_RECT_F& rc);
     void ShowSingleClickMenu(const D2D1_RECT_F& rc);
     void ShowCheckBoxMenu(const D2D1_RECT_F& rc);
+    void ShowGeoClickMenu(const D2D1_RECT_F& rc);
+    std::wstring GeoText(const FileEntry& e);
+    void GeoClick(uint32_t idx);
     int settingsPage_ = 0;          // 0 Einstellungen, 1 Tastenkombinationen
     float settingsScroll_ = 0, settingsContentH_ = 0;
     bool settingsScrollDrag_ = false;   // Bildlaufleiste der Einstellungen wird gezogen

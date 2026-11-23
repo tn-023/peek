@@ -33,10 +33,14 @@ struct ExifInfo {
     double fnumber = 0, exposure = 0;
     uint32_t iso = 0;
     int orientation = 0;              // 0 = nicht angegeben
+    bool hasGps = false;              // Aufnahmeort (GPS-Verzeichnis), Grad: Norden/Osten positiv
+    double lat = 0, lon = 0;
 };
 
 // data: EXIF-Block ab dem TIFF-Kopf ("II*\0" oder "MM\0*")
 bool ExifParse(const uint8_t* data, size_t size, ExifInfo& out);
+// JPEG: Lage des EXIF-Blocks (ab dem TIFF-Kopf) im APP1-Abschnitt "Exif\0\0"; false, wenn keiner im Puffer liegt
+bool JpegFindExif(const uint8_t* data, size_t size, size_t& tiffOffset, size_t& tiffLength);
 // EXIF-Eintrag einer HEIF-Datei (mit vorangestelltem Abstand zum TIFF-Kopf)
 bool HeifExifParse(const uint8_t* item, size_t size, ExifInfo& out);
 

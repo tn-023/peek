@@ -2033,6 +2033,21 @@ void App::PaintInfoPanel(ID2D1DeviceContext* dc, const D2D1_RECT_F& rc, const st
         row(T(L"Erstellt"), FormatDate(e.ctime));
         row(T(L"Kamera"), e.camera);
         PhotoDetailRows(e, row);
+        if (e.hasGeo && y <= rc.bottom - 30) {
+            // Aufnahmeort: wie ein Link (Klick kopiert die Koordinaten oder oeffnet OpenStreetMap, siehe Einstellungen)
+            y += r_.DrawWrapped(T(L"Aufnahmeort"), x0, y, w, fl, t.text3) + 2;
+            std::wstring gv = GeoText(e);
+            float gw = r_.MeasureText(gv, r_.Text(13));
+            D2D1_RECT_F gr = D2D1::RectF(x0 - 4, y - 2, std::min(x1, x0 + gw + 30), y + 20);
+            int gi = static_cast<int>(hits_.size());
+            hits_.push_back({gr, HitType::InfoGeo, static_cast<int>(sel.front())});
+            bool hot = hoverHit_ == gi;
+            if (hot) FillRound(dc, gr, 4, t.hover);
+            DrawText(dc, gv, D2D1::RectF(x0, y, x1, y + 18), r_.Text(13), accent_);
+            wchar_t gg[2] = {static_cast<wchar_t>(settings_.geoClick == 1 ? 0xE707 : 0xE8C8), 0};   // Karte bzw. Kopieren
+            DrawText(dc, gg, D2D1::RectF(x0 + gw + 8, y, x0 + gw + 26, y + 18), r_.Icon(11), hot ? accent_ : t.text3);
+            y += 18 + 12;
+        }
         if (!e.source.empty()) row(T(L"Quelle"), T(e.source));
         if (e.templateId != UINT32_MAX) row(T(L"Namensmuster"), TPattern(templDict_.Word(e.templateId)));
         row(T(L"Ordner"), ParentPath(e.path));
@@ -2636,7 +2651,7 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
     DrawText(dc, T(L"Darstellung"), D2D1::RectF(x0, y, x1, y + 28), fh, t.text);
     y += 34;
     {
-        D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 8 + 6 * 56);
+        D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 8 + 7 * 56);
         FillRound(dc, rc, 8, t.chip);
         auto dropRow = [&](float ry, const wchar_t* label, HitType type, const std::wstring& cur) {
             DrawText(dc, label, D2D1::RectF(x0 + 20, ry, x1 - 260, ry + 56), r_.Text(13), t.text);
@@ -2665,6 +2680,9 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
         dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 284), D2D1::Point2F(x1 - 16, rc.top + 284), r_.Brush(t.stroke), 1.0f);
         dropRow(rc.top + 284, T(L"Auswahlkästchen"), HitType::SettingsCheckBoxes,
                 T(kCheckBoxNames[settings_.checkBoxes ? 1 : 0]));
+        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 340), D2D1::Point2F(x1 - 16, rc.top + 340), r_.Brush(t.stroke), 1.0f);
+        dropRow(rc.top + 340, T(L"Klick auf den Aufnahmeort"), HitType::SettingsGeoClick,
+                T(kGeoClickNames[std::clamp(settings_.geoClick, 0, 1)]));
         y = rc.bottom + 28;
     }
 

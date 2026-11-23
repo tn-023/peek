@@ -17,6 +17,7 @@ namespace peek {
 const wchar_t* const kThemeNames[3] = {N_(L"System (Standard)"), N_(L"Hell"), N_(L"Dunkel")};
 const wchar_t* const kSingleClickNames[2] = {N_(L"Doppelklick (Standard)"), N_(L"Einfacher Klick")};
 const wchar_t* const kCheckBoxNames[2] = {N_(L"Aus (Standard)"), N_(L"Ein")};
+const wchar_t* const kGeoClickNames[2] = {N_(L"Koordinaten kopieren (Standard)"), N_(L"In OpenStreetMap öffnen")};
 const wchar_t* const kViewerFullscreenNames[2] = {N_(L"Ein"), N_(L"Aus (Standard)")};
 const wchar_t* const kViewerSmallNames[2] = {N_(L"Originalgr\u00f6\u00dfe (100 %)"), N_(L"An die Ansicht anpassen")};
 
@@ -1269,6 +1270,9 @@ void App::OnMetaResults() {
                 else if (r.row.durationMs) e.durationMs = r.row.durationMs;
                 e.taken = r.row.taken;
                 e.camera = r.row.camera;
+                e.hasGeo = r.row.hasGeo;
+                e.lat = r.row.lat;
+                e.lon = r.row.lon;
                 e.cameraLower = FoldForMatch(ToLower(e.camera));
             }
             changed = true;
@@ -2104,6 +2108,34 @@ void App::DeleteSelection() {
 
 // Betrachter im Fenster: die Titelleiste von Windows verschwindet, der Inhalt reicht bis an den oberen Rand.
 // Seiten und unterer Rand bleiben die (unsichtbaren) Griffe von Windows; oben uebernimmt CaptionHitTest.
+// Aufnahmeort im Info-Bereich angeklickt: Koordinaten kopieren oder (Einstellung) die Karte im Browser oeffnen.
+// peek selbst stellt dabei keine Verbindung her: den Link oeffnet der Standardbrowser.
+std::wstring App::GeoText(const FileEntry& e) {
+    wchar_t b[64];
+    swprintf_s(b, L"%.6f, %.6f", e.lat, e.lon);
+    return b;
+}
+
+void App::GeoClick(uint32_t idx) {
+    if (idx >= entries_.size() || !entries_[idx].hasGeo) return;
+    const FileEntry& e = entries_[idx];
+    if (settings_.geoClick == 1) {
+        wchar_t url[256];
+        swprintf_s(url, L"https://www.openstreetmap.org/?mlat=%.6f&mlon=%.6f#map=17/%.6f/%.6f", e.lat, e.lon, e.lat, e.lon);
+        ShellExecuteW(hwnd_, L"open", url, nullptr, nullptr, SW_SHOWNORMAL);
+        return;
+    }
+    CopyTextToClipboard(hwnd_, GeoText(e));
+    if (viewer_.open) {
+        viewer_.toast = T(L"Koordinaten kopiert");
+        viewer_.toastUntil = GetTickCount() + 1800;
+        SetTimer(hwnd_, kTimerViewerUi, 1900, nullptr);
+    } else {
+        SetStatus(T(L"Koordinaten kopiert"));
+    }
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
 void App::SetCaptionless(bool on) {
     if (captionless_ == on) return;
     captionless_ = on;

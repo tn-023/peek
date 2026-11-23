@@ -30,6 +30,8 @@ struct FileEntry {
     uint32_t width = 0, height = 0, durationMs = 0;
     int64_t taken = 0;
     std::wstring camera, cameraLower;
+    bool hasGeo = false;            // Aufnahmeort aus dem EXIF (Grad, Norden/Osten positiv)
+    double lat = 0, lon = 0;
     uint32_t pages = 0;             // PDF/AI: Seitenzahl (in der Datenbank im Feld "dur" gespeichert)
 
     // Mustererkennung

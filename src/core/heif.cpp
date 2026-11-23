@@ -3,6 +3,7 @@
 #include "core/heif.h"
 
 #include <algorithm>
+#include <cstring>
 #include <vector>
 
 namespace peek {
@@ -364,7 +365,7 @@ bool ExifParse(const uint8_t* data, size_t size, ExifInfo& out) {
     uint16_t magic;
     uint32_t ifd0;
     if (!t.U16(2, magic) || magic != 42 || !t.U32(4, ifd0)) return false;
-    uint32_t exifIfd = 0;
+    uint32_t exifIfd = 0, gpsIfd = 0;
     std::string dateTime;
     ReadIfd(t, ifd0, [&](const Entry& e) {
         switch (e.tag) {
@@ -373,9 +374,41 @@ bool ExifParse(const uint8_t* data, size_t size, ExifInfo& out) {
         case 306: dateTime = Ascii(t, e); break;
         case 274: out.orientation = static_cast<int>(Number(t, e)); break;
         case 34665: if (e.type == 4 || e.type == 13) t.U32(e.at, exifIfd); break;
+        case 34853: if (e.type == 4 || e.type == 13) t.U32(e.at, gpsIfd); break;
         default: break;
         }
     });
+    if (gpsIfd && gpsIfd != ifd0 && gpsIfd != exifIfd) {
+        // Breite/Laenge als Grad, Minuten, Sekunden (drei Brueche), dazu N/S bzw. E/W
+        auto dms = [&](const Entry& e) {
+            if (e.type != 5 || e.count < 3) return -1.0;
+            double v[3];
+            for (int i = 0; i < 3; ++i) {
+                Entry x = e;
+                x.at = e.at + size_t(i) * 8;
+                v[i] = Number(t, x);
+            }
+            return v[0] + v[1] / 60.0 + v[2] / 3600.0;
+        };
+        char latRef = 0, lonRef = 0;
+        double lat = -1, lon = -1;
+        ReadIfd(t, gpsIfd, [&](const Entry& e) {
+            switch (e.tag) {
+            case 1: { std::string r = Ascii(t, e); latRef = r.empty() ? 0 : r[0]; break; }
+            case 2: lat = dms(e); break;
+            case 3: { std::string r = Ascii(t, e); lonRef = r.empty() ? 0 : r[0]; break; }
+            case 4: lon = dms(e); break;
+            default: break;
+            }
+        });
+        bool refs = (latRef == 'N' || latRef == 'S') && (lonRef == 'E' || lonRef == 'W');
+        // 0/0 schreiben manche Geraete ohne Empfang: kein Ort
+        if (refs && lat >= 0 && lat <= 90 && lon >= 0 && lon <= 180 && (lat > 1e-7 || lon > 1e-7)) {
+            out.hasGps = true;
+            out.lat = latRef == 'S' ? -lat : lat;
+            out.lon = lonRef == 'W' ? -lon : lon;
+        }
+    }
     if (exifIfd && exifIfd != ifd0) {
         ReadIfd(t, exifIfd, [&](const Entry& e) {
             switch (e.tag) {
@@ -391,6 +424,30 @@ bool ExifParse(const uint8_t* data, size_t size, ExifInfo& out) {
     if (out.dateTaken.empty()) out.dateTaken = dateTime;
     if (out.orientation < 1 || out.orientation > 8) out.orientation = 0;
     return true;
+}
+
+bool JpegFindExif(const uint8_t* d, size_t n, size_t& off, size_t& len) {
+    off = len = 0;
+    if (!d || n < 4 || d[0] != 0xFF || d[1] != 0xD8) return false;
+    size_t p = 2;
+    while (p + 4 <= n) {
+        if (d[p] != 0xFF) return false;
+        uint8_t m = d[p + 1];
+        if (m == 0xFF) { ++p; continue; }                     // Fuellbytes
+        if (m == 0xD8 || (m >= 0xD0 && m <= 0xD7) || m == 0x01) { p += 2; continue; }   // ohne Laenge
+        if (m == 0xDA || m == 0xD9) return false;             // Bilddaten beginnen: kein EXIF mehr
+        size_t segLen = (size_t(d[p + 2]) << 8) | d[p + 3];
+        if (segLen < 2) return false;
+        size_t body = p + 4, bodyLen = segLen - 2;
+        if (m == 0xE1 && bodyLen >= 6 && body + 6 <= n && std::memcmp(d + body, "Exif\0\0", 6) == 0) {
+            if (body + bodyLen > n) return false;            // abgeschnitten
+            off = body + 6;
+            len = bodyLen - 6;
+            return len >= 8;
+        }
+        p = body + bodyLen;
+    }
+    return false;
 }
 
 bool HeifExifParse(const uint8_t* item, size_t size, ExifInfo& out) {

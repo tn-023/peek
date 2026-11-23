@@ -4,6 +4,7 @@
 #include "db.h"
 #include "settings.h"
 
+#include <cmath>
 #include <sqlite3.h>
 
 namespace peek {
@@ -77,6 +78,9 @@ int RunIndexTest(const std::wstring& dir, const std::wstring& report) {
         m.width = 4000;
         m.height = 3000;
         m.camera = L"Kamera Modell Zeta";
+        m.hasGeo = true;
+        m.lat = 48.137428;
+        m.lon = 11.575533;
         db.PutFile(Entry(a), &m, 1);
         db.PutFiles({Entry(b), Entry(c)}, 1);
         db.PutThumb(a, 1234, 1700000000, jpeg);
@@ -87,6 +91,7 @@ int RunIndexTest(const std::wstring& dir, const std::wstring& report) {
         check(db.GetThumb(a, 1234, 1700000000, got) && got == jpeg, L"Vorschaubild lesen");
         MetaRow r;
         check(db.GetMeta(a, 1234, 1700000000, r) && r.camera == m.camera && r.width == 4000, L"Metadaten lesen");
+        check(r.hasGeo && std::fabs(r.lat - m.lat) < 1e-6 && std::fabs(r.lon - m.lon) < 1e-6, L"Aufnahmeort lesen");
         auto all = db.LoadUnder(L"C:\\Bilder");
         bool found = false;
         for (auto& e : all) found |= e.path == a && e.name == L"Urlaub am See.jpg";
@@ -96,6 +101,7 @@ int RunIndexTest(const std::wstring& dir, const std::wstring& report) {
     // Dateien auf Klartext pruefen (nach dem Schliessen, inkl. WAL)
     check(!AnyFileContains(dir, secret) && !AnyFileContains(dir, L"Urlaub am See"), L"keine Pfade im Klartext");
     check(!AnyFileContains(dir, L"Kamera Modell Zeta"), L"kein Kameramodell im Klartext");
+    check(!AnyFileContains(dir, L"48.137") && !AnyFileContains(dir, L"11.575"), L"kein Aufnahmeort im Klartext");
     {
         const uint8_t jfif[] = {'J', 'F', 'I', 'F', 0, 'X', 'X', 'X'};
         bool plain = false;

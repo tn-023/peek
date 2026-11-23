@@ -388,6 +388,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
                 StartAnimation();
                 return;
             case HitType::ViewerCrop: StopSlideshow(true); EnterCrop(); return;
+            case HitType::InfoGeo: GeoClick(static_cast<uint32_t>(h->a)); return;
             case HitType::ViewerSlideshow:
                 if (viewer_.slide) StopSlideshow(true);
                 else StartSlideshow(false);
@@ -438,6 +439,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         case HitType::SettingsViewerFullscreen: ShowViewerFullscreenMenu(h->rc); break;
         case HitType::SettingsSingleClick: ShowSingleClickMenu(h->rc); break;
         case HitType::SettingsCheckBoxes: ShowCheckBoxMenu(h->rc); break;
+        case HitType::SettingsGeoClick: ShowGeoClickMenu(h->rc); break;
         case HitType::SettingsViewerSmall: ShowViewerSmallMenu(h->rc); break;
         case HitType::SettingsShortcuts:
             settingsPage_ = 1;
@@ -479,6 +481,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         case HitType::ViewList: SetViewMode(1); break;
         case HitType::ViewCloud: SetViewMode(2); break;
         case HitType::SlideshowStart: StartSlideshow(true); break;
+        case HitType::InfoGeo: GeoClick(static_cast<uint32_t>(a)); break;
         case HitType::SortButton:
             if (!MenuJustClosed(static_cast<int>(ChipId::Sort))) ShowSortMenu(rc);
             break;
@@ -1770,6 +1773,22 @@ void App::ShowSingleClickMenu(const D2D1_RECT_F& rc) {
     UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
     if (cmd < 100 || cmd > 101) return;
     settings_.singleClick = cmd == 101;
+    settings_.Save();
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void App::ShowGeoClickMenu(const D2D1_RECT_F& rc) {
+    std::vector<MenuItem> items;
+    for (int i = 0; i < 2; ++i) {
+        MenuItem m;
+        m.id = 100 + i;
+        m.text = T(kGeoClickNames[i]);
+        m.checked = settings_.geoClick == i;
+        items.push_back(m);
+    }
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
+    if (cmd < 100 || cmd > 101) return;
+    settings_.geoClick = static_cast<int>(cmd - 100);
     settings_.Save();
     InvalidateRect(hwnd_, nullptr, FALSE);
 }

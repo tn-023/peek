@@ -1,6 +1,9 @@
 #include "db.h"
 #include "core/textutil.h"
 
+#include <cmath>
+#include <cstdio>
+
 #include <unordered_set>
 
 #include <sqlite3.h>
@@ -76,6 +79,25 @@ std::string SingleValue(sqlite3* db, const char* sql) {
     return st.ColTextA(0);
 }
 
+// Aufnahmeort verschluesselt wie das Kameramodell (verraet sonst, wo jemand wohnt): "Breite,Laenge" als Text
+std::wstring GeoText(bool has, double lat, double lon) {
+    if (!has) return {};
+    wchar_t b[64];
+    swprintf_s(b, L"%.7f,%.7f", lat, lon);
+    return b;
+}
+
+void GeoParse(const std::wstring& s, bool& has, double& lat, double& lon) {
+    has = false;
+    lat = lon = 0;
+    double a = 0, b = 0;
+    if (s.empty() || swscanf_s(s.c_str(), L"%lf,%lf", &a, &b) != 2) return;
+    if (!(std::fabs(a) <= 90 && std::fabs(b) <= 180)) return;
+    has = true;
+    lat = a;
+    lon = b;
+}
+
 bool HasTable(sqlite3* db, const char* name) {
     Stmt st(db, "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1;");
     if (!st) return false;
@@ -124,6 +146,19 @@ bool Database::Open(const std::wstring& dir) {
          " seen INTEGER DEFAULT 0);");
     Exec(thumbs_,
          "CREATE TABLE IF NOT EXISTS thumbs(path TEXT PRIMARY KEY, size INTEGER, mtime INTEGER, data BLOB);");
+    {
+        // Spalte fuer den Aufnahmeort (seit 1.6.8): nachtraeglich anlegen und die Metadaten aller Bilder neu
+        // lesen lassen; Vorschaubilder und uebrige Eintraege bleiben erhalten
+        bool hasGeo = false;
+        {
+            Stmt probe(meta_, "SELECT geo FROM files LIMIT 0;");
+            hasGeo = static_cast<bool>(probe);
+        }
+        if (!hasGeo) {
+            Exec(meta_, "ALTER TABLE files ADD COLUMN geo TEXT;");
+            Exec(meta_, "UPDATE files SET meta_ok=0 WHERE kind=1;");
+        }
+    }
     for (sqlite3* db : {meta_, thumbs_}) {
         Exec(db, "CREATE TABLE IF NOT EXISTS info(key TEXT PRIMARY KEY, value TEXT);");
         Stmt st(db, "INSERT OR REPLACE INTO info(key, value) VALUES('schema', ?1), ('check', ?2);");
@@ -144,7 +179,7 @@ void Database::Close() {
 
 bool Database::GetMeta(const std::wstring& path, uint64_t size, int64_t mtime, MetaRow& out) {
     std::lock_guard<std::mutex> lock(metaMutex_);
-    Stmt st(meta_, "SELECT width, height, dur, taken, camera FROM files "
+    Stmt st(meta_, "SELECT width, height, dur, taken, camera, geo FROM files "
                    "WHERE path=?1 AND size=?2 AND mtime=?3 AND meta_ok=1;");
     if (!st) return false;
     st.TextA(1, crypto_.PathKey(path));
@@ -156,6 +191,9 @@ bool Database::GetMeta(const std::wstring& path, uint64_t size, int64_t mtime, M
     out.durationMs = static_cast<uint32_t>(st.ColInt(2));
     out.taken = st.ColInt(3);
     crypto_.FromToken(st.ColTextA(4), out.camera);
+    std::wstring geo;
+    crypto_.FromToken(st.ColTextA(5), geo);
+    GeoParse(geo, out.hasGeo, out.lat, out.lon);
     return true;
 }
 
@@ -175,11 +213,11 @@ void Database::PutMetaBatch(const std::vector<std::pair<FileEntry, MetaRow>>& ro
 void Database::PutFileLocked(const FileEntry& e, const MetaRow* m, int64_t seen) {
     Stmt st(meta_,
             "INSERT INTO files(path, size, mtime, ctime, kind, attrs, meta_ok, width, height, dur, taken,"
-            " camera, seen) VALUES(?1,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)"
+            " camera, seen, geo) VALUES(?1,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)"
             " ON CONFLICT(path) DO UPDATE SET size=excluded.size, mtime=excluded.mtime,"
             " ctime=excluded.ctime, kind=excluded.kind, attrs=excluded.attrs, meta_ok=excluded.meta_ok,"
             " width=excluded.width, height=excluded.height, dur=excluded.dur, taken=excluded.taken,"
-            " camera=excluded.camera, seen=MAX(files.seen, excluded.seen);");
+            " camera=excluded.camera, seen=MAX(files.seen, excluded.seen), geo=excluded.geo;");
     if (!st) return;
     st.TextA(1, crypto_.PathKey(e.path));
     st.Int(3, static_cast<int64_t>(e.size));
@@ -194,6 +232,7 @@ void Database::PutFileLocked(const FileEntry& e, const MetaRow* m, int64_t seen)
     st.Int(12, m ? m->taken : 0);
     st.TextA(13, m ? crypto_.Token(m->camera) : std::string());
     st.Int(14, seen);
+    st.TextA(15, m && m->hasGeo ? crypto_.Token(GeoText(true, m->lat, m->lon)) : std::string());
     st.Step();
 }
 
@@ -359,7 +398,7 @@ std::vector<FileEntry> Database::LoadUnder(const std::wstring& root) {
     std::string lo, hi;
     RangeKeys(crypto_.PathKey(root), lo, hi);
     std::lock_guard<std::mutex> lock(metaMutex_);
-    Stmt st(meta_, "SELECT path, size, mtime, ctime, kind, attrs, meta_ok, width, height, dur, taken, camera"
+    Stmt st(meta_, "SELECT path, size, mtime, ctime, kind, attrs, meta_ok, width, height, dur, taken, camera, geo"
                    " FROM files WHERE path >= ?1 AND path < ?2;");
     if (!st) return out;
     st.TextA(1, lo);
@@ -379,6 +418,11 @@ std::vector<FileEntry> Database::LoadUnder(const std::wstring& root) {
         e.durationMs = static_cast<uint32_t>(st.ColInt(9));
         e.taken = st.ColInt(10);
         crypto_.FromToken(st.ColTextA(11), e.camera);
+        {
+            std::wstring geo;
+            crypto_.FromToken(st.ColTextA(12), geo);
+            GeoParse(geo, e.hasGeo, e.lat, e.lon);
+        }
         e.cameraLower = FoldForMatch(ToLower(e.camera));
         e.nameLower = FoldForMatch(ToLower(e.name));
         e.folderLower = FoldForMatch(ToLower(ParentPath(e.path)));

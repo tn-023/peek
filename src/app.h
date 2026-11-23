@@ -422,7 +422,7 @@ private:
     };
     struct TimelineGroup {
         int64_t key = 0;
-        std::wstring big, small, full;   // Zeitangabe gross, Zusatz klein, vollstaendig (neben dem Regler)
+        std::wstring big, sub, full;   // Zeitangabe gross, Zusatz klein, vollstaendig (neben dem Regler)
         int count = 0, firstItem = 0, itemCount = 0;
         bool collapsed = false;
         std::vector<int> mosaic;         // zusammengefasst: Vorschau aus den ersten Bildern

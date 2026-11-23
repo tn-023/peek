@@ -132,11 +132,11 @@ void App::TimelineSync() {
             g.big = g.full = std::to_wstring(d.y);
         } else if (level == 1) {
             g.big = MonthName(static_cast<unsigned>(d.m));
-            g.small = std::to_wstring(d.y);
-            g.full = g.big + L" " + g.small;
+            g.sub = std::to_wstring(d.y);
+            g.full = g.big + L" " + g.sub;
         } else {
             g.big = std::to_wstring(d.d);
-            g.small = std::wstring(MonthName(static_cast<unsigned>(d.m))) + L" " + std::to_wstring(d.y);
+            g.sub = std::wstring(MonthName(static_cast<unsigned>(d.m))) + L" " + std::to_wstring(d.y);
             g.full = FormatDay(d.y, static_cast<unsigned>(d.m), static_cast<unsigned>(d.d));
         }
         g.x0 = x;
@@ -181,12 +181,12 @@ void App::TimelineSync() {
         g.itemCount = static_cast<int>(t.items.size()) - g.firstItem;
         // Zeitangabe: so gross wie moeglich, hoechstens so breit wie die Gruppe (aber nicht kleiner als kTlBigMin)
         g.bigW = r_.MeasureText(g.big, fBig);
-        g.smallW = g.small.empty() ? 0 : r_.MeasureText(g.small, fSmall);
-        float need = g.bigW + (g.small.empty() ? 0 : 14 + g.smallW);
+        g.subW = g.sub.empty() ? 0 : r_.MeasureText(g.sub, fSmall);
+        float need = g.bigW + (g.sub.empty() ? 0 : 14 + g.subW);
         g.fs = kTlBig;
-        if (need > width && need > 0) g.fs = std::max(kTlBigMin, std::floor(kTlBig * (width - (g.small.empty() ? 0 : 14 + g.smallW)) /
+        if (need > width && need > 0) g.fs = std::max(kTlBigMin, std::floor(kTlBig * (width - (g.sub.empty() ? 0 : 14 + g.subW)) /
                                                                             std::max(1.0f, g.bigW)));
-        g.labelW = g.bigW * g.fs / kTlBig + (g.small.empty() ? 0 : 14 + g.smallW);
+        g.labelW = g.bigW * g.fs / kTlBig + (g.sub.empty() ? 0 : 14 + g.subW);
         g.x1 = x + std::max(width, g.labelW);
         x = g.x1 + kTlGroupGap;
         t.groups.push_back(std::move(g));
@@ -384,8 +384,8 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
         float bw = g.bigW * g.fs / kTlBig;
         float top = oy + kTlTop - g.fs * 0.98f;   // unterer Teil der Ziffern verschwindet hinter den Kacheln
         DrawText(dc, g.big, D2D1::RectF(lx - 2, top, lx + bw + 40, top + g.fs * 1.4f), fb, text);
-        if (!g.small.empty())
-            DrawText(dc, g.small, D2D1::RectF(lx + bw + 14, oy + kTlTop - 34, lx + bw + 14 + g.smallW + 40, oy + kTlTop - 8),
+        if (!g.sub.empty())
+            DrawText(dc, g.sub, D2D1::RectF(lx + bw + 14, oy + kTlTop - 34, lx + bw + 14 + g.subW + 40, oy + kTlTop - 8),
                      fSmall, text2);
         // aufgeklappte grosse Gruppe: Klick auf die Zeitangabe klappt sie wieder zu
         if (g.count > kTlCollapse && !g.collapsed) {
@@ -393,7 +393,7 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
             int idx = static_cast<int>(hits_.size());
             hits_.push_back({hr, HitType::TimelineGroup, gi});
             wchar_t gc[2] = {0xE70E, 0};   // Pfeil nach oben: zuklappen
-            float cx = lx + g.labelW + (g.small.empty() ? 10 : 6);
+            float cx = lx + g.labelW + (g.sub.empty() ? 10 : 6);
             DrawText(dc, gc, D2D1::RectF(cx, oy + kTlTop - 34, cx + 20, oy + kTlTop - 8), r_.Icon(12),
                      hoverHit_ == idx ? accent_ : text2);
         }

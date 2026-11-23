@@ -426,7 +426,7 @@ private:
         int count = 0, firstItem = 0, itemCount = 0;
         bool collapsed = false;
         std::vector<int> mosaic;         // zusammengefasst: Vorschau aus den ersten Bildern
-        float x0 = 0, x1 = 0, fs = 0, bigW = 0, smallW = 0, labelW = 0;
+        float x0 = 0, x1 = 0, fs = 0, bigW = 0, subW = 0, labelW = 0;
     };
     struct TimelineState {
         std::wstring folder;

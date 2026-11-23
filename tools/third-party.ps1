@@ -11,6 +11,8 @@ $ErrorActionPreference = 'Stop'
 
 $texts = New-Object System.Collections.Generic.List[string]   # unique license texts, numbered from 1
 $index = @{}                                                    # normalized text -> number
+$owner = New-Object System.Collections.Generic.List[string]    # first component using each text (build log)
+$script:current = ''
 # A copyright line: "Copyright (c) 2016 ...", "Copyright 2018 ...", "Copyright © ...", "(c) 2020 ...".
 # Template lines such as "Copyright [yyyy] [name of copyright owner]" stay in the license text.
 $copyRe = '(?i)^\s*(copyright\s*(\(c\)|©|\d{4})|©\s*\d{4}|\(c\)\s*\d{4})'
@@ -27,8 +29,20 @@ function Split-License([string]$text) {
 function Add-Text([string]$body) {
     $norm = ($body -replace '\s+', ' ').Trim().ToLowerInvariant()
     if ($norm.Length -eq 0) { return 0 }
+    # Apache 2.0 comes in many slightly different copies (quotes, appendix, wrapping): one text for all
+    if ($norm.StartsWith('apache license') -and $norm.Contains('version 2.0, january 2004') -and
+        $norm.Contains('terms and conditions for use, reproduction, and distribution')) {
+        $norm = 'apache-2.0'
+    }
+    # MIT: the same permission text with or without a title line
+    $mit = $norm -replace '^(the )?mit license( \(mit\))?\s*', ''
+    if ($mit.StartsWith('permission is hereby granted, free of charge') -and
+        $mit.Contains('the above copyright notice and this permission notice shall be included')) {
+        $norm = $mit
+    }
     if (-not $index.ContainsKey($norm)) {
         $texts.Add($body)
+        $owner.Add($script:current)
         $index[$norm] = $texts.Count
     }
     return $index[$norm]
@@ -36,6 +50,7 @@ function Add-Text([string]$body) {
 
 $components = New-Object System.Text.StringBuilder
 function Add-Component([string]$title, [string]$license, [string]$repo, $files) {
+    $script:current = $title
     $copies = New-Object System.Collections.Generic.List[string]
     $refs = New-Object System.Collections.Generic.List[string]
     foreach ($f in $files) {
@@ -126,10 +141,11 @@ for ($i = 0; $i -lt $texts.Count; $i++) {
 }
 Set-Content -Path $Out -Value $sb.ToString() -Encoding UTF8
 Write-Host ("vcpkg ports: " + (($ports | ForEach-Object Name) -join ', '))
-# Groesste Texte (zur Kontrolle im Build-Protokoll)
+# license texts with size and first user (to check in the build log)
 for ($i = 0; $i -lt $texts.Count; $i++) {
     $first = ($texts[$i] -split "`n" | Where-Object { $_.Trim() } | Select-Object -First 1)
-    Write-Host ("  [{0}] {1,7:N0} chars  {2}" -f ($i + 1), $texts[$i].Length, $first.Trim().Substring(0, [Math]::Min(60, $first.Trim().Length)))
+    Write-Host ("  [{0}] {1,7:N0} chars  {2}: {3}" -f ($i + 1), $texts[$i].Length, $owner[$i],
+        $first.Trim().Substring(0, [Math]::Min(50, $first.Trim().Length)))
 }
 Write-Host ("  components: {0:N0} chars" -f $components.Length)
 Write-Host ("THIRD-PARTY.txt written ({0:N0} characters, {1} vcpkg ports, {2} Rust packages, {3} distinct license texts)" -f

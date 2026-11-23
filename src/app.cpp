@@ -650,13 +650,16 @@ void App::SetStatus(const std::wstring& msg) {
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
+// Fenstertitel (Taskleiste, Alt+Tab, Vorschau): zuerst der Ordner, dann "peek" – wie beim Explorer und anderen Apps
 void App::UpdateTitle() {
-    std::wstring t = L"peek";
-    if (collectionsView_) t += T(L" – Alle Sammlungen");
+    std::wstring place;
+    if (collectionsView_) place = T(L"Alle Sammlungen");
+    else if (bookmarksView_) place = T(L"Merkliste");
     else if (!path_.empty()) {
         std::wstring n = FileNameOf(path_);
-        t += L" – " + (n.empty() ? path_ : n);
+        place = n.empty() ? path_ : n;   // Laufwerk: "D:\"
     }
+    std::wstring t = place.empty() ? std::wstring(L"peek") : place + L" \u2013 peek";
     SetWindowTextW(hwnd_, t.c_str());
 }
 

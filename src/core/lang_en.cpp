@@ -29,7 +29,6 @@ extern const LangPair kEnglish[] = {
     {L" leere Felder", L" empty cells"},
     {L" leeres Feld", L" empty cell"},
     {L" von ", L" of "},
-    {L" – Alle Sammlungen", L" – All collections"},
     {L"0 / 1 / Doppelklick", L"0 / 1 / Double-click"},
     {L"0 / Doppelklick", L"0 / Double-click"},
     {L"1 bis 10 MB", L"1 to 10 MB"},

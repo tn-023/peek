@@ -151,6 +151,7 @@ void Settings::Load() {
     singleClick = ReadInt(L"View", L"SingleClick", 0) != 0;
     checkBoxes = ReadInt(L"View", L"CheckBoxes", 0) != 0;
     geoClick = std::clamp(ReadInt(L"View", L"GeoClick", 0), 0, 1);
+    timelineAsc = ReadInt(L"View", L"TimelineAsc", 0) != 0;
     for (int i = 0; i < 5; ++i) {
         std::wstring key = L"Col" + std::to_wstring(i);
         colW[i] = std::clamp(ReadInt(L"View", key.c_str(), colW[i]), 60, 1200);
@@ -232,6 +233,7 @@ void Settings::Save() const {
     WriteInt(L"View", L"SingleClick", singleClick ? 1 : 0);
     WriteInt(L"View", L"CheckBoxes", checkBoxes ? 1 : 0);
     WriteInt(L"View", L"GeoClick", geoClick);
+    WriteInt(L"View", L"TimelineAsc", timelineAsc ? 1 : 0);
     for (int i = 0; i < 5; ++i) {
         std::wstring key = L"Col" + std::to_wstring(i);
         WriteInt(L"View", key.c_str(), colW[i]);

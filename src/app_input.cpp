@@ -1505,6 +1505,37 @@ void App::ShowMoreFiltersMenu(const D2D1_RECT_F& rc) {
 }
 
 void App::ShowSortMenu(const D2D1_RECT_F& rc) {
+    if (settings_.viewMode == 3) {   // Zeitleiste: nur nach Aufnahmedatum, auf- oder absteigend
+        std::vector<MenuItem> items;
+        MenuItem k;
+        k.id = 105;
+        k.text = T(L"Aufgenommen");
+        k.checked = true;
+        items.push_back(k);
+        items.push_back(MenuItem::Sep());
+        MenuItem asc, desc;
+        asc.id = 200; asc.text = T(L"Aufsteigend"); asc.checked = settings_.timelineAsc;
+        desc.id = 201; desc.text = T(L"Absteigend"); desc.checked = !settings_.timelineAsc;
+        items.push_back(asc);
+        items.push_back(desc);
+        openMenu_ = static_cast<int>(ChipId::Sort);
+        InvalidateRect(hwnd_, nullptr, FALSE);
+        UpdateWindow(hwnd_);
+        UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
+        openMenu_ = -1;
+        lastMenu_ = static_cast<int>(ChipId::Sort);
+        lastMenuClose_ = GetTickCount();
+        if (cmd == 200 || cmd == 201) {
+            settings_.timelineAsc = cmd == 200;
+            settings_.Save();
+            tl_.version = ~0ull;   // neu anordnen, vorn beginnen
+            tl_.scroll = tl_.target = 0;
+            tl_.vel = 0;
+            tl_.items.clear();
+        }
+        InvalidateRect(hwnd_, nullptr, FALSE);
+        return;
+    }
     const wchar_t* n[] = {L"Name", T(L"Datum"), T(L"Größe"), T(L"Auflösung"), T(L"Typ"), T(L"Aufgenommen")};
     std::vector<MenuItem> items;
     for (int i = 0; i < 6; ++i) {

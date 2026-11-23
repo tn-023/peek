@@ -197,6 +197,7 @@ private:
     void StartSlideshow(bool fromGrid);
     void SlideshowFromGrid();
     void BeginSlideshow(bool fromGrid, bool intro);
+    bool slidePosted_ = false;
     int slidePending_ = -1;             // Diashow aus der Ordneransicht: Startbild, waehrend nach Schwarz abgeblendet wird
     double slidePendingEnd_ = 0;
     void StopSlideshow(bool keepViewer);
@@ -429,7 +430,12 @@ private:
         int pos = -1;            // Position in visible_ (zusammengefasste Gruppe: erstes Element)
         float x = 0, y = 0, s = 0;   // Weltkoordinaten (x ab Beginn des Zeitstrahls, y ab Oberkante)
         int group = 0;
+        int col = -1;            // Spalte (tl_.cols)
         bool stack = false;      // Kachel fuer eine zusammengefasste Gruppe
+    };
+    struct TimelineCol {
+        float x = 0, s = 0;      // Lage und Kachelgroesse ohne Schrumpfen
+        int first = 0, count = 0, group = 0;   // Kacheln first .. first+count-1 in tl_.items
     };
     struct TimelineGroup {
         int64_t key = 0;
@@ -439,6 +445,7 @@ private:
         std::vector<int> mosaic;         // zusammengefasst: Vorschau aus den ersten Bildern
         float x0 = 0, x1 = 0, fs = 0, bigW = 0, subW = 0, labelW = 0;
         float fromX0 = 0;                // Lage vor dem Auf-/Zuklappen (Animation)
+        int firstCol = 0, lastCol = 0;
         int level = 0;                   // 0 Tag, 1 Monat, 2 Jahr
     };
     struct TimelineState {
@@ -447,6 +454,9 @@ private:
         float viewH = 0;
         bool langEn = false, dirty = false;
         std::vector<TimelineItem> items;     // nach x geordnet
+        std::vector<TimelineCol> cols;
+        std::vector<float> colX, colK, colFog;   // je Spalte: Lage nach dem Aneinanderreihen, Groesse, Abdunklung
+        std::vector<int> drawList;
         std::vector<TimelineGroup> groups;
         std::unordered_set<int64_t> expanded;   // aufgeklappte grosse Gruppen
         int level = 0;                       // 0 Tage, 1 Monate, 2 Jahre
@@ -471,7 +481,8 @@ private:
     void TimelineScrubAt(float x, bool immediate);
     bool TimelineMouseDown(float x, float y, WPARAM keys);
     float TimelineShrink(float x, float s, float& fog) const;
-    D2D1_RECT_F TimelineRect(float x, float y, float s, float k) const;
+    void TimelineMapColumns();
+    D2D1_RECT_F TimelineItemRect(const TimelineItem& it) const;
     int TimelineItemAt(float x, float y) const;
     bool TimelineMouseMove(float x, float y);
     bool TimelineMouseUp();

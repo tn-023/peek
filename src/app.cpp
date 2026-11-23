@@ -1815,7 +1815,8 @@ int App::SlideNext(int pos, int dir) const {
 bool App::ViewerBefore(int a, int b) const {
     if (!viewer_.timeOrder) return a < b;
     int64_t ta = entries_[visible_[a]].Time(), tb = entries_[visible_[b]].Time();
-    return ta != tb ? ta > tb : a < b;
+    if (ta == tb) return a < b;
+    return settings_.timelineAsc ? ta < tb : ta > tb;
 }
 
 int App::ViewerNext(int pos, int dir) const {
@@ -1859,11 +1860,14 @@ void App::StartSlideshow(bool fromGrid) {
         if (slidePending_ >= 0) return;
         int start = -1;
         if (focus_ >= 0 && focus_ < n && entries_[visible_[focus_]].kind == Kind::Image) start = focus_;
-        if (start < 0 && settings_.viewMode == 3) {   // Zeitleiste: mit dem neuesten Bild beginnen
-            for (int p = 0; p < n; ++p)
-                if (entries_[visible_[p]].kind == Kind::Image &&
-                    (start < 0 || entries_[visible_[p]].Time() > entries_[visible_[start]].Time()))
+        if (start < 0 && settings_.viewMode == 3) {   // Zeitleiste: mit dem ersten Bild dort beginnen
+            for (int p = 0; p < n; ++p) {
+                if (entries_[visible_[p]].kind != Kind::Image) continue;
+                int64_t tp = entries_[visible_[p]].Time();
+                if (start < 0 || (settings_.timelineAsc ? tp < entries_[visible_[start]].Time()
+                                                        : tp > entries_[visible_[start]].Time()))
                     start = p;
+            }
         }
         for (int p = 0; p < n && start < 0; ++p)
             if (entries_[visible_[p]].kind == Kind::Image) start = p;
@@ -1874,6 +1878,7 @@ void App::StartSlideshow(bool fromGrid) {
         // erst die Ordneransicht langsam nach Schwarz abblenden; der Betrachter (und damit ein Wechsel der
         // Fenstergroesse fuer das Vollbild) kommt erst danach, unsichtbar im Schwarz
         slidePending_ = start;
+        slidePosted_ = false;
         slidePendingEnd_ = NowMs() + 800;
         SetTimer(hwnd_, kTimerSlideStart, 800, nullptr);
         InvalidateRect(hwnd_, nullptr, FALSE);
@@ -1885,6 +1890,7 @@ void App::StartSlideshow(bool fromGrid) {
 // Abblenden vorbei: Betrachter oeffnen und die Diashow im Schwarz beginnen
 void App::SlideshowFromGrid() {
     KillTimer(hwnd_, kTimerSlideStart);
+    if (slidePending_ < 0) return;
     int start = slidePending_;
     slidePending_ = -1;
     if (start < 0 || start >= static_cast<int>(visible_.size())) { InvalidateRect(hwnd_, nullptr, FALSE); return; }

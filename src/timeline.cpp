@@ -97,13 +97,16 @@ void App::TimelineSync() {
     t.dirty = false;
     t.items.clear();
     t.groups.clear();
+    t.cols.clear();
 
     // Bilder und Videos nach Datum, neueste zuerst
     std::vector<int> order;
     for (int p = 0; p < static_cast<int>(visible_.size()); ++p)
         if (entries_[visible_[p]].IsMedia()) order.push_back(p);
+    const bool asc = settings_.timelineAsc;   // Sortierung: nur nach Aufnahmedatum, auf- oder absteigend
     std::stable_sort(order.begin(), order.end(), [&](int a, int b) {
-        return entries_[visible_[a]].Time() > entries_[visible_[b]].Time();
+        int64_t ta = entries_[visible_[a]].Time(), tb = entries_[visible_[b]].Time();
+        return asc ? ta < tb : ta > tb;
     });
     std::vector<Ymd> ymd(order.size());
     for (size_t i = 0; i < order.size(); ++i) ymd[i] = LocalYmd(entries_[visible_[order[i]]].Time());
@@ -184,6 +187,8 @@ void App::TimelineSync() {
             it.s = s;
             it.group = static_cast<int>(t.groups.size());
             it.stack = true;
+            it.col = static_cast<int>(t.cols.size());
+            t.cols.push_back({x, s, static_cast<int>(t.items.size()), 1, it.group});
             t.items.push_back(it);
             for (size_t k = i; k < j && g.mosaic.size() < 4; ++k) g.mosaic.push_back(order[k]);
             width = s;
@@ -195,8 +200,11 @@ void App::TimelineSync() {
             while (k < j) {
                 float s = std::round(s0 * (0.55f + 0.45f * std::exp(-col / 2.5f)));
                 int rows = std::max(1, static_cast<int>((availH + kTlGap) / (s + kTlGap)));
+                TimelineCol tc{cx, s, static_cast<int>(t.items.size()), 0, static_cast<int>(t.groups.size())};
                 for (int r = 0; r < rows && k < j; ++r, ++k) {
                     TimelineItem it;
+                    it.col = static_cast<int>(t.cols.size());
+                    ++tc.count;
                     it.pos = order[k];
                     it.x = cx;
                     it.y = kTlTop + r * (s + kTlGap);
@@ -204,12 +212,15 @@ void App::TimelineSync() {
                     it.group = static_cast<int>(t.groups.size());
                     t.items.push_back(it);
                 }
+                t.cols.push_back(tc);
                 cx += s + kTlGap;
                 ++col;
             }
             width = cx - kTlGap - x;
         }
         g.itemCount = static_cast<int>(t.items.size()) - g.firstItem;
+        g.firstCol = g.itemCount > 0 ? t.items[g.firstItem].col : 0;
+        g.lastCol = static_cast<int>(t.cols.size()) - 1;
         // Zeitangabe: so gross wie moeglich, hoechstens so breit wie die Gruppe (aber nicht kleiner als kTlBigMin)
         g.bigW = r_.MeasureText(g.big, fBig);
         g.subW = g.sub.empty() ? 0 : r_.MeasureText(g.sub, fSmall);
@@ -235,6 +246,55 @@ void App::TimelineSync() {
     float maxScroll = std::max(0.0f, t.contentW - (gridRc_.right - gridRc_.left));
     t.scroll = std::clamp(t.scroll, 0.0f, maxScroll);
     t.target = std::clamp(t.target, 0.0f, maxScroll);
+    t.colX.clear();
+    TimelineMapColumns();
+}
+
+// Spalten neben der Bildmitte schrumpfen (um ihre Ecke oben links); die Abstaende zwischen den Spalten bleiben
+// dabei gleich: von der Spalte in der Mitte aus wird nach rechts und links neu aneinandergereiht
+void App::TimelineMapColumns() {
+    auto& t = tl_;
+    const size_t n = t.cols.size();
+    t.colX.assign(n, 0);
+    t.colK.assign(n, 1);
+    t.colFog.assign(n, 0);
+    if (n == 0) return;
+    const float center = t.scroll + (gridRc_.right - gridRc_.left) / 2;
+    size_t lo = 0, hi = n;   // letzte Spalte, die links der Mitte beginnt
+    while (lo < hi) {
+        size_t mid = (lo + hi) / 2;
+        if (t.cols[mid].x <= center) lo = mid + 1;
+        else hi = mid;
+    }
+    const size_t c0 = lo > 0 ? lo - 1 : 0;
+    auto shrink = [&](size_t c, float x) {
+        float fog = 0;
+        t.colK[c] = TimelineShrink(x, t.cols[c].s, fog);
+        t.colFog[c] = fog;
+    };
+    t.colX[c0] = t.cols[c0].x;
+    shrink(c0, t.colX[c0]);
+    for (size_t c = c0 + 1; c < n; ++c) {
+        float gap = t.cols[c].x - (t.cols[c - 1].x + t.cols[c - 1].s);
+        t.colX[c] = t.colX[c - 1] + t.cols[c - 1].s * t.colK[c - 1] + gap;
+        shrink(c, t.colX[c]);
+    }
+    for (size_t c = c0; c-- > 0;) {
+        float gap = t.cols[c + 1].x - (t.cols[c].x + t.cols[c].s);
+        float est = t.colX[c + 1] - gap - t.cols[c].s;   // Lage ungefaehr (fuer die Staerke), dann genau
+        shrink(c, est);
+        t.colX[c] = t.colX[c + 1] - gap - t.cols[c].s * t.colK[c];
+    }
+}
+
+// Lage einer Kachel nach dem Aneinanderreihen (Welt: x ab Beginn des Zeitstrahls, y ab Oberkante)
+D2D1_RECT_F App::TimelineItemRect(const TimelineItem& it) const {
+    const auto& t = tl_;
+    if (it.col < 0 || it.col >= static_cast<int>(t.colX.size())) return D2D1::RectF(it.x, it.y, it.x + it.s, it.y + it.s);
+    float k = t.colK[it.col];
+    float x = t.colX[it.col];
+    float top = kTlTop + (it.y - kTlTop) * k;
+    return D2D1::RectF(x, top, x + it.s * k, top + it.s * k);
 }
 
 // Index des ersten Elements, dessen Spalte bis x reicht (Elemente sind nach x geordnet)
@@ -261,22 +321,20 @@ float App::TimelineShrink(float x, float s, float& fog) const {
     return 1.0f - 0.19f * f;
 }
 
-D2D1_RECT_F App::TimelineRect(float x, float y, float s, float k) const {
-    float top = kTlTop + (y - kTlTop) * k;
-    return D2D1::RectF(x, top, x + s * k, top + s * k);
-}
+
 
 // Element unter dem Mauszeiger: Index in tl_.items oder -1
 int App::TimelineItemAt(float x, float y) const {
     const auto& t = tl_;
     if (y >= gridRc_.bottom - kTlSlider) return -1;
     float wx = x - gridRc_.left + t.scroll, wy = y - gridRc_.top;
-    for (int i = TimelineFirstAt(wx); i < static_cast<int>(t.items.size()); ++i) {
-        const auto& it = t.items[i];
-        if (it.x > wx) break;
-        float fog;
-        D2D1_RECT_F r = TimelineRect(it.x, it.y, it.s, TimelineShrink(it.x, it.s, fog));
-        if (wx >= r.left && wx < r.right && wy >= r.top && wy < r.bottom) return i;
+    for (size_t c = 0; c < t.colX.size() && c < t.cols.size(); ++c) {
+        if (t.colX[c] > wx) break;
+        if (wx >= t.colX[c] + t.cols[c].s * t.colK[c]) continue;
+        for (int i = t.cols[c].first; i < t.cols[c].first + t.cols[c].count; ++i) {
+            D2D1_RECT_F r = TimelineItemRect(t.items[i]);
+            if (wx >= r.left && wx < r.right && wy >= r.top && wy < r.bottom) return i;
+        }
     }
     return -1;
 }
@@ -298,12 +356,14 @@ void App::TimelineToggle(int group) {
     std::unordered_map<int64_t, float> oldX0;
     D2D1_RECT_F stackRc{};
     bool haveStack = false;
+    TimelineMapColumns();
     for (const auto& it : t.items) {
-        D2D1_RECT_F r = D2D1::RectF(it.x, it.y, it.x + it.s, it.y + it.s);
+        D2D1_RECT_F r = TimelineItemRect(it);   // so, wie die Kachel gerade zu sehen ist
         old[it.pos] = r;
         if (it.stack && t.groups[it.group].key == k) { stackRc = r; haveStack = true; }
     }
-    for (const auto& g : t.groups) oldX0[g.key] = g.x0;
+    for (const auto& g : t.groups)
+        oldX0[g.key] = g.firstCol < static_cast<int>(t.colX.size()) ? t.colX[g.firstCol] : g.x0;
     if (expanding) t.expanded.insert(k);
     else t.expanded.erase(k);
     t.dirty = true;
@@ -315,7 +375,7 @@ void App::TimelineToggle(int group) {
     int rank = 0;
     for (size_t i = 0; i < n; ++i) {
         const auto& it = t.items[i];
-        D2D1_RECT_F to = D2D1::RectF(it.x, it.y, it.x + it.s, it.y + it.s);
+        D2D1_RECT_F to = TimelineItemRect(it);
         bool inGroup = t.groups[it.group].key == k;
         if (expanding && inGroup && haveStack) {
             t.from[i] = stackRc;
@@ -329,7 +389,7 @@ void App::TimelineToggle(int group) {
     }
     for (auto& g : t.groups) {
         auto f = oldX0.find(g.key);
-        g.fromX0 = f != oldX0.end() ? f->second : g.x0;
+        g.fromX0 = f != oldX0.end() ? f->second : (g.firstCol < static_cast<int>(t.colX.size()) ? t.colX[g.firstCol] : g.x0);
     }
     t.anim = true;
     t.animT0 = NowMs();
@@ -503,6 +563,7 @@ bool App::TimelineStep(float dt) {
 
 void App::PaintTimeline(ID2D1DeviceContext* dc) {
     TimelineSync();
+    TimelineMapColumns();
     auto& t = tl_;
     const D2D1_RECT_F area = gridRc_;
     const float vw = area.right - area.left;
@@ -526,8 +587,11 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
     IDWriteTextFormat* fSmall = r_.Text(kTlSmall, DWRITE_FONT_WEIGHT_NORMAL);
     for (int gi = 0; gi < static_cast<int>(t.groups.size()); ++gi) {
         const auto& g = t.groups[gi];
-        const float gdx = t.anim ? (g.fromX0 - g.x0) * (1.0f - uAll) : 0.0f;   // gleitet beim Auf-/Zuklappen mit
-        const float gx0 = g.x0 + gdx, gx1 = g.x1 + gdx;
+        if (g.firstCol >= static_cast<int>(t.colX.size()) || g.lastCol >= static_cast<int>(t.colX.size())) continue;
+        const float mx0 = t.colX[g.firstCol];   // Beginn der Gruppe nach dem Aneinanderreihen
+        const float mx1 = t.colX[g.lastCol] + t.cols[g.lastCol].s * t.colK[g.lastCol];
+        const float gdx = t.anim ? (g.fromX0 - mx0) * (1.0f - uAll) : 0.0f;   // gleitet beim Auf-/Zuklappen mit
+        const float gx0 = mx0 + gdx, gx1 = gx0 + std::max(mx1 - mx0, g.labelW);
         if (gx1 + ox < area.left || gx0 + ox > area.right) continue;
         float lx = std::clamp(area.left + kTlPad, gx0 + ox, std::max(gx0 + ox, gx1 + ox - g.labelW));
         IDWriteTextFormat* fb = r_.Text(g.fs, kTlWeight);
@@ -576,28 +640,34 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
     };
     const float wx0 = t.scroll, wx1 = t.scroll + vw;
     const bool animItems = t.anim && t.from.size() == t.items.size();
-    for (int i = animItems ? 0 : TimelineFirstAt(wx0); i < static_cast<int>(t.items.size()); ++i) {
+    std::vector<int>& todo = t.drawList;
+    todo.clear();
+    if (animItems) {
+        for (int i = 0; i < static_cast<int>(t.items.size()); ++i) todo.push_back(i);
+    } else {
+        // Spalten im Bild (nach dem Aneinanderreihen; colX steigt mit c)
+        size_t lo = 0, hi = t.colX.size();
+        while (lo < hi) {
+            size_t mid = (lo + hi) / 2;
+            if (t.colX[mid] + t.cols[mid].s < wx0) lo = mid + 1;
+            else hi = mid;
+        }
+        for (size_t c = lo; c < t.colX.size() && t.colX[c] <= wx1; ++c)
+            for (int i = t.cols[c].first; i < t.cols[c].first + t.cols[c].count; ++i) todo.push_back(i);
+    }
+    for (int i : todo) {
         const auto& it = t.items[i];
-        float x = it.x, y = it.y, sz = it.s;
+        D2D1_RECT_F wr = TimelineItemRect(it);
+        float fog = it.col >= 0 && it.col < static_cast<int>(t.colFog.size()) ? t.colFog[it.col] : 0.0f;
         if (animItems) {
-            // von der alten Lage (bzw. der Gruppenkachel) zur neuen, je Kachel etwas versetzt
+            // von der bisherigen Lage (bzw. der Gruppenkachel) zur neuen, je Kachel etwas versetzt
             float u = EaseOutCubic(static_cast<float>(std::clamp((now - t.animT0 - t.delay[i]) / kTlAnimMs, 0.0, 1.0)));
             const D2D1_RECT_F& f = t.from[i];
-            x = f.left + (it.x - f.left) * u;
-            y = f.top + (it.y - f.top) * u;
-            sz = (f.right - f.left) + (it.s - (f.right - f.left)) * u;
-            if (x + sz < wx0 || x > wx1) continue;
-        } else {
-            if (it.x > wx1) break;
-            if (it.x + it.s < wx0) continue;
+            wr = D2D1::RectF(f.left + (wr.left - f.left) * u, f.top + (wr.top - f.top) * u, f.right + (wr.right - f.right) * u,
+                             f.bottom + (wr.bottom - f.bottom) * u);
+            if (wr.right < wx0 || wr.left > wx1) continue;
         }
-        float fog = 0;
-        // die ganze Spalte neben der Mitte kleiner (um ihre Ecke oben links) und dunkler
-        D2D1_RECT_F rc = TimelineRect(x, y, sz, TimelineShrink(x, sz, fog));
-        rc.left += ox;
-        rc.right += ox;
-        rc.top += oy;
-        rc.bottom += oy;
+        D2D1_RECT_F rc = D2D1::RectF(wr.left + ox, wr.top + oy, wr.right + ox, wr.bottom + oy);
         const float ss = rc.right - rc.left;
         auto darken = [&] {
             if (fog > 0.01f) FillRound(dc, rc, rad, D2D1::ColorF(fogC.r, fogC.g, fogC.b, fog));
@@ -638,13 +708,13 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
         }
         bool sel = selected_.count(visible_[it.pos]) != 0;
         darken();
-        // wie in der Wolke: unter der Maus ein Rahmen in Akzentfarbe, ausgewaehlt ein weisser Rahmen
+        // wie in der Wolke: ausgewaehlt ein Rahmen in Akzentfarbe, unter der Maus ein weisser Rahmen
         if (sel) {
             D2D1_RECT_F fr = D2D1::RectF(rc.left - 1.5f, rc.top - 1.5f, rc.right + 1.5f, rc.bottom + 1.5f);
-            dc->DrawRoundedRectangle(D2D1::RoundedRect(fr, rad + 1.5f, rad + 1.5f), r_.Brush(D2D1::ColorF(1, 1, 1, 0.95f)), 2.5f);
+            dc->DrawRoundedRectangle(D2D1::RoundedRect(fr, rad + 1.5f, rad + 1.5f), r_.Brush(accent_), 2.5f);
         } else if (it.pos == hoverPos_) {
             D2D1_RECT_F hr = D2D1::RectF(rc.left - 1, rc.top - 1, rc.right + 1, rc.bottom + 1);
-            dc->DrawRoundedRectangle(D2D1::RoundedRect(hr, rad + 1, rad + 1), r_.Brush(accent_), 2.0f);
+            dc->DrawRoundedRectangle(D2D1::RoundedRect(hr, rad + 1, rad + 1), r_.Brush(D2D1::ColorF(1, 1, 1, 0.95f)), 2.0f);
         } else if (it.pos == focus_ && !moving) {
             D2D1_RECT_F in = D2D1::RectF(rc.left + 0.5f, rc.top + 0.5f, rc.right - 0.5f, rc.bottom - 0.5f);
             dc->DrawRoundedRectangle(D2D1::RoundedRect(in, rad, rad), r_.Brush(text2), 1.0f);

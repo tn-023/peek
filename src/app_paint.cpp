@@ -797,7 +797,16 @@ void App::Paint() {
             float k = static_cast<float>(1.0 - std::clamp((slidePendingEnd_ - NowMs()) / 800.0, 0.0, 1.0));
             dc->FillRectangle(D2D1::RectF(0, 0, W_, H_), r_.Brush(D2D1::ColorF(0, 0, 0, k * k * (3 - 2 * k))));
             hits_.clear();
-            InvalidateRect(hwnd_, nullptr, FALSE);
+            // ganz schwarz: Betrachter oeffnen. Als Nachricht, nicht per Zeitgeber: solange jedes Bild das naechste
+            // anfordert, stellt Windows WM_TIMER nicht zu (er kaeme nie an)
+            if (k >= 1.0f) {
+                if (!slidePosted_) {
+                    slidePosted_ = true;
+                    PostMessageW(hwnd_, WM_TIMER, kTimerSlideStart, 0);
+                }
+            } else {
+                InvalidateRect(hwnd_, nullptr, FALSE);
+            }
         }
     }
     PaintTip(dc);
@@ -997,6 +1006,7 @@ std::wstring App::ChipLabel(ChipId id) const {
     case ChipId::Sort: {
         static const wchar_t* n[] = {N_(L"Name"), N_(L"Datum"), N_(L"Größe"), N_(L"Auflösung"), N_(L"Typ"),
                                      N_(L"Aufgenommen")};
+        if (settings_.viewMode == 3) return T(L"Aufgenommen");   // Zeitleiste: nur nach Aufnahmedatum
         return T(n[std::clamp(settings_.sortKey, 0, 5)]);
     }
     case ChipId::Recursive:
@@ -1030,7 +1040,8 @@ void App::PaintChips(ID2D1DeviceContext* dc) {
         tx += 24;
         DrawText(dc, label, D2D1::RectF(tx, rc.top, tx + lw + 2, rc.bottom), f, dark_ ? t.onAccent : t.text);
         tx += lw + 6;
-        wchar_t ga[2] = {static_cast<wchar_t>(settings_.sortDesc ? 0xE74B : 0xE74A), 0};
+        bool desc = settings_.viewMode == 3 ? !settings_.timelineAsc : settings_.sortDesc;
+        wchar_t ga[2] = {static_cast<wchar_t>(desc ? 0xE74B : 0xE74A), 0};
         DrawText(dc, ga, D2D1::RectF(tx, rc.top, tx + 14, rc.bottom), r_.Icon(11), accent_);
         right = rc.left - 8;
     }
@@ -1948,7 +1959,7 @@ void App::PaintStatus(ID2D1DeviceContext* dc) {
     // rechts: i-Symbol, Zoom (Plus/Regler/Minus), Ansicht, Status
     float rx = W_ - 8;
     // eigene Symbole (Linien, 16 Einheiten): 0 Bilderwolke = drei leere Kacheln wie eine Wolke verteilt,
-    // 1 Zeitleiste = Strahl oben mit drei daran haengenden Kacheln
+    // 1 Zeitleiste = minimalistische Uhr
     auto drawSymbol = [&](const D2D1_RECT_F& rc, int which, const D2D1_COLOR_F& c) {
         const float u = 17.0f / 16.0f;
         const float bx = std::round((rc.left + rc.right) / 2 - 8.5f), by = std::round((rc.top + rc.bottom) / 2 - 8.5f);
@@ -1984,17 +1995,11 @@ void App::PaintStatus(ID2D1DeviceContext* dc) {
             if (layer) dc->PopLayer();
             sq(fx, fy, fw, fr);
         } else {
-            // Strahl oben (duenner Pfeil), daran haengen drei gleich grosse abgerundete Rechtecke
-            auto ln = [&](float x1, float y1, float x2, float y2) {
-                dc->DrawLine(D2D1::Point2F(bx + x1 * u, by + y1 * u), D2D1::Point2F(bx + x2 * u, by + y2 * u), br, 0.9f);
-            };
-            ln(0.5f, 4.5f, 15.5f, 4.5f);
-            ln(13.3f, 2.5f, 15.5f, 4.5f);
-            ln(13.3f, 6.5f, 15.5f, 4.5f);
-            for (float cx : {2.75f, 7.25f, 11.75f}) {
-                ln(cx, 4.5f, cx, 8.5f);
-                sq(cx - 2.0f, 8.5f, 4.0f, 1.1f);
-            }
+            // minimalistische Uhr: Kreis mit zwei Zeigern
+            const D2D1_POINT_2F m = D2D1::Point2F(bx + 8.25f * u, by + 8.25f * u);
+            dc->DrawEllipse(D2D1::Ellipse(m, 7.0f * u, 7.0f * u), br, 1.2f);
+            dc->DrawLine(m, D2D1::Point2F(m.x, m.y - 4.2f * u), br, 1.2f);
+            dc->DrawLine(m, D2D1::Point2F(m.x + 3.0f * u, m.y + 1.2f * u), br, 1.2f);
         }
     };
     auto iconButton = [&](HitType type, wchar_t glyph, float size, bool active, int symbol = -1) {

@@ -1452,7 +1452,7 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
             if (dw.card == c.hover) {
                 float rad = std::min(5.0f, kRound * std::min(dw.rc.right - dw.rc.left, dw.rc.bottom - dw.rc.top));
                 D2D1_RECT_F hr = D2D1::RectF(dw.rc.left - 1, dw.rc.top - 1, dw.rc.right + 1, dw.rc.bottom + 1);
-                dc->DrawRoundedRectangle(D2D1::RoundedRect(hr, rad + 1, rad + 1), r_.Brush(accent_), 2.0f);
+                dc->DrawRoundedRectangle(D2D1::RoundedRect(hr, rad + 1, rad + 1), r_.Brush(D2D1::ColorF(1, 1, 1, 0.95f)), 2.0f);
                 break;
             }
     }
@@ -1495,10 +1495,10 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
                      D2D1::RectF(box.left + 12, ty, box.right - 12, ty + 24), f1, tx);
             DrawText(dc, l2, D2D1::RectF(box.left + 12, ty + 24, box.right - 12, ty + 46), f2, tx2);
             dc->PopAxisAlignedClip();
-            // weisser Rahmen um das ausgewaehlte Bild
+            // Rahmen in Akzentfarbe um das ausgewaehlte Bild
             float rr = std::min(5.0f, kRound * std::min(cw, sd->rc.bottom - sd->rc.top));
             D2D1_RECT_F fr = D2D1::RectF(sd->rc.left - 1.5f, sd->rc.top - 1.5f, sd->rc.right + 1.5f, sd->rc.bottom + 1.5f);
-            dc->DrawRoundedRectangle(D2D1::RoundedRect(fr, rr + 1.5f, rr + 1.5f), r_.Brush(D2D1::ColorF(1, 1, 1, 0.95f)), 2.5f);
+            dc->DrawRoundedRectangle(D2D1::RoundedRect(fr, rr + 1.5f, rr + 1.5f), r_.Brush(accent_), 2.5f);
         }
     }
     dc->PopAxisAlignedClip();

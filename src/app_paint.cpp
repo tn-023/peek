@@ -2266,6 +2266,33 @@ void App::PaintSlides(ID2D1DeviceContext* dc, float VW) {
     dc->FillRectangle(D2D1::RectF(0, 0, VW, H_), r_.Brush(D2D1::ColorF(0, 0, 0, 1)));   // ueber Schwarz
     if (v.slidePrev >= 0 && u < 1) drawSlide(v.slidePrev, v.slidePrevT0, 1.0f - a * a);
     drawSlide(v.pos, v.slideT0, a);   // auch das erste Bild blendet langsam aus dem Schwarz ein
+    if (!v.slideCaption.empty()) {
+        // Datum in Versalien, gross und duenn: zieht waehrend der ganzen Zeit des Bildes sehr sanft von rechts
+        // nach links, blendet dabei ein und wieder aus
+        const double age = t - v.slideT0, dur = kFade + kShow + kFade;
+        if (age >= 0 && age < dur) {
+            float p = static_cast<float>(age / dur);
+            auto smooth = [](float e0, float e1, float x) {
+                float k = std::clamp((x - e0) / (e1 - e0), 0.0f, 1.0f);
+                return k * k * (3 - 2 * k);
+            };
+            float alpha = smooth(0.0f, 0.2f, p) * (1.0f - smooth(0.72f, 1.0f, p));
+            float fs = std::round(std::clamp(VW * 0.075f, 40.0f, 128.0f));
+            IDWriteTextFormat* fc = r_.Text(fs, DWRITE_FONT_WEIGHT_LIGHT);
+            float w = r_.MeasureText(v.slideCaption, fc);
+            if (w > VW * 0.8f) {   // passt nicht: kleiner
+                fs = std::max(24.0f, std::floor(fs * VW * 0.8f / w));
+                fc = r_.Text(fs, DWRITE_FONT_WEIGHT_LIGHT);
+                w = r_.MeasureText(v.slideCaption, fc);
+            }
+            float cx = VW * (0.62f - 0.24f * p);
+            float cy = H_ * 0.7f;
+            D2D1_RECT_F tr = D2D1::RectF(cx - w / 2, cy - fs * 0.75f, cx + w / 2 + 12, cy + fs * 0.75f);
+            DrawText(dc, v.slideCaption, D2D1::RectF(tr.left + 2, tr.top + 2, tr.right + 2, tr.bottom + 2), fc,
+                     D2D1::ColorF(0, 0, 0, 0.35f * alpha));
+            DrawText(dc, v.slideCaption, tr, fc, D2D1::ColorF(1, 1, 1, 0.92f * alpha));
+        }
+    }
     dc->PopAxisAlignedClip();
     if (u >= 1 && v.slidePrev >= 0) v.slidePrev = -1;
 

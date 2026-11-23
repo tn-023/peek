@@ -129,7 +129,8 @@ struct ViewerState {
     int slidePrev = -1;          // vorheriges Bild, blendet aus
     double slidePrevT0 = 0;
     double slidePausedAt = 0;
-    double slideIntroEnd = 0;    // ms: bis dahin blendet die bisherige Ansicht nach Schwarz ab
+    double slideIntroEnd = 0;
+    std::wstring slideCaption;   // Datum ueber dem ersten Bild eines Tages (nur bei Sortierung nach Aufnahmedatum)    // ms: bis dahin blendet die bisherige Ansicht nach Schwarz ab
 };
 
 class App {
@@ -208,6 +209,7 @@ private:
     int ViewerEdge(bool last) const;           // erstes/letztes Bild oder -1
     void ViewerRank(int pos, int& index, int& count) const;     // naechstes Bild in der Ansicht (am Ende wieder von vorn)
     void SlideAdvance(int dir);
+    std::wstring SlideCaption(int pos, bool first) const;
     void PaintSlides(ID2D1DeviceContext* dc, float VW);
     struct SlideCache {                        // Bild in Bildschirmaufloesung (einmal hochwertig gefiltert)
         std::wstring path;
@@ -877,6 +879,7 @@ private:
     bool dark_ = true;
     bool backdrop_ = false;
     bool fullscreen_ = false;
+    bool inSizeMove_ = false;           // Fenster wird gerade mit der Maus in der Groesse geaendert
     bool tipShown_ = false;             // Hinweis (Tooltip) zum Treffer unter der Maus sichtbar
     void PaintTip(ID2D1DeviceContext* dc);
     bool captionless_ = false;          // Titelleiste ausgeblendet (Betrachter im Fenster)

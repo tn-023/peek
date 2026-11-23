@@ -753,7 +753,7 @@ void App::OnLButtonUp(float x, float y) {
         const Hit* h = viewer_.open ? HitAt(x, y) : nullptr;
         if (h && h->type == p) {   // nur, wenn die Maus noch ueber dem Knopf ist
             if (p == HitType::ViewerBack) CloseViewer();                          // zur Ordneransicht
-            else if (viewer_.shell || (captionless_ && !fullscreen_)) PostMessageW(hwnd_, WM_CLOSE, 0, 0);   // Explorer bzw. Fenster: beenden
+            else if (viewer_.shell) PostMessageW(hwnd_, WM_CLOSE, 0, 0);   // aus dem Explorer geoeffnet: beenden
             else CloseViewer();
         }
         return;

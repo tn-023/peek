@@ -76,7 +76,12 @@ void App::TimelineSync() {
         t.version = ~0ull;
     }
     const float vh = gridRc_.bottom - gridRc_.top;
-    if (t.version == visibleVersion_ && std::fabs(t.viewH - vh) < 0.5f && t.langEn == LangEn() && !t.dirty) return;
+    const bool same = t.version == visibleVersion_ && t.langEn == LangEn() && !t.dirty;
+    if (same && std::fabs(t.viewH - vh) < 0.5f) return;
+    // Hoehe aendert sich, waehrend das Fenster gezogen wird: nicht bei jedem Schritt neu anordnen (die Kacheln
+    // sprangen und flimmerten), sondern die bisherige Anordnung mitskalieren (PaintTimeline); neu angeordnet
+    // wird nach dem Loslassen
+    if (same && inSizeMove_ && !t.items.empty()) return;
 
     // Lage merken: das Element am linken Rand bleibt nach dem Neuaufbau an derselben Stelle
     int anchorPos = -1;
@@ -567,6 +572,7 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
     auto& t = tl_;
     const D2D1_RECT_F area = gridRc_;
     const float vw = area.right - area.left;
+    const float vh0 = area.bottom - area.top;
     const D2D1_COLOR_F text = dark_ ? D2D1::ColorF(1, 1, 1, 0.92f) : D2D1::ColorF(0, 0, 0, 0.88f);
     const D2D1_COLOR_F text2 = dark_ ? D2D1::ColorF(1, 1, 1, 0.6f) : D2D1::ColorF(0, 0, 0, 0.55f);
     const D2D1_COLOR_F cardBg = dark_ ? D2D1::ColorF(0.24f, 0.24f, 0.25f, 1) : D2D1::ColorF(0.9f, 0.9f, 0.91f, 1);
@@ -576,12 +582,18 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
         return;
     }
     const float ox = area.left - t.scroll, oy = area.top;
+    // waehrend das Fenster in der Hoehe gezogen wird: bisherige Anordnung passend skaliert (s. TimelineSync)
+    const float zoom = (t.viewH > kTlSlider + 1 && std::fabs(t.viewH - vh0) >= 0.5f)
+                           ? std::max(0.2f, (vh0 - kTlSlider) / (t.viewH - kTlSlider))
+                           : 1.0f;
     const bool moving = t.scrub || t.pan || t.scroll != t.target || t.anim || t.vel != 0 || autoScroll_;
     const double now = NowMs();
     const float uAll = t.anim ? EaseOutCubic(static_cast<float>(std::clamp((now - t.animT0) / kTlAnimMs, 0.0, 1.0))) : 1.0f;
     const D2D1_COLOR_F fogC = dark_ ? D2D1::ColorF(0.17f, 0.17f, 0.17f, 1) : D2D1::ColorF(0.975f, 0.975f, 0.975f, 1);
     const float rad = 6;
     dc->PushAxisAlignedClip(D2D1::RectF(area.left, area.top, area.right, area.bottom - kTlSlider + 6), D2D1_ANTIALIAS_MODE_ALIASED);
+    const float viewW = vw / zoom;   // sichtbare Breite in Weltkoordinaten
+    if (zoom != 1.0f) dc->SetTransform(D2D1::Matrix3x2F::Scale(zoom, zoom, D2D1::Point2F(area.left, area.top)));
 
     // 1) Zeitangaben (hinter den Kacheln); bleiben am linken Rand stehen, bis die Gruppe vorbei ist
     IDWriteTextFormat* fSmall = r_.Text(kTlSmall, DWRITE_FONT_WEIGHT_NORMAL);
@@ -592,7 +604,7 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
         const float mx1 = t.colX[g.lastCol] + t.cols[g.lastCol].s * t.colK[g.lastCol];
         const float gdx = t.anim ? (g.fromX0 - mx0) * (1.0f - uAll) : 0.0f;   // gleitet beim Auf-/Zuklappen mit
         const float gx0 = mx0 + gdx, gx1 = gx0 + std::max(mx1 - mx0, g.labelW);
-        if (gx1 + ox < area.left || gx0 + ox > area.right) continue;
+        if (gx1 + ox < area.left || gx0 + ox > area.left + viewW) continue;
         float lx = std::clamp(area.left + kTlPad, gx0 + ox, std::max(gx0 + ox, gx1 + ox - g.labelW));
         IDWriteTextFormat* fb = r_.Text(g.fs, kTlWeight);
         float bw = g.bigW * g.fs / kTlBig;
@@ -638,7 +650,7 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
                             D2D1::Matrix3x2F::Scale(k, k) * D2D1::Matrix3x2F::Translation(rc.left, rc.top));
         dc->FillRoundedRectangle(D2D1::RoundedRect(rc, r, r), brush.Get());
     };
-    const float wx0 = t.scroll, wx1 = t.scroll + vw;
+    const float wx0 = t.scroll, wx1 = t.scroll + viewW;
     const bool animItems = t.anim && t.from.size() == t.items.size();
     std::vector<int>& todo = t.drawList;
     todo.clear();
@@ -727,6 +739,7 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
         if (it.stack || (it.x + it.s >= wx0 && it.x <= wx1)) continue;
         EnsureThumb(entries_[visible_[it.pos]], 1, frame_);
     }
+    if (zoom != 1.0f) dc->SetTransform(D2D1::Matrix3x2F::Identity());
     dc->PopAxisAlignedClip();
 
     // 3) Uebersicht statt Bildlaufleiste: je Zeitraum ein Balken (Breite wie auf dem Zeitstrahl, Hoehe nach Anzahl),

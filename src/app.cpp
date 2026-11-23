@@ -310,6 +310,13 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             return r;
         }
         break;
+    case WM_ENTERSIZEMOVE:
+        inSizeMove_ = true;
+        break;
+    case WM_EXITSIZEMOVE:
+        inSizeMove_ = false;
+        InvalidateRect(hwnd_, nullptr, FALSE);   // Zeitleiste: jetzt fuer die neue Hoehe anordnen
+        break;
     case WM_NCHITTEST:
         if (captionless_) return CaptionHitTest(lp, DefWindowProcW(hwnd_, msg, wp, lp));
         break;
@@ -1914,6 +1921,7 @@ void App::BeginSlideshow(bool fromGrid, bool intro) {
     double now = NowMs();
     v.slideIntroEnd = intro ? now + 800 : now;
     v.slideT0 = intro ? v.slideIntroEnd : now + 150;   // kurz Schwarz halten (Fenster hat evtl. gerade gewechselt)
+    v.slideCaption = SlideCaption(v.pos, true);
     v.slidePrev = -1;
     v.bar = false;   // Leiste ausblenden (die Einstellung bleibt, wie sie ist)
     v.zoom = 0;
@@ -1958,6 +1966,33 @@ void App::ToggleSlidePause() {
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
+// Nach Aufnahmedatum sortiert (bzw. in der Zeitleiste): ueber dem ersten Bild eines Tages zieht das Datum in
+// Versalien vorbei. first: erstes Bild der Diashow (immer mit Datum)
+std::wstring App::SlideCaption(int pos, bool first) const {
+    if (!(settings_.viewMode == 3 || settings_.sortKey == 5)) return {};
+    if (pos < 0 || pos >= static_cast<int>(visible_.size())) return {};
+    auto ymd = [&](int p, SYSTEMTIME& st) {
+        int64_t unix = entries_[visible_[p]].Time();
+        if (unix <= 0) return false;
+        ULARGE_INTEGER u;
+        u.QuadPart = static_cast<ULONGLONG>(unix) * 10000000ull + 116444736000000000ull;
+        FILETIME ft{u.LowPart, u.HighPart}, lft;
+        return FileTimeToLocalFileTime(&ft, &lft) && FileTimeToSystemTime(&lft, &st);
+    };
+    SYSTEMTIME a{};
+    if (!ymd(pos, a)) return {};
+    if (!first) {
+        int prev = ViewerNext(pos, -1);   // Vorgaenger in der Reihenfolge des Betrachters
+        SYSTEMTIME b{};
+        if (prev >= 0 && ymd(prev, b) && a.wYear == b.wYear && a.wMonth == b.wMonth && a.wDay == b.wDay) return {};
+    }
+    std::wstring month = MonthName(a.wMonth);
+    std::wstring s = LangEn() ? month + L" " + std::to_wstring(a.wDay) + L", " + std::to_wstring(a.wYear)
+                              : std::to_wstring(a.wDay) + L". " + month + L" " + std::to_wstring(a.wYear);
+    if (!s.empty()) CharUpperBuffW(s.data(), static_cast<DWORD>(s.size()));
+    return s;
+}
+
 void App::SlideAdvance(int dir) {
     auto& v = viewer_;
     int nx = SlideNext(v.pos, dir);
@@ -1967,6 +2002,7 @@ void App::SlideAdvance(int dir) {
     v.slidePrevT0 = v.slideT0;
     v.pos = nx;
     v.slideT0 = now;
+    v.slideCaption = SlideCaption(nx, false);
     if (v.slidePaused) {   // angehalten: gleich das ganze Bild zeigen (die Zeit steht ja still)
         v.slidePrev = -1;
         v.slideT0 = now - 1500;

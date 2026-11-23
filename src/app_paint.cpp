@@ -2270,7 +2270,9 @@ void App::PaintSlides(ID2D1DeviceContext* dc, float VW) {
     if (!v.slideCaption.empty() && cur.right > cur.left + 1 && cur.bottom > cur.top + 1) {
         // Zeitangabe der Gruppe in Versalien, gross und duenn: steht genau auf der Unterkante des Bildes und faehrt
         // waehrend der ganzen Zeit des Bildes einmal ganz von rechts nach links durch; nur auf dem Bild sichtbar
-        const double age = t - v.slideT0, dur = kFade + kShow + kFade;
+        // Zeitraum bis zum Wechsel zum naechsten Bild (danach gehoert die Zeile dem neuen Bild): darin ganz durch
+        // und vollstaendig ausgeblendet, sonst verschwand der Text beim Wechsel schlagartig
+        const double age = t - v.slideT0, dur = kFade + kShow;
         if (age >= 0 && age < dur) {
             float p = static_cast<float>(age / dur);
             float fs = std::round(std::clamp((cur.bottom - cur.top) * 0.2f, 32.0f, 220.0f));
@@ -2286,7 +2288,7 @@ void App::PaintSlides(ID2D1DeviceContext* dc, float VW) {
                 float k = std::clamp((v - e0) / (e1 - e0), 0.0f, 1.0f);
                 return k * k * (3 - 2 * k);
             };
-            float fade = smooth(0.0f, 0.12f, p) * (1.0f - smooth(0.7f, 0.94f, p));
+            float fade = smooth(0.0f, 0.12f, p) * (1.0f - smooth(0.68f, 0.9f, p));
             D2D1_RECT_F clip = D2D1::RectF(std::max(cur.left, 0.0f), std::max(cur.top, 0.0f), std::min(cur.right, VW),
                                            std::min(cur.bottom, H_));
             dc->PushAxisAlignedClip(clip, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);

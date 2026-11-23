@@ -387,7 +387,11 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
                 settings_.viewerInfo = !settings_.viewerInfo;
                 StartAnimation();
                 return;
-            case HitType::ViewerCrop: EnterCrop(); return;
+            case HitType::ViewerCrop: StopSlideshow(true); EnterCrop(); return;
+            case HitType::ViewerSlideshow:
+                if (viewer_.slide) StopSlideshow(true);
+                else StartSlideshow(false);
+                return;
             case HitType::CropSave: SaveCrop(); return;
             case HitType::CropCancel: CancelCrop(); return;
             default: break;
@@ -474,6 +478,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         case HitType::ViewGrid: SetViewMode(0); break;
         case HitType::ViewList: SetViewMode(1); break;
         case HitType::ViewCloud: SetViewMode(2); break;
+        case HitType::SlideshowStart: StartSlideshow(true); break;
         case HitType::SortButton:
             if (!MenuJustClosed(static_cast<int>(ChipId::Sort))) ShowSortMenu(rc);
             break;
@@ -813,6 +818,7 @@ void App::OnDoubleClick(float x, float y) {
             else if (h->type == HitType::ViewerNext) ViewerStep(1);
             return;
         }
+        if (viewer_.slide) return;   // Diashow: kein Zoom
         if (x >= ViewerAreaW() || viewer_.pos < 0 || viewer_.pos >= static_cast<int>(visible_.size())) return;
         const FileEntry& e = entries_[visible_[viewer_.pos]];
         float iw, ih;
@@ -938,6 +944,7 @@ void App::OnWheel(float x, float y, int delta, WPARAM keys) {
         CompareZoom(x, y, std::pow(1.15f, delta / 120.0f));
         return;
     }
+    if (viewer_.open && viewer_.slide) return;   // Diashow: kein Zoom
     if (settingsOpen_) {
         {
             float maxS = std::max(0.0f, settingsContentH_ - H_);
@@ -1038,6 +1045,10 @@ bool App::OnKeyDown(WPARAM vk) {
             if (vk == VK_ESCAPE) CancelCrop();
             else if (vk == VK_RETURN) SaveCrop();
             return true;
+        }
+        if (viewer_.slide) {   // Diashow: Leertaste haelt an, Esc beendet, Pfeile blaettern (mit Ueberblenden)
+            if (vk == VK_SPACE) { ToggleSlidePause(); return true; }
+            if (vk == VK_ESCAPE || vk == VK_RETURN || vk == VK_BACK) { StopSlideshow(false); return true; }
         }
         switch (vk) {
         case VK_ESCAPE: case VK_RETURN: case VK_BACK: CloseViewer(); return true;

@@ -35,7 +35,7 @@ enum class HitType {
     ViewerClose, ViewerBack, ViewerPrev, ViewerNext, ViewerInfo, ViewerCrop, CropSave, CropCancel,
     ClearBookmarks, SearchHistItem, SearchHistDel, SearchHistClear, SearchParam,
     ViewCloud,
-    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen, SettingsSingleClick, SettingsCheckBoxes, SelectAll,
+    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen, SettingsSingleClick, SettingsCheckBoxes, SelectAll, SlideshowStart, ViewerSlideshow,
     SheetCancel, SheetCreate, SheetOrient, SheetColsMinus, SheetColsPlus, SheetRowsMinus, SheetRowsPlus, SheetNames,
     SheetExts, SheetQuality, SheetPrev, SheetNext, SheetHeadline, SheetCheck, SheetCell, SheetStripCheck, SheetStrip,
     SheetOpenPdf, BookmarkSheet,
@@ -118,6 +118,14 @@ struct ViewerState {
     D2D1_RECT_F imgBox{};            // Bildschirmrechteck des angezeigten Bildes
     std::wstring toast;     // kurzer Hinweis oben (z. B. "In den Papierkorb verschoben")
     DWORD toastUntil = 0;
+    // Diashow: Bilder blenden langsam ineinander ueber, jedes zoomt dabei leicht heran
+    bool slide = false;
+    bool slidePaused = false;
+    bool slideFromGrid = false;  // aus der Ordneransicht gestartet: Esc fuehrt dorthin zurueck
+    double slideT0 = 0;          // ms: Beginn des aktuellen Bildes (Einblenden)
+    int slidePrev = -1;          // vorheriges Bild, blendet aus
+    double slidePrevT0 = 0;
+    double slidePausedAt = 0;
 };
 
 class App {
@@ -182,6 +190,19 @@ private:
     std::vector<std::wstring> SelectedPaths() const;
     void DeleteSelection();
     void ToggleFullscreen(bool workArea = false);   // workArea: rahmenlos ueber dem Arbeitsbereich (Taskleiste bleibt sichtbar)
+    void StartSlideshow(bool fromGrid);
+    void StopSlideshow(bool keepViewer);
+    void ToggleSlidePause();
+    int SlideNext(int pos, int dir) const;     // naechstes Bild in der Ansicht (am Ende wieder von vorn)
+    void SlideAdvance(int dir);
+    void PaintSlides(ID2D1DeviceContext* dc, float VW);
+    struct SlideCache {                        // Bild in Bildschirmaufloesung (einmal hochwertig gefiltert)
+        std::wstring path;
+        ID2D1Bitmap1* src = nullptr;
+        ComPtr<ID2D1Bitmap1> bmp;
+        float w = 0, h = 0, dpi = 0;
+    };
+    SlideCache slideCache_[2];
     void SetCaptionless(bool on);   // Betrachter/Vergleich im Fenster: ohne Titelleiste, die obere Leiste zieht das Fenster
     LRESULT CaptionHitTest(LPARAM lp, LRESULT def);
     void ApplyTheme();

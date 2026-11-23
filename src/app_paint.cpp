@@ -1921,6 +1921,7 @@ void App::PaintStatus(ID2D1DeviceContext* dc) {
     rx -= 12;
     iconButton(HitType::ViewList, 0xE8FD, 13, settings_.viewMode == 1);
     iconButton(HitType::ViewCloud, 0xE91B, 13, settings_.viewMode == 2);
+    iconButton(HitType::SlideshowStart, 0xE768, 12, false);   // Diashow aller Bilder der Ansicht
     iconButton(HitType::ViewGrid, 0xE8A9, 13, settings_.viewMode == 0);
     rx -= 14;
     if (settings_.viewMode == 0) {
@@ -2071,6 +2072,101 @@ void App::PaintInfoPanel(ID2D1DeviceContext* dc, const D2D1_RECT_F& rc, const st
 // Bildbetrachter (Vollbild, ohne Titelleiste)
 // ---------------------------------------------------------------------------
 
+// Diashow: das aktuelle Bild blendet ueber dem vorherigen ein; jedes zoomt waehrend seiner ganzen Zeit leicht heran.
+// Jedes Bild wird einmal in Bildschirmaufloesung (bei groesstem Zoom) hochwertig gefiltert und danach nur noch
+// leicht verkleinert gezeichnet: so bleibt jedes Bild der Animation billig.
+void App::PaintSlides(ID2D1DeviceContext* dc, float VW) {
+    constexpr double kShow = 4000, kFade = 1500;
+    constexpr float kZoom = 0.05f;   // waechst in der ganzen Zeit (Einblenden, Zeigen, Ausblenden) um 5 %
+    auto& v = viewer_;
+    const double now = NowMs();
+    const double t = v.slidePaused ? v.slidePausedAt : now;
+    const int n = static_cast<int>(visible_.size());
+    const float sc = r_.scale();
+    auto bitmapFor = [&](const FileEntry& e) -> Bmp* {
+        auto fit = fullBmps_.find(e.path);
+        if (fit != fullBmps_.end() && fit->second.bmp) return &fit->second;
+        auto tit = bmps_.find(e.path);
+        if (tit != bmps_.end() && tit->second.bmp) return &tit->second;
+        return nullptr;
+    };
+    auto drawSlide = [&](int pos, double t0, float alpha) {
+        if (pos < 0 || pos >= n || alpha <= 0.002f) return;
+        const FileEntry& e = entries_[visible_[pos]];
+        Bmp* b = bitmapFor(e);
+        if (!b) return;
+        float iw, ih;
+        float fit = ViewerScale(e, iw, ih);
+        float age = static_cast<float>(std::clamp((t - t0) / (kShow + 2 * kFade), 0.0, 1.0));
+        float z = 1.0f + kZoom * age;
+        // Ausschnitt in Bildschirmaufloesung beim groessten Zoom (einmal je Bild)
+        float bw = iw * fit * (1 + kZoom), bh = ih * fit * (1 + kZoom);
+        SlideCache* c = nullptr;
+        for (auto& sc2 : slideCache_)
+            if (sc2.path == e.path) c = &sc2;
+        if (!c || c->src != b->bmp.Get() || c->w != bw || c->h != bh || c->dpi != r_.dpi()) {
+            if (!c) {   // freien Platz nehmen: nicht den des anderen gerade gezeigten Bildes
+                const std::wstring other = (pos == v.pos && v.slidePrev >= 0 && v.slidePrev < n)
+                                               ? entries_[visible_[v.slidePrev]].path
+                                               : entries_[visible_[v.pos]].path;
+                c = slideCache_[0].path == other ? &slideCache_[1] : &slideCache_[0];
+            }
+            *c = SlideCache{};
+            UINT pw = static_cast<UINT>(std::ceil(bw * sc)), ph = static_cast<UINT>(std::ceil(bh * sc));
+            if (pw > 0 && ph > 0 && pw <= r_.maxBitmapSize() && ph <= r_.maxBitmapSize()) {
+                D2D1_BITMAP_PROPERTIES1 bp = D2D1::BitmapProperties1(
+                    D2D1_BITMAP_OPTIONS_TARGET, D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+                    r_.dpi(), r_.dpi());
+                dc->CreateBitmap(D2D1::SizeU(pw, ph), nullptr, 0, bp, &c->bmp);
+                if (c->bmp) {
+                    ComPtr<ID2D1Image> oldTarget;
+                    dc->GetTarget(&oldTarget);
+                    dc->SetTarget(c->bmp.Get());
+                    dc->Clear(D2D1::ColorF(0, 0, 0, 0));
+                    dc->DrawBitmap(b->bmp.Get(), D2D1::RectF(0, 0, bw, bh), 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+                    dc->SetTarget(oldTarget.Get());
+                    c->path = e.path;
+                    c->src = b->bmp.Get();
+                    c->w = bw;
+                    c->h = bh;
+                    c->dpi = r_.dpi();
+                }
+            }
+        }
+        float dw = iw * fit * z, dh = ih * fit * z;
+        D2D1_RECT_F dst = D2D1::RectF(VW / 2 - dw / 2, H_ / 2 - dh / 2, VW / 2 + dw / 2, H_ / 2 + dh / 2);
+        if (c && c->bmp) dc->DrawBitmap(c->bmp.Get(), dst, alpha, D2D1_INTERPOLATION_MODE_LINEAR);
+        else dc->DrawBitmap(b->bmp.Get(), dst, alpha, D2D1_INTERPOLATION_MODE_LINEAR);
+    };
+
+    float u = static_cast<float>(std::clamp((t - v.slideT0) / kFade, 0.0, 1.0));
+    float a = u * u * (3 - 2 * u);   // weich ein- und ausklingend
+    dc->PushAxisAlignedClip(D2D1::RectF(0, 0, VW, H_), D2D1_ANTIALIAS_MODE_ALIASED);
+    if (v.slidePrev >= 0 && u < 1) drawSlide(v.slidePrev, v.slidePrevT0, 1.0f - a * a);
+    drawSlide(v.pos, v.slideT0, v.slidePrev >= 0 ? a : 1.0f);   // erstes Bild ohne Einblenden
+    dc->PopAxisAlignedClip();
+    if (u >= 1 && v.slidePrev >= 0) v.slidePrev = -1;
+
+    if (!v.slidePaused) {
+        // weiter, wenn das Bild lange genug stand und das naechste geladen ist (hoechstens 8 s darauf warten)
+        double shown = now - v.slideT0;
+        if (shown >= kFade + kShow) {
+            int nx = SlideNext(v.pos, 1);
+            if (nx != v.pos) {
+                auto it = fullBmps_.find(entries_[visible_[nx]].path);
+                bool ready = it != fullBmps_.end() && (it->second.bmp || it->second.failed);
+                if (ready || shown >= kFade + kShow + 8000) SlideAdvance(1);
+            }
+        }
+        InvalidateRect(hwnd_, nullptr, FALSE);   // naechstes Bild der Animation (Present wartet auf VSync)
+    }
+    if (GetTickCount() >= v.controlsUntil && GetForegroundWindow() == hwnd_) {
+        POINT pt;
+        GetCursorPos(&pt);
+        if (WindowFromPoint(pt) == hwnd_) SetCursor(nullptr);
+    }
+}
+
 float App::ViewerScale(const FileEntry& e, float& imgW, float& imgH) const {
     imgW = static_cast<float>(e.width);
     imgH = static_cast<float>(e.height);
@@ -2134,6 +2230,10 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
     // weiche Zoom-Animation: angezeigter Massstab und Versatz laufen dem Ziel exponentiell nach
     double nowMs = NowMs();
     DWORD now = GetTickCount();
+    D2D1_COLOR_F white = D2D1::ColorF(1, 1, 1, 0.95f), dim = D2D1::ColorF(1, 1, 1, 0.6f);
+    if (viewer_.slide) {
+        PaintSlides(dc, VW);   // Diashow: eigene Darstellung (Ueberblenden, leichter Zoom)
+    } else {
     // Der Zoom laeuft um einen festen Punkt (Mauszeiger): Mittelpunkt c = A - (A - c0) * s / s0.
     // So bleibt der Punkt unter dem Mauszeiger waehrend der ganzen Animation stehen (keine Bogenbewegung).
     auto& v = viewer_;
@@ -2192,7 +2292,6 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         auto tit = bmps_.find(e.path);
         if (tit != bmps_.end() && tit->second.bmp) b = &tit->second;
     }
-    D2D1_COLOR_F white = D2D1::ColorF(1, 1, 1, 0.95f), dim = D2D1::ColorF(1, 1, 1, 0.6f);
     // angezeigte Bildflaeche (gedreht) fuer den Zuschnitt
     viewer_.imgBox = (viewer_.rotation % 2 == 1) ? D2D1::RectF(c.x - dh / 2, c.y - dw / 2, c.x + dh / 2, c.y + dw / 2) : dst;
     D2D1_INTERPOLATION_MODE im = D2D1_INTERPOLATION_MODE_LINEAR;
@@ -2361,6 +2460,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
     }
 
     dc->PopAxisAlignedClip();
+    }   // Ende: normale Anzeige (keine Diashow)
 
     // Leiste oben ueber die ganze Breite: das X sitzt immer ganz oben rechts, das Info-Panel darunter
     float barH = 0;
@@ -2453,9 +2553,11 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         info += L"   \u00b7   " + FormatSize(e.size);
         info += L"   \u00b7   " + std::to_wstring(static_cast<int>(std::round(sTarget * r_.scale() * 100))) + L" %";
         IDWriteTextFormat* fi = r_.TextWrap(12.5f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
-        float infoW = std::max(60.0f, W_ - 152 - (nameX + nameW + 16));
+        float infoW = std::max(60.0f, W_ - 200 - (nameX + nameW + 16));
         float infoH = r_.MeasureWrapped(info, fi, infoW);
-        r_.DrawWrapped(info, W_ - 152 - infoW, by + (barH - infoH) / 2, infoW, fi, dim);
+        r_.DrawWrapped(info, W_ - 200 - infoW, by + (barH - infoH) / 2, infoW, fi, dim);
+        // Diashow: Abspielen (laeuft sie, beendet derselbe Knopf sie)
+        topButton(HitType::ViewerSlideshow, viewer_.slide ? 0xE71A : 0xE768, W_ - 192, W_ - 144, 44, false, viewer_.slide);
         if (e.ext != L"svg" && e.ext != L"tga") topButton(HitType::ViewerCrop, 0xE7A8, W_ - 144, W_ - 96, 44, false, false);
         topButton(HitType::ViewerInfo, 0xE946, W_ - 96, W_ - 48, 44, false, settings_.viewerInfo);
         topButton(HitType::ViewerClose, 0xE8BB, W_ - 48, W_, 44, true, false);
@@ -2699,6 +2801,10 @@ void App::PaintShortcuts(ID2D1DeviceContext* dc) {
           {N_(L"Strg+C / Strg+Umschalt+C"), N_(L"Kopieren / Pfad kopieren")},
           {N_(L"Strg+E"), N_(L"Im Explorer zeigen")},
           {N_(L"Esc / Enter / Rücktaste"), N_(L"Betrachter schließen")}}},
+        {N_(L"Diashow"),
+         {{L"← / →", N_(L"Vorheriges / nächstes Bild")},
+          {N_(L"Leertaste"), N_(L"Anhalten / fortsetzen")},
+          {L"Esc", N_(L"Diashow beenden")}}},
     };
 
     float sy = settingsScroll_;

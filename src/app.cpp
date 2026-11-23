@@ -463,6 +463,10 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 SetCursor(LoadCursorW(nullptr, c));
                 return TRUE;
             }
+            if (viewer_.open && viewer_.slide && GetTickCount() >= viewer_.controlsUntil) {
+                SetCursor(nullptr);   // Diashow: Mauszeiger verschwindet, bis die Maus bewegt wird
+                return TRUE;
+            }
             if (viewer_.open && viewer_.crop && pt.x / s < ViewerAreaW()) {
                 const Hit* ch = HitAt(pt.x / s, pt.y / s);
                 SetCursor(LoadCursorW(nullptr, ch ? IDC_ARROW : CropCursor(pt.x / s, pt.y / s)));
@@ -532,7 +536,7 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             if (viewer_.open) {
                 viewer_.bar = !viewer_.bar;
                 // fuer das naechste Oeffnen merken (nicht beim Start aus dem Explorer: dort beginnt die Leiste immer sichtbar)
-                if (!viewer_.shell) settings_.viewerBar = viewer_.bar;
+                if (!viewer_.shell && !viewer_.slide) settings_.viewerBar = viewer_.bar;
                 InvalidateRect(hwnd_, nullptr, FALSE);
             }
             break;
@@ -1760,6 +1764,8 @@ void App::CloseViewer() {
     bool ownFs = viewer_.ownFullscreen;
     viewer_.open = false;
     viewer_.shell = false;
+    viewer_.slide = false;
+    for (auto& c : slideCache_) c = SlideCache{};
     viewer_.bar = settings_.viewerBar;
     viewCache_ = {};
     infoAnim_ = settings_.infoPanel ? 1.0f : 0.0f;      // Infobereich der Ansicht wiederherstellen (ohne Animation)
@@ -1778,8 +1784,109 @@ void App::CloseViewer() {
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
+// ---------------------------------------------------------------------------
+// Diashow
+// ---------------------------------------------------------------------------
+
+int App::SlideNext(int pos, int dir) const {
+    int n = static_cast<int>(visible_.size());
+    if (n <= 0) return pos;
+    int p = pos;
+    for (int k = 0; k < n; ++k) {
+        p = (p + (dir > 0 ? 1 : -1) + n) % n;
+        if (p == pos) return pos;
+        if (entries_[visible_[p]].kind == Kind::Image) return p;
+    }
+    return pos;
+}
+
+void App::StartSlideshow(bool fromGrid) {
+    int n = static_cast<int>(visible_.size());
+    if (fromGrid) {
+        int start = -1;
+        if (focus_ >= 0 && focus_ < n && entries_[visible_[focus_]].kind == Kind::Image) start = focus_;
+        for (int p = 0; p < n && start < 0; ++p)
+            if (entries_[visible_[p]].kind == Kind::Image) start = p;
+        if (start < 0) {
+            SetStatus(T(L"Keine Bilder in dieser Ansicht."));
+            return;
+        }
+        OpenViewer(start);
+    }
+    if (!viewer_.open || viewer_.pos < 0 || viewer_.pos >= n) return;
+    if (viewer_.crop) CancelCrop();
+    auto& v = viewer_;
+    v.slide = true;
+    v.slidePaused = false;
+    v.slideFromGrid = fromGrid;
+    v.slideT0 = NowMs();
+    v.slidePrev = -1;
+    v.bar = false;   // Leiste ausblenden (die Einstellung bleibt, wie sie ist)
+    v.zoom = 0;
+    v.pan = {0, 0};
+    v.rotation = 0;
+    v.controlsUntil = 0;
+    ViewerPrefetch();
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+// keepViewer: im Betrachter beim aktuellen Bild bleiben; sonst (Esc) wie Esc im Betrachter
+void App::StopSlideshow(bool keepViewer) {
+    if (!viewer_.slide) return;
+    bool toGrid = viewer_.slideFromGrid && !keepViewer;
+    viewer_.slide = false;
+    viewer_.slidePaused = false;
+    viewer_.slidePrev = -1;
+    viewer_.animS = 0;
+    viewer_.bar = viewer_.shell || settings_.viewerBar;
+    for (auto& c : slideCache_) c = SlideCache{};
+    if (toGrid) CloseViewer();
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void App::ToggleSlidePause() {
+    auto& v = viewer_;
+    if (!v.slide) return;
+    double now = NowMs();
+    if (v.slidePaused) {
+        double d = now - v.slidePausedAt;   // die Zeit steht still: alle Zeitpunkte verschieben
+        v.slideT0 += d;
+        v.slidePrevT0 += d;
+        v.slidePaused = false;
+        v.toast = T(L"Diashow läuft weiter");
+    } else {
+        v.slidePaused = true;
+        v.slidePausedAt = now;
+        v.toast = T(L"Diashow angehalten – Leertaste setzt fort");
+    }
+    v.toastUntil = GetTickCount() + 1800;
+    SetTimer(hwnd_, kTimerViewerUi, 1900, nullptr);   // Hinweis danach wieder ausblenden
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void App::SlideAdvance(int dir) {
+    auto& v = viewer_;
+    int nx = SlideNext(v.pos, dir);
+    if (nx == v.pos) return;
+    double now = v.slidePaused ? v.slidePausedAt : NowMs();
+    v.slidePrev = v.pos;
+    v.slidePrevT0 = v.slideT0;
+    v.pos = nx;
+    v.slideT0 = now;
+    if (v.slidePaused) {   // angehalten: gleich das ganze Bild zeigen (die Zeit steht ja still)
+        v.slidePrev = -1;
+        v.slideT0 = now - 1500;
+    }
+    v.zoom = 0;
+    v.pan = {0, 0};
+    v.rotation = 0;
+    ViewerPrefetch();
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
 void App::ViewerStep(int delta) {
     if (!viewer_.open) return;
+    if (viewer_.slide) { SlideAdvance(delta); return; }
     if (viewer_.crop) CancelCrop();
     int n = static_cast<int>(visible_.size());
     int p = viewer_.pos;
@@ -1848,6 +1955,11 @@ void App::ViewerPrefetch() {
                 ++found;
             }
         }
+    }
+    if (viewer_.slide) {   // Diashow: das naechste Bild auch am Ende (wieder von vorn), das ausblendende behalten
+        int nx = SlideNext(viewer_.pos, 1);
+        if (nx != viewer_.pos && !entries_[visible_[nx]].offline) wanted.push_back({nx, 1});
+        if (viewer_.slidePrev >= 0 && viewer_.slidePrev < n) wanted.push_back({viewer_.slidePrev, 1});
     }
     std::unordered_set<std::wstring> keep;
     for (auto& [p, prio] : wanted) {

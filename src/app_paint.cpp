@@ -2277,11 +2277,20 @@ void App::PaintSlides(ID2D1DeviceContext* dc, float VW) {
             IDWriteTextFormat* fc = r_.TextWrap(fs, DWRITE_FONT_WEIGHT_LIGHT);
             float w = r_.MeasureText(v.slideCaption, fc);
             float base = r_.Baseline(v.slideCaption, fc);
-            float x = cur.right - p * (cur.right - cur.left + w);
+            // dynamisch: schnell herein, in der Mitte langsam (lesbar), zum Schluss wieder schneller hinaus
+            float q = p - 0.5f;
+            float f = 0.5f + 0.6f * q + 1.6f * q * q * q;   // 0 -> 1, Steigung in der Mitte 0.6, aussen 1.8
+            float x = cur.right - f * (cur.right - cur.left + w);
+            // ein- und zum Schluss immer ausblenden (auch wenn der Text noch nicht ganz hinaus ist)
+            auto smooth = [](float e0, float e1, float v) {
+                float k = std::clamp((v - e0) / (e1 - e0), 0.0f, 1.0f);
+                return k * k * (3 - 2 * k);
+            };
+            float fade = smooth(0.0f, 0.12f, p) * (1.0f - smooth(0.7f, 0.94f, p));
             D2D1_RECT_F clip = D2D1::RectF(std::max(cur.left, 0.0f), std::max(cur.top, 0.0f), std::min(cur.right, VW),
                                            std::min(cur.bottom, H_));
             dc->PushAxisAlignedClip(clip, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-            r_.DrawWrapped(v.slideCaption, x, cur.bottom - base, w + 40, fc, D2D1::ColorF(1, 1, 1, 0.92f * a));
+            r_.DrawWrapped(v.slideCaption, x, cur.bottom - base, w + 40, fc, D2D1::ColorF(1, 1, 1, 0.92f * a * fade));
             dc->PopAxisAlignedClip();
         }
     }

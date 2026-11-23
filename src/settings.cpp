@@ -147,7 +147,7 @@ void Settings::Load() {
     sheetQuality = std::clamp(ReadInt(L"Sheet", L"Quality", 1), 0, 2);
     group = ReadInt(L"View", L"Group", 0) != 0;
     viewerSmall = std::clamp(ReadInt(L"View", L"ViewerSmall", 0), 0, 1);
-    viewerFullscreen = ReadInt(L"View", L"ViewerFullscreen", 1) != 0;
+    viewerFullscreen = ReadInt(L"View", L"ViewerFull", 0) != 0;   // neuer Schluessel: Standard ist jetzt aus
     singleClick = ReadInt(L"View", L"SingleClick", 0) != 0;
     checkBoxes = ReadInt(L"View", L"CheckBoxes", 0) != 0;
     for (int i = 0; i < 5; ++i) {
@@ -227,7 +227,7 @@ void Settings::Save() const {
     WriteInt(L"Sheet", L"Quality", sheetQuality);
     WriteInt(L"View", L"Group", group ? 1 : 0);
     WriteInt(L"View", L"ViewerSmall", viewerSmall);
-    WriteInt(L"View", L"ViewerFullscreen", viewerFullscreen ? 1 : 0);
+    WriteInt(L"View", L"ViewerFull", viewerFullscreen ? 1 : 0);
     WriteInt(L"View", L"SingleClick", singleClick ? 1 : 0);
     WriteInt(L"View", L"CheckBoxes", checkBoxes ? 1 : 0);
     for (int i = 0; i < 5; ++i) {

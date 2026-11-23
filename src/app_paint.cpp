@@ -2377,6 +2377,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         barH = std::max(48.0f, nameH + 28);
     }
     const float by = -(1.0f - ba) * barH;   // Verschiebung der Leiste nach oben
+    viewerBarRc_ = {};
     if (InfoWidth() > 0.5f) {
         // auf ganze Pixel: der Streifen oben und das Panel stossen ohne Naht aneinander (sonst duenne helle Linie)
         const float px = r_.scale();
@@ -2425,6 +2426,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         DrawText(dc, T(L"Speichern"), save, bf, D2D1::ColorF(1, 1, 1, 1));
     } else if (ba > 0.001f) {
         btnY = by;
+        viewerBarRc_ = D2D1::RectF(0, by, W_, by + barH);   // zieht das Fenster (ohne Titelleiste)
         dc->FillRectangle(D2D1::RectF(0, by, W_, by + barH), r_.Brush(D2D1::ColorF(0, 0, 0, 0.45f)));
         float nameX = 20;
         if (backW > 0) {

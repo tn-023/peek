@@ -17,7 +17,7 @@ namespace peek {
 const wchar_t* const kThemeNames[3] = {N_(L"System (Standard)"), N_(L"Hell"), N_(L"Dunkel")};
 const wchar_t* const kSingleClickNames[2] = {N_(L"Doppelklick (Standard)"), N_(L"Einfacher Klick")};
 const wchar_t* const kCheckBoxNames[2] = {N_(L"Aus (Standard)"), N_(L"Ein")};
-const wchar_t* const kViewerFullscreenNames[2] = {N_(L"Ein (Standard)"), N_(L"Aus \u2013 Taskleiste bleibt sichtbar")};
+const wchar_t* const kViewerFullscreenNames[2] = {N_(L"Ein"), N_(L"Aus (Standard)")};
 const wchar_t* const kViewerSmallNames[2] = {N_(L"Originalgr\u00f6\u00dfe (100 %)"), N_(L"An die Ansicht anpassen")};
 
 const wchar_t* LanguageName(int setting) {
@@ -231,7 +231,8 @@ bool App::Init(HINSTANCE inst, int show) {
     ShowWindow(hwnd_, settings_.maximized ? SW_SHOWMAXIMIZED : show);
     if (viewerStart_) {
         // gleich im Vollbild (dunkel), bis das Bild bereit ist: kein kurzes Aufblitzen des Ordners
-        if (!fullscreen_) ToggleFullscreen(!settings_.viewerFullscreen);
+        if (settings_.viewerFullscreen) { if (!fullscreen_) ToggleFullscreen(); }
+        else SetCaptionless(true);
         SetTimer(hwnd_, kTimerViewerStart, 6000, nullptr);
     }
     UpdateWindow(hwnd_);
@@ -294,6 +295,23 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         InvalidateRect(hwnd_, nullptr, FALSE);
         return 0;
     }
+    case WM_NCCALCSIZE:
+        if (captionless_ && wp) {
+            // Titelleiste weglassen: wie Windows rechnen, dann den oberen Rand wieder zur Client-Flaeche nehmen
+            auto p = reinterpret_cast<NCCALCSIZE_PARAMS*>(lp);
+            LONG top = p->rgrc[0].top;
+            LRESULT r = DefWindowProcW(hwnd_, msg, wp, lp);
+            p->rgrc[0].top = top;
+            if (IsZoomed(hwnd_) && !fullscreen_) {   // maximiert ragt das Fenster um den Rahmen ueber den Bildschirm
+                UINT dpi = GetDpiForWindow(hwnd_);
+                p->rgrc[0].top += GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+            }
+            return r;
+        }
+        break;
+    case WM_NCHITTEST:
+        if (captionless_) return CaptionHitTest(lp, DefWindowProcW(hwnd_, msg, wp, lp));
+        break;
     case WM_GETMINMAXINFO: {
         auto mmi = reinterpret_cast<MINMAXINFO*>(lp);
         mmi->ptMinTrackSize.x = static_cast<LONG>(640 * s);
@@ -1698,10 +1716,15 @@ void App::OpenViewer(int pos) {
     infoAnim_ = settings_.viewerInfo ? 1.0f : 0.0f;     // ohne Einfahren
     searchFocus_ = false;
     if (settingsOpen_) settingsOpen_ = false;
-    // Betrachter ohne Titelleiste: randloses Vollbild auf dem aktuellen Bildschirm
-    if (!fullscreen_) {
-        ToggleFullscreen(!settings_.viewerFullscreen);
-        viewer_.ownFullscreen = fullscreen_;
+    // Betrachter ohne Titelleiste: randloses Vollbild auf dem aktuellen Bildschirm, oder (Einstellung) im
+    // peek-Fenster, dessen obere Leiste dann wie eine Titelleiste zieht
+    if (settings_.viewerFullscreen) {
+        if (!fullscreen_) {
+            ToggleFullscreen();
+            viewer_.ownFullscreen = fullscreen_;
+        }
+    } else {
+        SetCaptionless(true);
     }
     viewer_.controlsUntil = GetTickCount() + 2000;
     SetTimer(hwnd_, kTimerViewerUi, 2100, nullptr);
@@ -1720,8 +1743,9 @@ void App::EndViewerStart() {
         viewer_.ownFullscreen = fullscreen_;
         viewer_.shell = true;   // Leiste immer sichtbar (unabhaengig von der gemerkten Einstellung), "Zurueck" zum Ordner
         viewer_.bar = true;
-    } else if (fullscreen_) {
-        ToggleFullscreen();
+    } else {
+        if (fullscreen_) ToggleFullscreen();
+        if (!compare_.open) SetCaptionless(false);
     }
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
@@ -1742,6 +1766,7 @@ void App::CloseViewer() {
     settings_.Save();                                   // Betrachter-Leisten merken
     KillTimer(hwnd_, kTimerViewerClick);
     if (ownFs && fullscreen_) ToggleFullscreen();
+    if (!compare_.open) SetCaptionless(false);
     fullBmps_.clear();
     indexer_.Pause(false);
     if (pos >= 0 && pos < static_cast<int>(visible_.size())) {
@@ -1963,6 +1988,39 @@ void App::DeleteSelection() {
     auto paths = SelectedPaths();
     if (paths.empty()) return;
     if (RecycleFiles(hwnd_, paths)) Reload(false);
+}
+
+// Betrachter im Fenster: die Titelleiste von Windows verschwindet, der Inhalt reicht bis an den oberen Rand.
+// Seiten und unterer Rand bleiben die (unsichtbaren) Griffe von Windows; oben uebernimmt CaptionHitTest.
+void App::SetCaptionless(bool on) {
+    if (captionless_ == on) return;
+    captionless_ = on;
+    viewerBarRc_ = {};
+    SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+// Ohne Titelleiste: oberer Rand zum Aendern der Hoehe, die Leiste oben (ohne ihre Knoepfe) zum Verschieben
+LRESULT App::CaptionHitTest(LPARAM lp, LRESULT def) {
+    if (def != HTCLIENT || fullscreen_) return def;
+    POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+    ScreenToClient(hwnd_, &pt);
+    UINT dpi = GetDpiForWindow(hwnd_);
+    int frame = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+    RECT cr;
+    GetClientRect(hwnd_, &cr);
+    if (!IsZoomed(hwnd_) && pt.y < frame) {
+        if (pt.x < frame * 2) return HTTOPLEFT;
+        if (pt.x >= cr.right - frame * 2) return HTTOPRIGHT;
+        return HTTOP;
+    }
+    const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
+    float x = pt.x / s, y = pt.y / s;
+    D2D1_RECT_F bar{};
+    if (compare_.open) bar = D2D1::RectF(0, 0, W_, 48);
+    else if (viewer_.open && !viewer_.crop) bar = viewerBarRc_;
+    if (x >= bar.left && x < bar.right && y >= bar.top && y < bar.bottom && !HitAt(x, y)) return HTCAPTION;
+    return def;
 }
 
 void App::ToggleFullscreen(bool workArea) {

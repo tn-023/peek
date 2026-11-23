@@ -29,7 +29,7 @@ struct Settings {
     bool group = false;          // Ansicht nach dem Sortierkriterium gruppieren
     bool checkBoxes = false;        // Auswahlkaestchen an Kacheln und in der Detailliste (wie die Explorer-Option)
     bool singleClick = false;       // Ordner und Dateien mit einem Klick oeffnen (wie die Explorer-Option)
-    bool viewerFullscreen = true;   // Bildbetrachter/Vergleich: Vollbild (aus: rahmenlos, Taskleiste bleibt sichtbar)
+    bool viewerFullscreen = false;  // Bildbetrachter/Vergleich: Vollbild (aus: im peek-Fenster ohne Titelleiste)
     int viewerSmall = 0;         // kleine Bilder im Betrachter: 0 = 100 %, 1 = eingepasst (vergroessert)
     std::vector<std::wstring> collections;
     std::vector<std::wstring> bookmarks;       // Merkliste

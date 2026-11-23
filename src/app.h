@@ -182,6 +182,8 @@ private:
     std::vector<std::wstring> SelectedPaths() const;
     void DeleteSelection();
     void ToggleFullscreen(bool workArea = false);   // workArea: rahmenlos ueber dem Arbeitsbereich (Taskleiste bleibt sichtbar)
+    void SetCaptionless(bool on);   // Betrachter/Vergleich im Fenster: ohne Titelleiste, die obere Leiste zieht das Fenster
+    LRESULT CaptionHitTest(LPARAM lp, LRESULT def);
     void ApplyTheme();
     void ApplyLanguage();   // Sprache aus Einstellung bzw. --lang= setzen und Oberflaeche neu aufbauen
     void EndViewerStart();
@@ -773,6 +775,8 @@ private:
     bool dark_ = true;
     bool backdrop_ = false;
     bool fullscreen_ = false;
+    bool captionless_ = false;          // Titelleiste ausgeblendet (Betrachter im Fenster)
+    D2D1_RECT_F viewerBarRc_{};         // obere Leiste des Betrachters (zum Ziehen des Fensters), leer wenn verborgen
     WINDOWPLACEMENT prevPlacement_{sizeof(WINDOWPLACEMENT)};
     RECT prevRect_{};   // tatsaechliche Fensterlage (auch bei angedocktem Fenster)
     bool animating_ = false;

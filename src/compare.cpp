@@ -46,9 +46,13 @@ void App::OpenCompare(const std::vector<std::wstring>& paths) {
     c.mode = 0;
     searchFocus_ = false;
     c.ownFullscreen = false;
-    if (!fullscreen_) {   // wie der Bildbetrachter: Vollbild (bzw. Taskleiste sichtbar, je nach Einstellung)
-        ToggleFullscreen(!settings_.viewerFullscreen);
-        c.ownFullscreen = fullscreen_;
+    if (settings_.viewerFullscreen) {   // wie der Bildbetrachter: Vollbild oder im Fenster ohne Titelleiste
+        if (!fullscreen_) {
+            ToggleFullscreen();
+            c.ownFullscreen = fullscreen_;
+        }
+    } else {
+        SetCaptionless(true);
     }
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
@@ -61,6 +65,7 @@ void App::CloseCompare() {
         for (auto& p : c.path) fullBmps_.erase(p);
     if (c.ownFullscreen && fullscreen_) ToggleFullscreen();
     c.ownFullscreen = false;
+    if (!viewer_.open) SetCaptionless(false);
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 

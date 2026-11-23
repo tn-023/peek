@@ -335,9 +335,11 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 autoSticky_ = false;
                 autoAnchor_ = D2D1::Point2F(x, y);
                 autoMouseY_ = y;
+                autoMouseX_ = x;
                 autoStart_ = GetTickCount();
+                tl_.vel = 0;
                 SetCapture(hwnd_);
-                SetCursor(LoadCursorW(nullptr, IDC_SIZENS));
+                SetCursor(LoadCursorW(nullptr, settings_.viewMode == 3 ? IDC_SIZEWE : IDC_SIZENS));
                 StartAnimation();
                 InvalidateRect(hwnd_, nullptr, FALSE);
             }
@@ -351,7 +353,9 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         }
         if (autoScroll_ && !autoSticky_) {
             // kurzer Klick ohne Bewegung: Modus bleibt aktiv bis zum naechsten Klick (wie im Browser)
-            if (GetTickCount() - autoStart_ < 350 && std::fabs(Y(lp) - autoAnchor_.y) < 6) autoSticky_ = true;
+            if (GetTickCount() - autoStart_ < 350 && std::fabs(Y(lp) - autoAnchor_.y) < 6 &&
+                std::fabs(X(lp) - autoAnchor_.x) < 6)
+                autoSticky_ = true;
             else StopAutoScroll();
         }
         return 0;
@@ -450,7 +454,7 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             GetCursorPos(&pt);
             ScreenToClient(hwnd_, &pt);
             if (autoScroll_) {
-                SetCursor(LoadCursorW(nullptr, IDC_SIZENS));
+                SetCursor(LoadCursorW(nullptr, settings_.viewMode == 3 ? IDC_SIZEWE : IDC_SIZENS));   // Zeitleiste: waagerecht
                 return TRUE;
             }
             if (atlas_.open || compare_.open) {
@@ -2544,7 +2548,20 @@ bool App::AnimateStep(float dt) {
             more = true;
         }
     }
-    if (autoScroll_) {
+    if (autoScroll_ && settings_.viewMode == 3) {
+        // Zeitleiste: mit der mittleren Maustaste waagerecht scrollen (wie senkrecht in Liste und Kacheln)
+        float dx = autoMouseX_ - autoAnchor_.x;
+        const float dead = 12;
+        float maxX = std::max(0.0f, tl_.contentW - (gridRc_.right - gridRc_.left));
+        if (std::fabs(dx) > dead) {
+            float v = std::fabs(dx) - dead;
+            float speed = v * 0.06f + v * v * 0.0008f;
+            tl_.scroll = std::clamp(tl_.scroll + (dx > 0 ? speed : -speed) * step, 0.0f, maxX);
+        }
+        tl_.target = tl_.scroll;
+        tl_.vel = 0;
+        more = true;
+    } else if (autoScroll_) {
         float dy = autoMouseY_ - autoAnchor_.y;
         const float dead = 12;
         if (std::fabs(dy) > dead) {

@@ -238,6 +238,7 @@ void App::OnMouseMove(float x, float y, WPARAM keys) {
     if ((tl_.scrub || tl_.pan) && TimelineMouseMove(x, y)) return;
     if (autoScroll_) {
         autoMouseY_ = y;
+        autoMouseX_ = x;
         return;
     }
     if (settingsScrollDrag_) {

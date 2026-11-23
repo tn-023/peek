@@ -576,7 +576,7 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
         return;
     }
     const float ox = area.left - t.scroll, oy = area.top;
-    const bool moving = t.scrub || t.pan || t.scroll != t.target || t.anim || t.vel != 0;
+    const bool moving = t.scrub || t.pan || t.scroll != t.target || t.anim || t.vel != 0 || autoScroll_;
     const double now = NowMs();
     const float uAll = t.anim ? EaseOutCubic(static_cast<float>(std::clamp((now - t.animT0) / kTlAnimMs, 0.0, 1.0))) : 1.0f;
     const D2D1_COLOR_F fogC = dark_ ? D2D1::ColorF(0.17f, 0.17f, 0.17f, 1) : D2D1::ColorF(0.975f, 0.975f, 0.975f, 1);

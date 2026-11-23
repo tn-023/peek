@@ -789,9 +789,15 @@ void App::Paint() {
             D2D1_POINT_2F a = autoAnchor_;
             dc->FillEllipse(D2D1::Ellipse(a, 15, 15), r_.Brush(dark_ ? D2D1::ColorF(0.2f, 0.2f, 0.2f, 0.92f)
                                                                      : D2D1::ColorF(1, 1, 1, 0.95f)));
-            wchar_t up[2] = {0xE70E, 0}, dn[2] = {0xE70D, 0};
-            DrawText(dc, up, D2D1::RectF(a.x - 10, a.y - 14, a.x + 10, a.y - 2), r_.Icon(8), t.text);
-            DrawText(dc, dn, D2D1::RectF(a.x - 10, a.y + 2, a.x + 10, a.y + 14), r_.Icon(8), t.text);
+            if (settings_.viewMode == 3) {   // Zeitleiste: links/rechts
+                wchar_t lf[2] = {0xE76B, 0}, rt[2] = {0xE76C, 0};
+                DrawText(dc, lf, D2D1::RectF(a.x - 14, a.y - 10, a.x - 2, a.y + 10), r_.Icon(8), t.text);
+                DrawText(dc, rt, D2D1::RectF(a.x + 2, a.y - 10, a.x + 14, a.y + 10), r_.Icon(8), t.text);
+            } else {
+                wchar_t up[2] = {0xE70E, 0}, dn[2] = {0xE70D, 0};
+                DrawText(dc, up, D2D1::RectF(a.x - 10, a.y - 14, a.x + 10, a.y - 2), r_.Icon(8), t.text);
+                DrawText(dc, dn, D2D1::RectF(a.x - 10, a.y + 2, a.x + 10, a.y + 14), r_.Icon(8), t.text);
+            }
         }
         if (slidePending_ >= 0) {   // Diashow aus der Ordneransicht gestartet: die Ansicht blendet langsam nach Schwarz ab
             float k = static_cast<float>(1.0 - std::clamp((slidePendingEnd_ - NowMs()) / 800.0, 0.0, 1.0));

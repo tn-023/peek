@@ -836,7 +836,7 @@ private:
     // Mittlere Maustaste: automatisches Scrollen
     bool autoScroll_ = false, autoSticky_ = false;
     D2D1_POINT_2F autoAnchor_{};
-    float autoMouseY_ = 0;
+    float autoMouseY_ = 0, autoMouseX_ = 0;   // Zeitleiste: waagerecht
     DWORD autoStart_ = 0;
 
     // Drag & Drop in die App

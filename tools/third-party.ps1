@@ -148,5 +148,12 @@ for ($i = 0; $i -lt $texts.Count; $i++) {
         $first.Trim().Substring(0, [Math]::Min(50, $first.Trim().Length)))
 }
 Write-Host ("  components: {0:N0} chars" -f $components.Length)
+foreach ($p in $ports) {   # sections of large vcpkg copyright files (to check in the build log)
+    $text = Get-Content (Join-Path $p.FullName 'copyright') -Raw
+    if ($text.Length -lt 20000) { continue }
+    $lines = $text -split "`r?`n"
+    $heads = @(); for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^\S.{0,80}:\s*$') { $heads += "$($i):$($lines[$i].Trim())" } }
+    Write-Host ("  {0}: {1:N0} chars, {2} lines; sections: {3}" -f $p.Name, $text.Length, $lines.Count, (($heads | Select-Object -First 25) -join ' | '))
+}
 Write-Host ("THIRD-PARTY.txt written ({0:N0} characters, {1} vcpkg ports, {2} Rust packages, {3} distinct license texts)" -f
     $sb.Length, $ports.Count, $crates.Count, $texts.Count)

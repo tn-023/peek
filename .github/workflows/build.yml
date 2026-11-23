@@ -4,7 +4,7 @@ on:
   # Reine Text- und Doku-Aenderungen (README, Konzept, Release-Notes, andere Workflows) loesen keinen
   # Windows-Build aus: Windows-Minuten zaehlen bei GitHub doppelt.
   push:
-    branches: [ main ]
+    branches: [ main, new-features ]   # new-features: groessere Aenderungen erst testen, dann nach main
     tags: [ 'v*' ]
     paths-ignore:
       - '**/*.md'

@@ -135,7 +135,7 @@ void Settings::Load() {
     tileSize = std::clamp(ReadInt(L"View", L"TileSize", 160), 64, 384);
     sidebar = ReadInt(L"View", L"Sidebar", 1) != 0;
     infoPanel = ReadInt(L"View", L"InfoPanel", 0) != 0;
-    viewMode = std::clamp(ReadInt(L"View", L"ViewMode", 0), 0, 2);
+    viewMode = std::clamp(ReadInt(L"View", L"ViewMode", 0), 0, 3);
     viewerSmooth = ReadInt(L"View", L"ViewerSmooth", 0) != 0;
     theme = std::clamp(ReadInt(L"View", L"Theme", 0), 0, 2);
     language = std::clamp(ReadInt(L"View", L"Language", 0), 0, 2);
@@ -160,7 +160,7 @@ void Settings::Load() {
     sortKey = std::clamp(ReadInt(L"View", L"SortKey", 0), 0, 5);
     sortDesc = ReadInt(L"View", L"SortDesc", 0) != 0;
     // je Ansicht; aeltere Versionen kannten nur einen Wert (gilt dann fuer Vorschaubilder und Liste)
-    for (int v = 0; v < 3; ++v) {
+    for (int v = 0; v < 4; ++v) {
         std::wstring k = std::to_wstring(v);
         sidebarView[v] = ReadInt(L"View", (L"Sidebar" + k).c_str(), v < 2 ? (sidebar ? 1 : 0) : 0) != 0;
         infoView[v] = ReadInt(L"View", (L"Info" + k).c_str(), v < 2 ? (infoPanel ? 1 : 0) : 0) != 0;
@@ -240,7 +240,7 @@ void Settings::Save() const {
     WriteInt(L"View", L"Recursive", recursive ? 1 : 0);
     WriteInt(L"View", L"SortKey", sortKey);
     WriteInt(L"View", L"SortDesc", sortDesc ? 1 : 0);
-    for (int v = 0; v < 3; ++v) {
+    for (int v = 0; v < 4; ++v) {
         std::wstring k = std::to_wstring(v);
         bool sb = v == viewMode ? sidebar : sidebarView[v];
         bool in = v == viewMode ? infoPanel : infoView[v];

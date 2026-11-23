@@ -173,7 +173,7 @@ bool App::Init(HINSTANCE inst, int show) {
             if (a == L"--no-sidebar") { settings_.sidebar = false; sidebarAnim_ = 0.0f; continue; }
             if (!value(L"--view=").empty()) {
                 std::wstring v = value(L"--view=");
-                settings_.viewMode = v == L"list" ? 1 : (v == L"cloud" ? 2 : 0);
+                settings_.viewMode = v == L"list" ? 1 : (v == L"cloud" ? 2 : (v == L"timeline" ? 3 : 0));
                 settings_.sidebar = settings_.sidebarView[settings_.viewMode];
                 settings_.infoPanel = settings_.infoView[settings_.viewMode];
                 sidebarAnim_ = settings_.sidebar ? 1.0f : 0.0f;
@@ -1410,7 +1410,8 @@ bool App::NeedsMeta() const {
     return filters_.date || filters_.taken || filters_.res || filters_.orient || settings_.sortKey == 1 ||
            settings_.sortKey == 3 || settings_.sortKey == 5 || query_.taken.active() ||
            query_.width.active() || query_.height.active() || query_.megapixel.active() || query_.date.active() ||
-           query_.durationSec.active() || !query_.cams.empty() || !query_.terms.empty();
+           query_.durationSec.active() || !query_.cams.empty() || !query_.terms.empty() ||
+           settings_.viewMode == 3;   // Zeitleiste: nach Aufnahmedatum
 }
 
 void App::ComputeDateBounds() {
@@ -2449,6 +2450,7 @@ bool App::AnimateStep(float dt) {
     approach(sidebarAnim_, settings_.sidebar ? 1.0f : 0.0f);
     approach(infoAnim_, (viewer_.open ? settings_.viewerInfo : settings_.infoPanel) ? 1.0f : 0.0f);
     if (settings_.viewMode == 2 && CloudStep(dt)) more = true;
+    if (settings_.viewMode == 3 && TimelineStep(dt)) more = true;
 
     float gh = gridRc_.bottom - gridRc_.top;
     float maxScroll = std::max(0.0f, contentH_ - gh);

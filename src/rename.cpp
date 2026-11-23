@@ -96,7 +96,7 @@ void App::BeginRename(int pos) {
     // Element sichtbar machen und die Lage des Namens bestimmen (DIP, Fensterkoordinaten)
     D2D1_RECT_F nr{};
     const float fieldH = 26;
-    if (settings_.viewMode == 2) {
+    if (settings_.viewMode >= 2) {   // Wolke (bei der Karte) bzw. Zeitleiste (unten in der Mitte)
         bool found = false;
         auto ci = cloud_.index.find(e.path);
         if (ci != cloud_.index.end())
@@ -110,7 +110,8 @@ void App::BeginRename(int pos) {
                 }
         if (!found) {
             float cx = (gridRc_.left + gridRc_.right) / 2;
-            nr = D2D1::RectF(cx - 160, gridRc_.bottom - fieldH - 16, cx + 160, gridRc_.bottom - 16);
+            float b = gridRc_.bottom - (settings_.viewMode == 3 ? 76.0f : 16.0f);
+            nr = D2D1::RectF(cx - 160, b - fieldH, cx + 160, b);
         }
     } else {
         ScrollToPos(pos);

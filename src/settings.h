@@ -12,8 +12,8 @@ struct Settings {
     int viewMode = 0;       // 0 Vorschaubilder, 1 Details (Liste), 2 Bilderwolke
     // Seitenleiste links und Infobereich rechts je Ansicht (0 Vorschaubilder, 1 Liste, 2 Bilderwolke);
     // sidebar/infoPanel oben sind die Werte der aktuellen Ansicht
-    bool sidebarView[3] = {true, true, false};
-    bool infoView[3] = {false, false, false};
+    bool sidebarView[4] = {true, true, false, false};   // je Ansicht: Raster, Liste, Wolke, Zeitleiste
+    bool infoView[4] = {false, false, false, false};
     // Bildbetrachter: Leiste oben und Infobereich an der Seite
     bool viewerBar = true, viewerInfo = false;
     int theme = 0;

@@ -1380,6 +1380,10 @@ void App::PaintGrid(ID2D1DeviceContext* dc) {
         PaintCloud(dc);
         return;
     }
+    if (settings_.viewMode == 3 && !metaHold_ && !visible_.empty()) {
+        PaintTimeline(dc);
+        return;
+    }
     dc->PushAxisAlignedClip(gridRc_, D2D1_ANTIALIAS_MODE_ALIASED);
     float gh = gridRc_.bottom - gridRc_.top;
     int n = metaHold_ ? 0 : static_cast<int>(visible_.size());
@@ -1680,7 +1684,7 @@ D2D1_RECT_F App::CheckRect(int pos) const {
 }
 
 bool App::OnCheck(int pos, float x, float y) const {
-    if (!settings_.checkBoxes || settings_.viewMode == 2 || pos < 0 || pos >= static_cast<int>(visible_.size())) return false;
+    if (!settings_.checkBoxes || settings_.viewMode >= 2 || pos < 0 || pos >= static_cast<int>(visible_.size())) return false;
     D2D1_RECT_F cb = CheckRect(pos);
     float cy = y - gridRc_.top + scroll_;
     if (settings_.viewMode == 1)   // Detailansicht: die ganze Spalte in Zeilenhoehe
@@ -1906,21 +1910,47 @@ void App::PaintStatus(ID2D1DeviceContext* dc) {
 
     // rechts: i-Symbol, Zoom (Plus/Regler/Minus), Ansicht, Status
     float rx = W_ - 8;
-    auto iconButton = [&](HitType type, wchar_t glyph, float size, bool active) {
+    // eigene Symbole (Linien, 16 Einheiten): 0 Bilderwolke = drei leere Kacheln wie eine Wolke verteilt,
+    // 1 Zeitleiste = nach rechts kleiner werdende Kacheln ueber einer Linie
+    auto drawSymbol = [&](const D2D1_RECT_F& rc, int which, const D2D1_COLOR_F& c) {
+        const float u = 17.0f / 16.0f;
+        const float bx = std::round((rc.left + rc.right) / 2 - 8.5f), by = std::round((rc.top + rc.bottom) / 2 - 8.5f);
+        ID2D1SolidColorBrush* br = r_.Brush(c);
+        auto sq = [&](float x, float yy, float w, float r) {
+            dc->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(bx + x * u, by + yy * u, bx + (x + w) * u, by + (yy + w) * u), r, r),
+                                     br, 1.2f);
+        };
+        if (which == 0) {
+            sq(0.5f, 8.5f, 5.5f, 1.6f);
+            sq(5.0f, 2.0f, 7.0f, 1.9f);
+            sq(11.5f, 7.5f, 4.5f, 1.4f);
+        } else {
+            sq(0.25f, 2.75f, 6.5f, 1.7f);
+            sq(7.75f, 2.75f, 4.5f, 1.4f);
+            sq(13.25f, 2.75f, 3.0f, 1.0f);
+            dc->DrawLine(D2D1::Point2F(bx + 0.25f * u, by + 13.25f * u), D2D1::Point2F(bx + 16.25f * u, by + 13.25f * u), br, 1.2f);
+        }
+    };
+    auto iconButton = [&](HitType type, wchar_t glyph, float size, bool active, int symbol = -1) {
         D2D1_RECT_F rc = D2D1::RectF(rx - 30, y + 3, rx, H_ - 3);
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({rc, type, 0});
         if (active) FillRound(dc, rc, 4, t.press);
         else if (hoverHit_ == idx) FillRound(dc, rc, 4, t.hover);
-        wchar_t g[2] = {glyph, 0};
-        DrawText(dc, g, rc, r_.Icon(size + 1), active ? accent_ : t.text);   // deutlich: weiss (dunkel) bzw. fast schwarz (hell)
+        if (symbol >= 0) {
+            drawSymbol(rc, symbol, active ? accent_ : t.text);
+        } else {
+            wchar_t g[2] = {glyph, 0};
+            DrawText(dc, g, rc, r_.Icon(size + 1), active ? accent_ : t.text);   // deutlich: weiss (dunkel) bzw. fast schwarz (hell)
+        }
         rx = rc.left - 2;
     };
     // feste Reihenfolge von rechts: i, Listenansicht, Bilderwolke, Kachelansicht, dann (nur Kacheln) der Zoom
     iconButton(HitType::InfoToggle, 0xE946, 13, settings_.infoPanel);
     rx -= 12;
     iconButton(HitType::ViewList, 0xE8FD, 13, settings_.viewMode == 1);
-    iconButton(HitType::ViewCloud, 0xE91B, 13, settings_.viewMode == 2);
+    iconButton(HitType::ViewCloud, 0, 13, settings_.viewMode == 2, 0);
+    iconButton(HitType::ViewTimeline, 0, 13, settings_.viewMode == 3, 1);
     iconButton(HitType::SlideshowStart, 0xE768, 12, false);   // Diashow aller Bilder der Ansicht
     iconButton(HitType::ViewGrid, 0xE8A9, 13, settings_.viewMode == 0);
     rx -= 14;
@@ -2785,7 +2815,7 @@ void App::PaintShortcuts(ID2D1DeviceContext* dc) {
           {N_(L"Strg+E"), N_(L"Im Explorer zeigen")},
           {L"Alt+Enter", N_(L"Eigenschaften")}}},
         {N_(L"Ansicht"),
-         {{N_(L"Strg+1 / Strg+2 / Strg+3"), N_(L"Vorschaubilder / Liste / Bilderwolke")},
+         {{N_(L"Strg+1 / Strg+2 / Strg+3 / Strg+4"), N_(L"Vorschaubilder / Liste / Bilderwolke / Zeitleiste")},
           {N_(L"Strg+Plus / Strg+Minus"), N_(L"Vorschaubilder größer / kleiner")},
           {N_(L"Strg+Mausrad"), N_(L"Vorschaubildgröße stufenlos")},
           {N_(L"Strg+0"), N_(L"Standardgröße")},
@@ -2819,6 +2849,11 @@ void App::PaintShortcuts(ID2D1DeviceContext* dc) {
           {N_(L"Strg+C / Strg+Umschalt+C"), N_(L"Kopieren / Pfad kopieren")},
           {N_(L"Strg+E"), N_(L"Im Explorer zeigen")},
           {N_(L"Esc / Enter / Rücktaste"), N_(L"Betrachter schließen")}}},
+        {N_(L"Zeitleiste"),
+         {{N_(L"← / → / Mausrad"), N_(L"Vor und zurück")},
+          {N_(L"Bild↑ / Bild↓"), N_(L"Eine Fensterbreite")},
+          {N_(L"Pos1 / Ende"), N_(L"Neueste / älteste Bilder")},
+          {N_(L"Regler unten"), N_(L"Spulen: je weiter zur Seite, desto schneller")}}},
         {N_(L"Diashow"),
          {{L"← / →", N_(L"Vorheriges / nächstes Bild")},
           {N_(L"Leertaste"), N_(L"Anhalten / fortsetzen")},

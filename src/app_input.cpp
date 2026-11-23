@@ -45,6 +45,7 @@ void App::ToggleCheck(int pos, bool shift) {
 
 int App::GridPosAt(float x, float y) const {
     if (settings_.viewMode == 2) return -1;   // Bilderwolke: eigene Trefferbestimmung (CloudPick)
+    if (settings_.viewMode == 3) return settingsOpen_ ? -1 : TimelinePick(x, y);
     if (!Inside(gridRc_, x, y) || x > gridRc_.right - 14 || visible_.empty()) return -1;
     float cy = y - gridRc_.top + scroll_;
     if (cy < 8 || cy >= 8 + rowTop_.back()) return -1;
@@ -83,6 +84,19 @@ void App::StartAnimation() {
 }
 
 void App::ScrollToPos(int pos) {
+    if (settings_.viewMode == 3) {   // Zeitleiste: Element ins Bild holen
+        float vw = gridRc_.right - gridRc_.left;
+        for (auto& it : tl_.items)
+            if (it.pos == pos && !it.stack) {
+                if (it.x < tl_.target || it.x + it.s > tl_.target + vw) {
+                    float maxScroll = std::max(0.0f, tl_.contentW - vw);
+                    tl_.target = std::clamp(it.x - vw / 3, 0.0f, maxScroll);
+                    StartAnimation();
+                }
+                break;
+            }
+        return;
+    }
     if (pos < 0 || cols_ <= 0) return;
     Layout();
     float gh = gridRc_.bottom - gridRc_.top;
@@ -221,6 +235,7 @@ void App::OnMouseMove(float x, float y, WPARAM keys) {
     if (sheet_.open) { SheetMouseMove(x, y); return; }
     if (atlas_.open) { AtlasMouseMove(x, y); return; }
     if (compare_.open) { CompareMouseMove(x, y); return; }
+    if ((tl_.scrub || tl_.pan) && TimelineMouseMove(x, y)) return;
     if (autoScroll_) {
         autoMouseY_ = y;
         return;
@@ -482,6 +497,13 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         case HitType::ViewCloud: SetViewMode(2); break;
         case HitType::SlideshowStart: StartSlideshow(true); break;
         case HitType::InfoGeo: GeoClick(static_cast<uint32_t>(a)); break;
+        case HitType::ViewTimeline: SetViewMode(3); break;
+        case HitType::TimelineGroup: TimelineToggle(a); break;
+        case HitType::TimelineScrub:
+            tl_.scrub = true;
+            TimelineScrubAt(x);
+            StartAnimation();
+            break;
         case HitType::SortButton:
             if (!MenuJustClosed(static_cast<int>(ChipId::Sort))) ShowSortMenu(rc);
             break;
@@ -638,6 +660,10 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         CloudMouseDown(x, y);
         return;
     }
+    if (settings_.viewMode == 3 && Inside(gridRc_, x, y) && TimelineMouseDown(x, y)) {
+        InvalidateRect(hwnd_, nullptr, FALSE);
+        return;
+    }
     // Bildlaufleiste
     if (Inside(gridRc_, x, y) && x > gridRc_.right - 14 && contentH_ > gridRc_.bottom - gridRc_.top) {
         float gh = gridRc_.bottom - gridRc_.top;
@@ -726,6 +752,7 @@ void App::OnLButtonUp(float x, float y) {
     if (sheet_.open) { SheetMouseUp(); return; }
     if (atlas_.open) return;
     if (compare_.open) { CompareMouseUp(); return; }
+    if (TimelineMouseUp()) return;
     if (cloud_.down && !viewer_.open) {
         CloudMouseUp(x, y);
         InvalidateRect(hwnd_, nullptr, FALSE);
@@ -972,6 +999,10 @@ void App::OnWheel(float x, float y, int delta, WPARAM keys) {
         InvalidateRect(hwnd_, nullptr, FALSE);
         return;
     }
+    if (settings_.viewMode == 3 && Inside(gridRc_, x, y) && !visible_.empty()) {
+        TimelineWheel(delta);
+        return;
+    }
     if (settings_.viewMode == 2 && Inside(gridRc_, x, y)) {
         if (keys & MK_CONTROL) CloudSetSpread(cloud_.spread * (delta > 0 ? 1.12f : 1.0f / 1.12f));   // Abstand der Karten
         else CloudWheel(x, y, delta);
@@ -1155,6 +1186,7 @@ bool App::OnKeyDown(WPARAM vk) {
         CloudSetSpread(1.0f);   // Standardabstand
         return true;
     }
+    if (settings_.viewMode == 3 && !ctrl && !alt && !settingsOpen_ && TimelineKey(vk)) return true;
     if (settings_.viewMode == 2 && !ctrl && !alt && CloudKey(vk)) {
         InvalidateRect(hwnd_, nullptr, FALSE);
         return true;
@@ -1228,6 +1260,7 @@ bool App::OnKeyDown(WPARAM vk) {
         case '1': SetViewMode(0); break;
         case '2': SetViewMode(1); break;
         case '3': SetViewMode(2); break;
+        case '4': SetViewMode(3); break;
         case 'A':
             selected_.clear();
             for (uint32_t i : visible_) selected_.insert(i);

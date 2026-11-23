@@ -67,13 +67,18 @@ float Approach(float& v, float target, float k, float eps) {
 // Ansicht wechseln (Seitenleiste und Infobereich werden je Ansicht gemerkt)
 
 void App::SetViewMode(int mode) {
-    mode = std::clamp(mode, 0, 2);
+    mode = std::clamp(mode, 0, 3);
     int old = settings_.viewMode;
     if (mode == old) return;
     settings_.sidebarView[old] = settings_.sidebar;
     settings_.infoView[old] = settings_.infoPanel;
     settings_.sidebar = settings_.sidebarView[mode];
     settings_.infoPanel = settings_.infoView[mode];
+    if (mode == 3) {
+        tl_.version = ~0ull;
+        tl_.knob = 0;
+        tl_.scrub = tl_.pan = false;
+    }
     if (mode == 2) {
         cloud_.version = ~0ull;
         cloud_.camInit = false;
@@ -93,6 +98,7 @@ void App::SetViewMode(int mode) {
     hoverPos_ = -1;
     Layout();
     if (mode != 2 && focus_ >= 0) ScrollToPos(focus_);
+    if (mode == 3 || old == 3) Refilter();   // Zeitleiste braucht die Aufnahmedaten (NeedsMeta)
     StartAnimation();
     InvalidateRect(hwnd_, nullptr, FALSE);
 }

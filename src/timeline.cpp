@@ -10,6 +10,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
+#include <unordered_map>
 
 namespace peek {
 
@@ -26,6 +28,12 @@ constexpr float kTlSmall = 15;       // Zusatz (Jahr bzw. Monat und Jahr)
 constexpr DWRITE_FONT_WEIGHT kTlWeight = DWRITE_FONT_WEIGHT_LIGHT;
 constexpr int kTlCollapse = 400;     // ab so vielen Elementen liegt eine Gruppe als eine Kachel da
 constexpr int kTlMaxGroups = 48;     // feinste Stufe (Tag, Monat, Jahr) mit hoechstens so vielen Gruppen
+constexpr int kTlRefine = 150;       // Gruppen mit mehr Elementen: feiner aufteilen (Jahr -> Monate -> Tage)
+constexpr double kTlAnimMs = 520;    // Auf-/Zuklappen
+constexpr double kTlStaggerMs = 4;   // Versatz je Kachel beim Aufklappen (hoechstens kTlStaggerMax)
+constexpr double kTlStaggerMax = 280;
+
+float EaseOutCubic(float u) { return 1.0f - (1.0f - u) * (1.0f - u) * (1.0f - u); }
 
 struct Ymd { int y = 0, m = 0, d = 0; };
 
@@ -123,21 +131,37 @@ void App::TimelineSync() {
     IDWriteTextFormat* fBig = r_.Text(kTlBig, kTlWeight);
     IDWriteTextFormat* fSmall = r_.Text(kTlSmall, DWRITE_FONT_WEIGHT_NORMAL);
 
+    // Abschnitte: grosse Gruppen feiner aufteilen (ein volles Jahr zeigt seine Monate, ein voller Monat seine Tage)
+    struct Seg { size_t i, j; int level; };
+    std::vector<Seg> segs;
+    std::function<void(size_t, size_t, int)> split = [&](size_t a, size_t b, int lv) {
+        size_t i = a;
+        while (i < b) {
+            const int64_t k = GroupKey(ymd[i], lv);
+            size_t j = i;
+            while (j < b && GroupKey(ymd[j], lv) == k) ++j;
+            if (lv > 0 && j - i > static_cast<size_t>(kTlRefine) && ymd[i].y != 0) split(i, j, lv - 1);
+            else segs.push_back({i, j, lv});
+            i = j;
+        }
+    };
+    split(0, order.size(), level);
+
     float x = kTlPad;
-    size_t i = 0;
-    while (i < order.size()) {
-        const int64_t gk = GroupKey(ymd[i], level);
-        size_t j = i;
-        while (j < order.size() && GroupKey(ymd[j], level) == gk) ++j;
+    for (const Seg& sg : segs) {
+        const size_t i = sg.i, j = sg.j;
+        const int lvl = sg.level;
+        const int64_t gk = GroupKey(ymd[i], lvl);
         TimelineGroup g;
         g.key = gk;
+        g.level = lvl;
         g.count = static_cast<int>(j - i);
         const Ymd& d = ymd[i];
         if (d.y == 0) {
             g.big = g.full = T(L"Ohne Datum");
-        } else if (level == 2) {
+        } else if (lvl == 2) {
             g.big = g.full = std::to_wstring(d.y);
-        } else if (level == 1) {
+        } else if (lvl == 1) {
             g.big = MonthName(static_cast<unsigned>(d.m));
             g.sub = std::to_wstring(d.y);
             g.full = g.big + L" " + g.sub;
@@ -197,7 +221,6 @@ void App::TimelineSync() {
         g.x1 = x + std::max(width, g.labelW);
         x = g.x1 + kTlGroupGap;
         t.groups.push_back(std::move(g));
-        i = j;
     }
     t.contentW = t.items.empty() ? 0 : x - kTlGroupGap + kTlPad;
 
@@ -228,13 +251,19 @@ int App::TimelineFirstAt(float wx) const {
 }
 
 // Spalten neben der Bildmitte: etwas kleiner (um die Ecke oben links) und abgedunkelt; k = Groesse, fog = Abdunklung
-float App::TimelineShrink(const TimelineItem& it, float& fog) const {
+// Die ganze Spalte schrumpft um ihre Ecke oben links (Abstaende eingeschlossen), die Kacheln darin gleich stark
+float App::TimelineShrink(float x, float s, float& fog) const {
     const float vw = std::max(1.0f, gridRc_.right - gridRc_.left);
-    const float cx = it.x - tl_.scroll + it.s / 2;   // Mitte der Spalte, vom linken Rand
+    const float cx = x - tl_.scroll + s / 2;   // Mitte der Spalte, vom linken Rand
     float d = std::clamp(std::fabs(cx - vw / 2) / (vw / 2), 0.0f, 1.0f);
     float f = d * d;
-    fog = (dark_ ? 0.55f : 0.45f) * f;
-    return 1.0f - 0.14f * f;
+    fog = (dark_ ? 0.66f : 0.56f) * f;
+    return 1.0f - 0.24f * f;
+}
+
+D2D1_RECT_F App::TimelineRect(float x, float y, float s, float k) const {
+    float top = kTlTop + (y - kTlTop) * k;
+    return D2D1::RectF(x, top, x + s * k, top + s * k);
 }
 
 // Element unter dem Mauszeiger: Index in tl_.items oder -1
@@ -246,8 +275,8 @@ int App::TimelineItemAt(float x, float y) const {
         const auto& it = t.items[i];
         if (it.x > wx) break;
         float fog;
-        float s = it.s * TimelineShrink(it, fog);
-        if (wx >= it.x && wx < it.x + s && wy >= it.y && wy < it.y + s) return i;
+        D2D1_RECT_F r = TimelineRect(it.x, it.y, it.s, TimelineShrink(it.x, it.s, fog));
+        if (wx >= r.left && wx < r.right && wy >= r.top && wy < r.bottom) return i;
     }
     return -1;
 }
@@ -258,14 +287,53 @@ int App::TimelinePick(float x, float y) const {
     return i < 0 || tl_.items[i].stack ? -1 : tl_.items[i].pos;
 }
 
+// Auf- bzw. Zuklappen, animiert: beim Aufklappen fliegen die Kacheln nacheinander aus der Gruppenkachel an ihren
+// Platz (werden dabei kleiner und blenden ein), alle anderen Kacheln und Zeitangaben gleiten an ihre neue Stelle
 void App::TimelineToggle(int group) {
     auto& t = tl_;
     if (group < 0 || group >= static_cast<int>(t.groups.size())) return;
     int64_t k = t.groups[group].key;
-    if (t.expanded.count(k)) t.expanded.erase(k);
-    else t.expanded.insert(k);
+    const bool expanding = !t.expanded.count(k);
+    std::unordered_map<int, D2D1_RECT_F> old;   // Position in visible_ -> bisherige Lage (Welt)
+    std::unordered_map<int64_t, float> oldX0;
+    D2D1_RECT_F stackRc{};
+    bool haveStack = false;
+    for (const auto& it : t.items) {
+        D2D1_RECT_F r = D2D1::RectF(it.x, it.y, it.x + it.s, it.y + it.s);
+        old[it.pos] = r;
+        if (it.stack && t.groups[it.group].key == k) { stackRc = r; haveStack = true; }
+    }
+    for (const auto& g : t.groups) oldX0[g.key] = g.x0;
+    if (expanding) t.expanded.insert(k);
+    else t.expanded.erase(k);
     t.dirty = true;
     TimelineSync();
+    const size_t n = t.items.size();
+    t.from.assign(n, D2D1_RECT_F{});
+    t.delay.assign(n, 0.0f);
+    t.emerge.assign(n, 0);
+    int rank = 0;
+    for (size_t i = 0; i < n; ++i) {
+        const auto& it = t.items[i];
+        D2D1_RECT_F to = D2D1::RectF(it.x, it.y, it.x + it.s, it.y + it.s);
+        bool inGroup = t.groups[it.group].key == k;
+        if (expanding && inGroup && haveStack) {
+            t.from[i] = stackRc;
+            t.emerge[i] = 1;
+            t.delay[i] = static_cast<float>(std::min(kTlStaggerMax, rank * kTlStaggerMs));
+            ++rank;
+        } else {
+            auto f = old.find(it.pos);
+            t.from[i] = f != old.end() ? f->second : to;
+        }
+    }
+    for (auto& g : t.groups) {
+        auto f = oldX0.find(g.key);
+        g.fromX0 = f != oldX0.end() ? f->second : g.x0;
+    }
+    t.anim = true;
+    t.animT0 = NowMs();
+    StartAnimation();
     // nach dem Zuklappen den Anfang der Gruppe zeigen, falls er links aus dem Bild ist
     if (group < static_cast<int>(t.groups.size()) && t.groups[group].x0 < t.scroll) {
         t.target = std::max(0.0f, t.groups[group].x0 - kTlPad);
@@ -294,6 +362,10 @@ bool App::TimelineMouseDown(float x, float y, WPARAM keys) {
     t.pan = true;
     t.panMoved = false;
     t.panX = x;
+    t.vel = 0;   // ein Griff haelt den Zeitstrahl an
+    t.lastX = x;
+    t.lastT = NowMs();
+    t.target = t.scroll;
     t.panScroll = t.scroll;
     t.scrub = false;
     t.pressPos = TimelinePick(x, y);
@@ -311,6 +383,16 @@ bool App::TimelineMouseMove(float x, float /*y*/) {
         if (std::fabs(x - t.panX) > GetSystemMetrics(SM_CXDRAG)) t.panMoved = true;
         if (!t.panMoved) return true;
         float maxScroll = std::max(0.0f, t.contentW - (gridRc_.right - gridRc_.left));
+        // Geschwindigkeit fuer das Weiterlaufen nach dem Loslassen (geglaettet, DIP je ms)
+        double now = NowMs();
+        double dtm = now - t.lastT;
+        if (t.lastT > 0 && dtm > 0.5 && dtm < 100) {
+            float inst = static_cast<float>(-(x - t.lastX) / dtm);
+            float w = static_cast<float>(std::min(1.0, dtm / 40.0));
+            t.vel = t.vel * (1 - w) + inst * w;
+        }
+        t.lastX = x;
+        t.lastT = now;
         t.scroll = t.target = std::clamp(t.panScroll - (x - t.panX), 0.0f, maxScroll);
         InvalidateRect(hwnd_, nullptr, FALSE);
         return true;
@@ -326,6 +408,14 @@ bool App::TimelineMouseUp() {
     }
     if (t.pan) {
         t.pan = false;
+        // angeschoben: weiterlaufen lassen (nur, wenn die Maus bis zuletzt bewegt wurde)
+        if (t.panMoved && NowMs() - t.lastT < 60 && std::fabs(t.vel) > 0.15f) {
+            t.vel = std::clamp(t.vel, -12.0f, 12.0f);
+            StartAnimation();
+        } else {
+            t.vel = 0;
+        }
+        t.lastT = 0;
         if (!t.panMoved) {
             int pos = t.pressPos;
             if (pos < 0 || pos >= static_cast<int>(visible_.size())) {
@@ -356,6 +446,7 @@ bool App::TimelineMouseUp() {
 void App::TimelineWheel(int delta) {
     auto& t = tl_;
     float maxScroll = std::max(0.0f, t.contentW - (gridRc_.right - gridRc_.left));
+    t.vel = 0;
     t.target = std::clamp(t.target - delta / 120.0f * 260.0f, 0.0f, maxScroll);
     StartAnimation();
 }
@@ -364,6 +455,7 @@ bool App::TimelineKey(WPARAM vk) {
     auto& t = tl_;
     float vw = gridRc_.right - gridRc_.left;
     float maxScroll = std::max(0.0f, t.contentW - vw);
+    t.vel = 0;
     switch (vk) {
     case VK_LEFT: t.target -= vw * 0.5f; break;
     case VK_RIGHT: t.target += vw * 0.5f; break;
@@ -384,6 +476,19 @@ bool App::TimelineStep(float dt) {
     bool more = false;
     float vw = gridRc_.right - gridRc_.left;
     float maxScroll = std::max(0.0f, t.contentW - vw);
+    if (!t.pan && t.vel != 0) {
+        // Weiterlaufen nach dem Anschieben, sanft abbremsend
+        t.scroll += t.vel * dt;
+        t.vel *= std::exp(-dt / 380.0f);
+        if (t.scroll <= 0 || t.scroll >= maxScroll || std::fabs(t.vel) < 0.01f) t.vel = 0;
+        t.scroll = std::clamp(t.scroll, 0.0f, maxScroll);
+        t.target = t.scroll;
+        more = true;
+    }
+    if (t.anim) {
+        if (NowMs() - t.animT0 > kTlAnimMs + kTlStaggerMax) t.anim = false;
+        else more = true;
+    }
     t.target = std::clamp(t.target, 0.0f, maxScroll);
     if (!t.pan) {
         float d = t.target - t.scroll;
@@ -410,7 +515,9 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
         return;
     }
     const float ox = area.left - t.scroll, oy = area.top;
-    const bool moving = t.scrub || t.pan || t.scroll != t.target;
+    const bool moving = t.scrub || t.pan || t.scroll != t.target || t.anim || t.vel != 0;
+    const double now = NowMs();
+    const float uAll = t.anim ? EaseOutCubic(static_cast<float>(std::clamp((now - t.animT0) / kTlAnimMs, 0.0, 1.0))) : 1.0f;
     const D2D1_COLOR_F fogC = dark_ ? D2D1::ColorF(0.17f, 0.17f, 0.17f, 1) : D2D1::ColorF(0.975f, 0.975f, 0.975f, 1);
     const float rad = 6;
     dc->PushAxisAlignedClip(D2D1::RectF(area.left, area.top, area.right, area.bottom - kTlSlider + 6), D2D1_ANTIALIAS_MODE_ALIASED);
@@ -419,8 +526,10 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
     IDWriteTextFormat* fSmall = r_.Text(kTlSmall, DWRITE_FONT_WEIGHT_NORMAL);
     for (int gi = 0; gi < static_cast<int>(t.groups.size()); ++gi) {
         const auto& g = t.groups[gi];
-        if (g.x1 + ox < area.left || g.x0 + ox > area.right) continue;
-        float lx = std::clamp(area.left + kTlPad, g.x0 + ox, std::max(g.x0 + ox, g.x1 + ox - g.labelW));
+        const float gdx = t.anim ? (g.fromX0 - g.x0) * (1.0f - uAll) : 0.0f;   // gleitet beim Auf-/Zuklappen mit
+        const float gx0 = g.x0 + gdx, gx1 = g.x1 + gdx;
+        if (gx1 + ox < area.left || gx0 + ox > area.right) continue;
+        float lx = std::clamp(area.left + kTlPad, gx0 + ox, std::max(gx0 + ox, gx1 + ox - g.labelW));
         IDWriteTextFormat* fb = r_.Text(g.fs, kTlWeight);
         float bw = g.bigW * g.fs / kTlBig;
         float top = oy + kTlTop - g.fs * 1.02f;   // unterer Teil der Ziffern verschwindet hinter den Kacheln
@@ -466,13 +575,30 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
         dc->FillRoundedRectangle(D2D1::RoundedRect(rc, r, r), brush.Get());
     };
     const float wx0 = t.scroll, wx1 = t.scroll + vw;
-    for (int i = TimelineFirstAt(wx0); i < static_cast<int>(t.items.size()); ++i) {
+    const bool animItems = t.anim && t.from.size() == t.items.size();
+    for (int i = animItems ? 0 : TimelineFirstAt(wx0); i < static_cast<int>(t.items.size()); ++i) {
         const auto& it = t.items[i];
-        if (it.x > wx1) break;
-        if (it.x + it.s < wx0) continue;
+        float x = it.x, y = it.y, sz = it.s;
+        if (animItems) {
+            // von der alten Lage (bzw. der Gruppenkachel) zur neuen, je Kachel etwas versetzt
+            float u = EaseOutCubic(static_cast<float>(std::clamp((now - t.animT0 - t.delay[i]) / kTlAnimMs, 0.0, 1.0)));
+            const D2D1_RECT_F& f = t.from[i];
+            x = f.left + (it.x - f.left) * u;
+            y = f.top + (it.y - f.top) * u;
+            sz = (f.right - f.left) + (it.s - (f.right - f.left)) * u;
+            if (x + sz < wx0 || x > wx1) continue;
+        } else {
+            if (it.x > wx1) break;
+            if (it.x + it.s < wx0) continue;
+        }
         float fog = 0;
-        const float ss = it.s * TimelineShrink(it, fog);   // neben der Mitte kleiner (um die Ecke oben links)
-        D2D1_RECT_F rc = D2D1::RectF(ox + it.x, oy + it.y, ox + it.x + ss, oy + it.y + ss);
+        // die ganze Spalte neben der Mitte kleiner (um ihre Ecke oben links) und dunkler
+        D2D1_RECT_F rc = TimelineRect(x, y, sz, TimelineShrink(x, sz, fog));
+        rc.left += ox;
+        rc.right += ox;
+        rc.top += oy;
+        rc.bottom += oy;
+        const float ss = rc.right - rc.left;
         auto darken = [&] {
             if (fog > 0.01f) FillRound(dc, rc, rad, D2D1::ColorF(fogC.r, fogC.g, fogC.b, fog));
         };
@@ -553,7 +679,7 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
         bool in = x1 >= vx0 && x0 <= vx1;
         D2D1_RECT_F br = D2D1::RectF(x0, barBottom - h, std::max(x0 + 1, x1 - (x1 - x0 > 4 ? 1.0f : 0.0f)), barBottom);
         dc->FillRectangle(br, r_.Brush(in ? WithAlpha(accent_, 0.85f) : barC));
-        int year = static_cast<int>(t.level == 2 ? g.key : t.level == 1 ? g.key / 100 : g.key / 10000);
+        int year = static_cast<int>(g.level == 2 ? g.key : g.level == 1 ? g.key / 100 : g.key / 10000);
         if (year != lastYear && year > 0 && x0 - lastLabel > 40) {
             DrawText(dc, std::to_wstring(year), D2D1::RectF(x0, barBottom + 3, x0 + 60, area.bottom - 2), fy, text2);
             lastLabel = x0;

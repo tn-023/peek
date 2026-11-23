@@ -50,6 +50,7 @@ struct Hit {
     D2D1_RECT_F rc{};
     HitType type = HitType::None;
     int a = 0;
+    const wchar_t* tip = nullptr;   // Hinweis beim Verweilen (deutscher Schluessel, wird uebersetzt)
 };
 
 struct SidebarItem {
@@ -127,6 +128,7 @@ struct ViewerState {
     int slidePrev = -1;          // vorheriges Bild, blendet aus
     double slidePrevT0 = 0;
     double slidePausedAt = 0;
+    double slideIntroEnd = 0;    // ms: bis dahin blendet die bisherige Ansicht nach Schwarz ab
 };
 
 class App {
@@ -427,6 +429,8 @@ private:
         bool collapsed = false;
         std::vector<int> mosaic;         // zusammengefasst: Vorschau aus den ersten Bildern
         float x0 = 0, x1 = 0, fs = 0, bigW = 0, subW = 0, labelW = 0;
+        float fromX0 = 0;                // Lage vor dem Auf-/Zuklappen (Animation)
+        int level = 0;                   // 0 Tag, 1 Monat, 2 Jahr
     };
     struct TimelineState {
         std::wstring folder;
@@ -441,6 +445,14 @@ private:
         bool scrub = false, pan = false, panMoved = false;   // scrub: Ziehen in der Uebersicht unten
         int pressPos = -1;                   // gedrueckt auf diesem Element (Klick ohne Ziehen waehlt es aus)
         WPARAM pressKeys = 0;
+        float vel = 0;                       // Weiterlaufen nach dem Anschieben (DIP je ms)
+        float lastX = 0;
+        double lastT = 0;
+        bool anim = false;                   // Auf-/Zuklappen laeuft
+        double animT0 = 0;
+        std::vector<D2D1_RECT_F> from;       // je Kachel: Lage vor dem Auf-/Zuklappen (Welt)
+        std::vector<float> delay;            // ms
+        std::vector<char> emerge;            // kommt aus der Gruppenkachel
         float panX = 0, panScroll = 0, trackMid = 0, trackHalf = 1;
     } tl_;
     void TimelineSync();
@@ -449,7 +461,8 @@ private:
     void TimelineToggle(int group);
     void TimelineScrubAt(float x, bool immediate);
     bool TimelineMouseDown(float x, float y, WPARAM keys);
-    float TimelineShrink(const TimelineItem& it, float& fog) const;
+    float TimelineShrink(float x, float s, float& fog) const;
+    D2D1_RECT_F TimelineRect(float x, float y, float s, float k) const;
     int TimelineItemAt(float x, float y) const;
     bool TimelineMouseMove(float x, float y);
     bool TimelineMouseUp();
@@ -844,6 +857,8 @@ private:
     bool dark_ = true;
     bool backdrop_ = false;
     bool fullscreen_ = false;
+    bool tipShown_ = false;             // Hinweis (Tooltip) zum Treffer unter der Maus sichtbar
+    void PaintTip(ID2D1DeviceContext* dc);
     bool captionless_ = false;          // Titelleiste ausgeblendet (Betrachter im Fenster)
     D2D1_RECT_F viewerBarRc_{};         // obere Leiste des Betrachters (zum Ziehen des Fensters), leer wenn verborgen
     WINDOWPLACEMENT prevPlacement_{sizeof(WINDOWPLACEMENT)};
@@ -900,6 +915,7 @@ constexpr UINT_PTR kTimerViewerClick = 6;
 constexpr UINT_PTR kTimerMetaHold = 47;
 constexpr UINT_PTR kTimerToast = 48;
 constexpr UINT_PTR kTimerDocMenu = 49;   // Dokumentation: Filtermenue verzoegert oeffnen
+constexpr UINT_PTR kTimerTip = 51;           // Hinweis nach kurzem Verweilen zeigen
 constexpr UINT_PTR kTimerViewerStart = 50;   // Start mit einer Bilddatei: Notausgang, falls der Ordner nicht laedt
 constexpr UINT WM_APP_FILEOP = WM_APP + 20;
 constexpr UINT WM_APP_SHEET = WM_APP + 21;   // Fortschritt/Ende der PDF-Erstellung (Kontaktabzug)

@@ -372,6 +372,11 @@ void App::OnMouseMove(float x, float y, WPARAM keys) {
         if (hits_[i].type != HitType::None && Inside(hits_[i].rc, x, y)) { hh = i; break; }
     bool sb = !settingsOpen_ && Inside(gridRc_, x, y) && x > gridRc_.right - 14;
     bool hc = hp >= 0 && OnCheck(hp, x, y);
+    if (hh != hoverHit_) {   // Hinweis: neu abwarten, sobald die Maus einen anderen Treffer erreicht
+        tipShown_ = false;
+        KillTimer(hwnd_, kTimerTip);
+        if (hh >= 0 && hits_[hh].tip) SetTimer(hwnd_, kTimerTip, 600, nullptr);
+    }
     if (hp != hoverPos_ || hh != hoverHit_ || sb != hoverScrollbar_ || hc != hoverCheck_) {
         hoverPos_ = hp;
         hoverCheck_ = hc;
@@ -383,6 +388,8 @@ void App::OnMouseMove(float x, float y, WPARAM keys) {
 
 void App::OnLButtonDown(float x, float y, WPARAM keys) {
     SetFocus(hwnd_);
+    tipShown_ = false;
+    KillTimer(hwnd_, kTimerTip);
     if (sheet_.open) { SheetMouseDown(x, y); return; }
     if (atlas_.open) { AtlasMouseDown(x, y); return; }
     if (compare_.open) { CompareMouseDown(x, y); return; }

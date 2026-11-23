@@ -120,6 +120,7 @@ extern const LangPair kEnglish[] = {
     {L"Diashow angehalten – Leertaste setzt fort", L"Slideshow paused – press Space to continue"},
     {L"Diashow beenden", L"End slideshow"},
     {L"Diashow läuft weiter", L"Slideshow continues"},
+    {L"Diashow starten", L"Start slideshow"},
     {L"Die App konnte nicht gestartet werden.", L"The app could not be started."},
     {L"Die Grafikausgabe (Direct3D 11 / Direct2D) konnte nicht initialisiert werden.", L"The graphics output (Direct3D 11 / Direct2D) could not be initialized."},
     {L"Die Merkliste ist leer – Elemente per Kontextmenü oder durch Ziehen auf „Merkliste“ hinzufügen.", L"Bookmarks are empty – add items via the context menu or by dragging them onto “Bookmarks”."},

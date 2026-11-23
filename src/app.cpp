@@ -368,6 +368,8 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_MOUSELEAVE:
+        tipShown_ = false;
+        KillTimer(hwnd_, kTimerTip);
         hoverPos_ = -1;
         hoverHit_ = -1;
         hoverScrollbar_ = false;
@@ -526,6 +528,11 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         }
         case kTimerToast:
             KillTimer(hwnd_, kTimerToast);
+            InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        case kTimerTip:
+            KillTimer(hwnd_, kTimerTip);
+            tipShown_ = true;
             InvalidateRect(hwnd_, nullptr, FALSE);
             break;
         case kTimerViewerUi:
@@ -1824,7 +1831,9 @@ void App::StartSlideshow(bool fromGrid) {
     v.slide = true;
     v.slidePaused = false;
     v.slideFromGrid = fromGrid;
-    v.slideT0 = NowMs();
+    // erst langsam nach Schwarz abblenden (Ordneransicht bzw. Betrachter), dann blendet das erste Bild ein
+    v.slideIntroEnd = NowMs() + 800;
+    v.slideT0 = v.slideIntroEnd;
     v.slidePrev = -1;
     v.bar = false;   // Leiste ausblenden (die Einstellung bleibt, wie sie ist)
     v.zoom = 0;

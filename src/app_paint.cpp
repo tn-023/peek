@@ -738,7 +738,7 @@ void App::Paint() {
 
     if (compare_.open) {
         PaintCompare(dc);
-    } else if (viewer_.open) {
+    } else if (viewer_.open && !(viewer_.slide && viewer_.slideFromGrid && NowMs() < viewer_.slideIntroEnd)) {
         PaintViewer(dc);
     } else if (viewerStart_) {
         dc->Clear(D2D1::ColorF(0, 0, 0, 1));   // Start mit einer Bilddatei: dunkel, bis der Betrachter offen ist
@@ -793,7 +793,14 @@ void App::Paint() {
             DrawText(dc, up, D2D1::RectF(a.x - 10, a.y - 14, a.x + 10, a.y - 2), r_.Icon(8), t.text);
             DrawText(dc, dn, D2D1::RectF(a.x - 10, a.y + 2, a.x + 10, a.y + 14), r_.Icon(8), t.text);
         }
+        if (viewer_.open) {   // Diashow aus der Ordneransicht gestartet: die Ansicht blendet langsam nach Schwarz ab
+            float k = static_cast<float>(1.0 - std::clamp((viewer_.slideIntroEnd - NowMs()) / 800.0, 0.0, 1.0));
+            dc->FillRectangle(D2D1::RectF(0, 0, W_, H_), r_.Brush(D2D1::ColorF(0, 0, 0, k * k * (3 - 2 * k))));
+            hits_.clear();
+            InvalidateRect(hwnd_, nullptr, FALSE);
+        }
     }
+    PaintTip(dc);
     if (perfHud_) PaintPerfHud(dc, paintStart);
     const double endStart = perfHud_ ? NowMs() : 0;
     r_.EndDraw();
@@ -1877,6 +1884,26 @@ int App::ColumnMinWidth(int c) {
 // Statusleiste (ohne Rahmenlinien)
 // ---------------------------------------------------------------------------
 
+// Hinweis zum Treffer unter der Maus (nach kurzem Verweilen), ueber dem Knopf, im Fenster gehalten
+void App::PaintTip(ID2D1DeviceContext* dc) {
+    if (!tipShown_ || hoverHit_ < 0 || hoverHit_ >= static_cast<int>(hits_.size()) || !hits_[hoverHit_].tip) return;
+    Theme t = MakeTheme(dark_, false);
+    const Hit& h = hits_[hoverHit_];
+    std::wstring s = T(h.tip);
+    IDWriteTextFormat* f = r_.Text(12, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+    float w = r_.MeasureText(s, f) + 20, hgt = 28;
+    float cx = (h.rc.left + h.rc.right) / 2;
+    float left = std::clamp(cx - w / 2, 4.0f, std::max(4.0f, W_ - w - 4));
+    float top = h.rc.top - hgt - 6;
+    if (top < 4) top = h.rc.bottom + 6;
+    D2D1_RECT_F rc = D2D1::RectF(left, top, left + w, top + hgt);
+    FillRound(dc, D2D1::RectF(rc.left, rc.top + 1, rc.right, rc.bottom + 2), 5, D2D1::ColorF(0, 0, 0, 0.18f));   // Schatten
+    FillRound(dc, rc, 5, dark_ ? D2D1::ColorF(0.17f, 0.17f, 0.17f, 0.98f) : D2D1::ColorF(0.99f, 0.99f, 0.99f, 0.98f));
+    D2D1_RECT_F in = D2D1::RectF(rc.left + 0.5f, rc.top + 0.5f, rc.right - 0.5f, rc.bottom - 0.5f);
+    dc->DrawRoundedRectangle(D2D1::RoundedRect(in, 4.5f, 4.5f), r_.Brush(t.stroke), 1.0f);
+    DrawText(dc, s, rc, f, t.text);
+}
+
 void App::PaintStatus(ID2D1DeviceContext* dc) {
     Theme t = MakeTheme(dark_, backdrop_);
     float y = H_ - statusH_;
@@ -1885,6 +1912,15 @@ void App::PaintStatus(ID2D1DeviceContext* dc) {
     IDWriteTextFormat* f = r_.Text(12);
     IDWriteTextFormat* fb = r_.Text(12, DWRITE_FONT_WEIGHT_SEMI_BOLD);
     float x = 16;
+    {   // ganz links in der Ecke: Diashow aller Bilder der Ansicht
+        D2D1_RECT_F rc = D2D1::RectF(4, y + 3, 36, H_ - 3);
+        int idx = static_cast<int>(hits_.size());
+        hits_.push_back({rc, HitType::SlideshowStart, 0, N_(L"Diashow starten")});
+        if (hoverHit_ == idx) FillRound(dc, rc, 4, t.hover);
+        wchar_t g[2] = {0xE768, 0};
+        DrawText(dc, g, rc, r_.Icon(13), t.text);
+        x = 46;
+    }
     auto segment = [&](const std::wstring& s, IDWriteTextFormat* fmt, const D2D1_COLOR_F& c) {
         if (s.empty()) return;
         float w = r_.MeasureText(s, fmt);
@@ -1912,7 +1948,7 @@ void App::PaintStatus(ID2D1DeviceContext* dc) {
     // rechts: i-Symbol, Zoom (Plus/Regler/Minus), Ansicht, Status
     float rx = W_ - 8;
     // eigene Symbole (Linien, 16 Einheiten): 0 Bilderwolke = drei leere Kacheln wie eine Wolke verteilt,
-    // 1 Zeitleiste = nach rechts kleiner werdende Kacheln ueber einer Linie
+    // 1 Zeitleiste = duenner Pfeil mit kleinen Kacheln oben und unten
     auto drawSymbol = [&](const D2D1_RECT_F& rc, int which, const D2D1_COLOR_F& c) {
         const float u = 17.0f / 16.0f;
         const float bx = std::round((rc.left + rc.right) / 2 - 8.5f), by = std::round((rc.top + rc.bottom) / 2 - 8.5f);
@@ -1948,10 +1984,19 @@ void App::PaintStatus(ID2D1DeviceContext* dc) {
             if (layer) dc->PopLayer();
             sq(fx, fy, fw, fr);
         } else {
-            sq(0.25f, 2.75f, 6.5f, 1.7f);
-            sq(7.75f, 2.75f, 4.5f, 1.4f);
-            sq(13.25f, 2.75f, 3.0f, 1.0f);
-            dc->DrawLine(D2D1::Point2F(bx + 0.25f * u, by + 13.25f * u), D2D1::Point2F(bx + 16.25f * u, by + 13.25f * u), br, 1.2f);
+            // duenner Pfeil als Zeitstrahl, kleine Kacheln oben und unten an kurzen Linien
+            auto ln = [&](float x1, float y1, float x2, float y2) {
+                dc->DrawLine(D2D1::Point2F(bx + x1 * u, by + y1 * u), D2D1::Point2F(bx + x2 * u, by + y2 * u), br, 0.9f);
+            };
+            ln(0.5f, 8.0f, 15.5f, 8.0f);
+            ln(13.0f, 5.8f, 15.5f, 8.0f);
+            ln(13.0f, 10.2f, 15.5f, 8.0f);
+            sq(1.0f, 0.5f, 4.0f, 1.1f);
+            ln(3.0f, 4.5f, 3.0f, 8.0f);
+            sq(5.5f, 11.5f, 4.0f, 1.1f);
+            ln(7.5f, 8.0f, 7.5f, 11.5f);
+            sq(9.5f, 1.5f, 3.5f, 1.0f);
+            ln(11.25f, 5.0f, 11.25f, 8.0f);
         }
     };
     auto iconButton = [&](HitType type, wchar_t glyph, float size, bool active, int symbol = -1) {
@@ -1974,7 +2019,6 @@ void App::PaintStatus(ID2D1DeviceContext* dc) {
     iconButton(HitType::ViewList, 0xE8FD, 13, settings_.viewMode == 1);
     iconButton(HitType::ViewCloud, 0, 13, settings_.viewMode == 2, 0);
     iconButton(HitType::ViewTimeline, 0, 13, settings_.viewMode == 3, 1);
-    iconButton(HitType::SlideshowStart, 0xE768, 12, false);   // Diashow aller Bilder der Ansicht
     iconButton(HitType::ViewGrid, 0xE8A9, 13, settings_.viewMode == 0);
     rx -= 14;
     if (settings_.viewMode == 0) {
@@ -2210,8 +2254,9 @@ void App::PaintSlides(ID2D1DeviceContext* dc, float VW) {
     float u = static_cast<float>(std::clamp((t - v.slideT0) / kFade, 0.0, 1.0));
     float a = u * u * (3 - 2 * u);   // weich ein- und ausklingend
     dc->PushAxisAlignedClip(D2D1::RectF(0, 0, VW, H_), D2D1_ANTIALIAS_MODE_ALIASED);
+    dc->FillRectangle(D2D1::RectF(0, 0, VW, H_), r_.Brush(D2D1::ColorF(0, 0, 0, 1)));   // ueber Schwarz
     if (v.slidePrev >= 0 && u < 1) drawSlide(v.slidePrev, v.slidePrevT0, 1.0f - a * a);
-    drawSlide(v.pos, v.slideT0, v.slidePrev >= 0 ? a : 1.0f);   // erstes Bild ohne Einblenden
+    drawSlide(v.pos, v.slideT0, a);   // auch das erste Bild blendet langsam aus dem Schwarz ein
     dc->PopAxisAlignedClip();
     if (u >= 1 && v.slidePrev >= 0) v.slidePrev = -1;
 
@@ -2299,7 +2344,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
     double nowMs = NowMs();
     DWORD now = GetTickCount();
     D2D1_COLOR_F white = D2D1::ColorF(1, 1, 1, 0.95f), dim = D2D1::ColorF(1, 1, 1, 0.6f);
-    if (viewer_.slide) {
+    if (viewer_.slide && nowMs >= viewer_.slideIntroEnd) {
         PaintSlides(dc, VW);   // Diashow: eigene Darstellung (Ueberblenden, leichter Zoom)
     } else {
     // Der Zoom laeuft um einen festen Punkt (Mauszeiger): Mittelpunkt c = A - (A - c0) * s / s0.
@@ -2674,6 +2719,11 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         wchar_t gd[2] = {0xE74D, 0};
         DrawText(dc, gd, D2D1::RectF(tr.left + 14, tr.top, tr.left + 34, tr.bottom), r_.Icon(13), white);
         DrawText(dc, viewer_.toast, D2D1::RectF(tr.left + 36, tr.top, tr.right - 14, tr.bottom), ft, white);
+    }
+    if (viewer_.slide && nowMs < viewer_.slideIntroEnd) {   // Diashow startet: der Betrachter blendet nach Schwarz ab
+        float k = static_cast<float>(1.0 - std::clamp((viewer_.slideIntroEnd - nowMs) / 800.0, 0.0, 1.0));
+        dc->FillRectangle(D2D1::RectF(0, 0, W_, H_), r_.Brush(D2D1::ColorF(0, 0, 0, k * k * (3 - 2 * k))));
+        InvalidateRect(hwnd_, nullptr, FALSE);
     }
 }
 

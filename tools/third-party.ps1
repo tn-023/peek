@@ -63,7 +63,12 @@ foreach ($p in $ports) {
 
 # Rust packages of resvg
 if (-not (Test-Path $Rust)) { throw "Rust license data missing: $Rust" }
-$rust = @(Get-Content $Rust -Raw | ConvertFrom-Json)
+# read as one object (no enumeration), then take the list; also accepts {"value": [...]} from older PowerShell
+$data = Get-Content $Rust -Raw | ConvertFrom-Json -NoEnumerate
+if ($data -is [System.Array]) { $rust = $data }
+elseif ($null -ne $data.value) { $rust = @($data.value) }
+else { $rust = @($data) }
+if ($rust.Count -lt 2) { throw "Rust license data looks wrong ($($rust.Count) packages): $Rust" }
 foreach ($p in $rust) {
     Add-Component "$($p.name) $($p.version)" $p.license $p.repository @($p.files)
 }

@@ -48,6 +48,47 @@ function Add-Text([string]$body) {
     return $index[$norm]
 }
 
+# Some vcpkg ports put whole source files into their copyright file because those files carry a license
+# header (dav1d: x86inc.asm, libspng: spng.c). From such sections only the comment blocks that contain a
+# copyright or license notice are kept; the program code itself is not a license text.
+function Reduce-Copyright([string]$text) {
+    $headRe = '^(?<n>[\w.+-]+\.(c|h|cc|cpp|asm|inc|s)|(LICENSE|COPYING|NOTICE|PATENTS|AUTHORS)[\w.+-]*):\s*$'
+    $lines = $text -split "`r?`n"
+    $sections = New-Object System.Collections.Generic.List[object]
+    $name = ''
+    $buf = New-Object System.Collections.Generic.List[string]
+    foreach ($l in $lines) {
+        if ($l -match $headRe) {
+            $sections.Add(@($name, ($buf -join "`n")))
+            $name = $Matches['n']
+            $buf = New-Object System.Collections.Generic.List[string]
+        } else { $buf.Add($l) }
+    }
+    $sections.Add(@($name, ($buf -join "`n")))
+    $out = New-Object System.Text.StringBuilder
+    foreach ($sec in $sections) {
+        $n = $sec[0]; $body = $sec[1]
+        if (-not $n -and -not $body.Trim()) { continue }
+        if ($n -match '\.(c|h|cc|cpp|asm|inc|s)$') {
+            $blocks = New-Object System.Collections.Generic.List[string]
+            foreach ($m in [regex]::Matches($body, '(?s)/\*.*?\*/')) { $blocks.Add($m.Value) }
+            $run = New-Object System.Collections.Generic.List[string]   # line comments (// or ; in assembler)
+            foreach ($l in (($body -split "`n") + '')) {
+                if ($l -match '^\s*(//|;)') { $run.Add($l) }
+                elseif ($run.Count) { $blocks.Add(($run -join "`n")); $run.Clear() }
+            }
+            $keep = @($blocks | Where-Object { $_ -match '(?i)copyright|licen[cs]e|permission is|redistribution' })
+            if ($n) { [void]$out.AppendLine("${n} (license notices from the source file):") }
+            foreach ($b in $keep) { [void]$out.AppendLine($b.Trim()); [void]$out.AppendLine() }
+        } else {
+            if ($n) { [void]$out.AppendLine("${n}:") }
+            [void]$out.AppendLine($body.Trim())
+            [void]$out.AppendLine()
+        }
+    }
+    return $out.ToString().Trim()
+}
+
 $components = New-Object System.Text.StringBuilder
 function Add-Component([string]$title, [string]$license, [string]$repo, $files) {
     $script:current = $title
@@ -72,7 +113,7 @@ $skip = @('vcpkg-cmake', 'vcpkg-cmake-config', 'vcpkg-cmake-get-vars', 'vcpkg-to
 $ports = Get-ChildItem -Path $VcpkgShare -Directory |
     Where-Object { $skip -notcontains $_.Name -and (Test-Path (Join-Path $_.FullName 'copyright')) } | Sort-Object Name
 foreach ($p in $ports) {
-    $text = Get-Content (Join-Path $p.FullName 'copyright') -Raw
+    $text = Reduce-Copyright (Get-Content (Join-Path $p.FullName 'copyright') -Raw)
     Add-Component $p.Name '' '' @([pscustomobject]@{ name = 'copyright'; text = $text })
 }
 
@@ -148,12 +189,5 @@ for ($i = 0; $i -lt $texts.Count; $i++) {
         $first.Trim().Substring(0, [Math]::Min(50, $first.Trim().Length)))
 }
 Write-Host ("  components: {0:N0} chars" -f $components.Length)
-foreach ($p in $ports) {   # sections of large vcpkg copyright files (to check in the build log)
-    $text = Get-Content (Join-Path $p.FullName 'copyright') -Raw
-    if ($text.Length -lt 20000) { continue }
-    $lines = $text -split "`r?`n"
-    $heads = @(); for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^\S.{0,80}:\s*$') { $heads += "$($i):$($lines[$i].Trim())" } }
-    Write-Host ("  {0}: {1:N0} chars, {2} lines; sections: {3}" -f $p.Name, $text.Length, $lines.Count, (($heads | Select-Object -First 25) -join ' | '))
-}
 Write-Host ("THIRD-PARTY.txt written ({0:N0} characters, {1} vcpkg ports, {2} Rust packages, {3} distinct license texts)" -f
     $sb.Length, $ports.Count, $crates.Count, $texts.Count)

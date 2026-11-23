@@ -103,7 +103,8 @@ if(NOT EXISTS "${RESVG_DIR}/lib/resvg.lib")
   message(FATAL_ERROR "resvg fehlt in ${RESVG_DIR} - zuerst tools/build-resvg.ps1 ausfuehren")
 endif()
 target_include_directories(peek PRIVATE "${RESVG_DIR}/include")
-target_link_libraries(peek PRIVATE "${RESVG_DIR}/lib/resvg.lib" ntdll userenv bcrypt crypt32)
+# synchronization: WaitOnAddress/WakeByAddress* (Rust-Standardbibliothek ab 1.9x)
+target_link_libraries(peek PRIVATE "${RESVG_DIR}/lib/resvg.lib" ntdll userenv bcrypt crypt32 synchronization)
 set_source_files_properties(src/peek.rc PROPERTIES OBJECT_DEPENDS
   "${PEEK_ICON};${CMAKE_SOURCE_DIR}/assets/peek-about-dark.svg;${CMAKE_SOURCE_DIR}/assets/peek-about-light.svg")
 

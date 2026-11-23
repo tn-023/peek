@@ -79,7 +79,7 @@ function Json-Str($h, [string]$name) {
     if ($h.ContainsKey($name) -and $h[$name].ValueKind -eq $kind::String) { return $h[$name].GetString() }
     return ''
 }
-$rust = New-Object System.Collections.Generic.List[object]
+$crates = New-Object System.Collections.Generic.List[object]
 foreach ($el in $root.EnumerateArray()) {
     $h = Json-Props $el
     $files = New-Object System.Collections.Generic.List[object]
@@ -91,12 +91,12 @@ foreach ($el in $root.EnumerateArray()) {
             if ($fh.Count -gt 0) { $files.Add([pscustomobject]@{ name = (Json-Str $fh 'name'); text = (Json-Str $fh 'text') }) }
         }
     }
-    $rust.Add([pscustomobject]@{
+    $crates.Add([pscustomobject]@{
         name = (Json-Str $h 'name'); version = (Json-Str $h 'version'); license = (Json-Str $h 'license')
         repository = (Json-Str $h 'repository'); files = $files.ToArray() })
 }
-if ($rust.Count -lt 2) { throw "Rust license data looks wrong ($($rust.Count) packages): $Rust" }
-foreach ($p in $rust) {
+if ($crates.Count -lt 2) { throw "Rust license data looks wrong ($($crates.Count) packages): $Rust" }
+foreach ($p in $crates) {
     Add-Component "$($p.name) $($p.version)" $p.license $p.repository $p.files
 }
 
@@ -108,7 +108,7 @@ $sb = New-Object System.Text.StringBuilder
 [void]$sb.AppendLine("are included only once.")
 [void]$sb.AppendLine()
 [void]$sb.AppendLine("C/C++ libraries (vcpkg): " + (($ports | ForEach-Object Name) -join ', '))
-[void]$sb.AppendLine("SVG rendering: resvg and the $($rust.Count) Rust packages it uses")
+[void]$sb.AppendLine("SVG rendering: resvg and the $($crates.Count) Rust packages it uses")
 [void]$sb.AppendLine()
 [void]$sb.AppendLine(('=' * 78))
 [void]$sb.AppendLine("COMPONENTS")
@@ -127,4 +127,4 @@ for ($i = 0; $i -lt $texts.Count; $i++) {
 Set-Content -Path $Out -Value $sb.ToString() -Encoding UTF8
 Write-Host ("vcpkg ports: " + (($ports | ForEach-Object Name) -join ', '))
 Write-Host ("THIRD-PARTY.txt written ({0:N0} characters, {1} vcpkg ports, {2} Rust packages, {3} distinct license texts)" -f
-    $sb.Length, $ports.Count, $rust.Count, $texts.Count)
+    $sb.Length, $ports.Count, $crates.Count, $texts.Count)

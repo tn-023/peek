@@ -25,7 +25,7 @@ See a folder instantly, find files quickly. peek recognizes terms and patterns i
 - **No background service:** indexes only while peek is running. No service, no autostart.
 - **Find:** terms as pills, filters for type, date, size, resolution, orientation. Search with `width:>3000 date:2024-08`.
 - **More than images:** previews for SVG, TGA, videos, PDF, Photoshop, Illustrator.
-- **Tools:** compare images, crop, contact sheet as PDF, tile texture from PNG sequences.
+- **Tools:** compare images, crop, slideshow, contact sheet as PDF, tile texture from PNG sequences.
 - **English and German:** follows the Windows language, switchable in the settings.
 - **Windows 11:** Mica, light/dark, text scaling, full keyboard control.
 
@@ -114,6 +114,15 @@ The folder as a cloud in space. The sort order decides what is on top. The mouse
   <sub>Grouping splits the cloud into up to six strips with title and count</sub>
 </p>
 
+## Timeline
+
+All images and videos of a folder on a horizontal time axis, newest first (or oldest first). Grouped by day, month or year depending on how many there are; full years show their months, full months their days. Columns away from the center get smaller and darker. Drag or flick to move; the overview at the bottom shows how many images each period holds and where you are. A slideshow started here shows the date of each group as it begins.
+
+<p align="center">
+  <img src="docs/screenshots/en/zeitleiste.png" alt="Timeline view" width="800"><br>
+  <sub>Timeline grouped by month, with the overview at the bottom</sub>
+</p>
+
 ## More features
 
 <table>
@@ -152,9 +161,10 @@ Data is stored in `%LOCALAPPDATA%\peek`. With an empty file `peek.portable` next
 
 ## Features
 
-- **Views:** tiles, list, image cloud. Previews for images, SVG, videos, PDF, PSD, AI.
-- **Image viewer:** JPEG, PNG, GIF, BMP, WebP, AVIF, TIFF, ICO, SVG, TGA, HEIC/HEIF (requires Microsoft's free “HEIF Image Extensions” and the “HEVC Video Extensions” from the Store). Zoom, rotate, crop. SVG stays sharp at every zoom level.
+- **Views:** tiles, list, image cloud, timeline. Previews for images, SVG, videos, PDF, PSD, AI.
+- **Image viewer:** JPEG, PNG, GIF, BMP, WebP, AVIF, TIFF, ICO, SVG, TGA, HEIC/HEIF (requires Microsoft's free “HEIF Image Extensions” and the “HEVC Video Extensions” from the Store). Zoom, rotate, crop, slideshow with cross-fades. SVG stays sharp at every zoom level. Full screen or inside the peek window.
 - **Filters and search:** terms, source, pattern, calendar, search parameters, search history.
+- **Location:** GPS coordinates from the photos in the info panel; a click copies them or opens OpenStreetMap in the browser.
 - **Bookmarks and collections:** mark with a star, index folders while peek is running.
 - **Compare:** two images side by side with synchronized zoom, or overlaid with a divider at the mouse pointer.
 - **Contact sheet:** A4 portrait/landscape, freely chosen grid, reorder images by dragging. PDF with embedded font.
@@ -166,7 +176,7 @@ Data is stored in `%LOCALAPPDATA%\peek`. With an empty file `peek.portable` next
 
 ### Keyboard
 
-Typing searches. `Enter` opens. `Space` shows the image. `Alt+←/→/↑` navigates. `F2` renames. `Alt+Enter` shows properties. `Del` moves to the recycle bin. `Ctrl+1/2/3` switches the view. All shortcuts: **Settings → Keyboard shortcuts**.
+Typing searches. `Enter` opens. `Space` shows the image. `Alt+←/→/↑` navigates. `F2` renames. `Alt+Enter` shows properties. `Del` moves to the recycle bin. `Ctrl+1/2/3/4` switches the view. All shortcuts: **Settings → Keyboard shortcuts**.
 
 ## Building
 

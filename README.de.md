@@ -25,7 +25,7 @@ Ordner sofort sehen, Dateien schnell finden. peek erkennt Begriffe und Muster in
 - **Kein Hintergrunddienst:** indexiert nur, solange peek läuft. Kein Dienst, kein Autostart.
 - **Finden:** Begriffe als Pillen, Filter für Typ, Datum, Größe, Auflösung, Ausrichtung. Suche mit `Breite:>3000 Datum:2024-08`.
 - **Mehr als Bilder:** Vorschau auch für SVG, TGA, Videos, PDF, Photoshop, Illustrator.
-- **Werkzeuge:** Bilder vergleichen, Zuschneiden, Kontaktabzug als PDF, Kacheltextur aus PNG-Sequenzen.
+- **Werkzeuge:** Bilder vergleichen, Zuschneiden, Diashow, Kontaktabzug als PDF, Kacheltextur aus PNG-Sequenzen.
 - **Deutsch und Englisch:** folgt der Windows-Sprache, umschaltbar in den Einstellungen.
 - **Windows 11:** Mica, Hell/Dunkel, Textskalierung, volle Tastaturbedienung.
 
@@ -112,6 +112,15 @@ Der Ordner als Wolke im Raum. Die Sortierung bestimmt, was oben liegt. Mausrad f
   <sub>Gruppieren teilt die Wolke in bis zu sechs Streifen mit Titel und Anzahl (Abbildung der englischen Oberfläche)</sub>
 </p>
 
+## Zeitleiste
+
+Alle Bilder und Videos eines Ordners auf einem waagerechten Zeitstrahl, neueste zuerst (oder älteste zuerst). Gruppiert nach Tag, Monat oder Jahr, je nach Menge; volle Jahre zeigen ihre Monate, volle Monate ihre Tage. Spalten abseits der Mitte werden kleiner und dunkler. Ziehen oder anschieben bewegt den Zeitstrahl; die Übersicht unten zeigt, wie viele Bilder jeder Zeitraum hat und wo man gerade ist. Eine hier gestartete Diashow zeigt zu Beginn jeder Gruppe deren Datum.
+
+<p align="center">
+  <img src="docs/screenshots/zeitleiste.png" alt="Zeitleiste" width="800"><br>
+  <sub>Zeitleiste nach Monaten gruppiert, unten die Übersicht</sub>
+</p>
+
 ## Weitere Funktionen
 
 <table>
@@ -150,9 +159,10 @@ Daten liegen in `%LOCALAPPDATA%\peek`. Mit einer leeren Datei `peek.portable` ne
 
 ## Funktionen
 
-- **Ansichten:** Kacheln, Liste, Bilderwolke. Vorschau für Bilder, SVG, Videos, PDF, PSD, AI.
-- **Bildbetrachter:** JPEG, PNG, GIF, BMP, WebP, AVIF, TIFF, ICO, SVG, TGA, HEIC/HEIF (benötigt die kostenlosen „HEIF-Bilderweiterungen“ und die „HEVC-Videoerweiterungen“ von Microsoft aus dem Store). Zoom, Drehen, Zuschneiden. SVG bleibt in jeder Zoomstufe scharf.
+- **Ansichten:** Kacheln, Liste, Bilderwolke, Zeitleiste. Vorschau für Bilder, SVG, Videos, PDF, PSD, AI.
+- **Bildbetrachter:** JPEG, PNG, GIF, BMP, WebP, AVIF, TIFF, ICO, SVG, TGA, HEIC/HEIF (benötigt die kostenlosen „HEIF-Bilderweiterungen“ und die „HEVC-Videoerweiterungen“ von Microsoft aus dem Store). Zoom, Drehen, Zuschneiden, Diashow mit Überblendungen. SVG bleibt in jeder Zoomstufe scharf. Im Vollbild oder im peek-Fenster.
 - **Filter und Suche:** Begriffe, Quelle, Muster, Kalender, Suchparameter, Suchverlauf.
+- **Aufnahmeort:** GPS-Koordinaten der Fotos im Info-Bereich; ein Klick kopiert sie oder öffnet OpenStreetMap im Browser.
 - **Merkliste und Sammlungen:** vormerken mit Stern, Ordner indexieren, solange peek läuft.
 - **Vergleichen:** zwei Bilder nebeneinander, Zoom synchron. Oder übereinander mit Trennlinie am Mauszeiger.
 - **Kontaktabzug:** A4 hoch/quer, Raster frei wählbar, Bilder per Ziehen sortieren. PDF mit eingebetteter Schrift.
@@ -164,7 +174,7 @@ Daten liegen in `%LOCALAPPDATA%\peek`. Mit einer leeren Datei `peek.portable` ne
 
 ### Tastatur
 
-Tippen sucht. `Enter` öffnet. `Leertaste` zeigt das Bild. `Alt+←/→/↑` navigiert. `F2` benennt um. `Alt+Enter` zeigt die Eigenschaften. `Entf` löscht in den Papierkorb. `Strg+1/2/3` wechselt die Ansicht. Alle Kürzel: **Einstellungen → Tastenkombinationen**.
+Tippen sucht. `Enter` öffnet. `Leertaste` zeigt das Bild. `Alt+←/→/↑` navigiert. `F2` benennt um. `Alt+Enter` zeigt die Eigenschaften. `Entf` löscht in den Papierkorb. `Strg+1/2/3/4` wechselt die Ansicht. Alle Kürzel: **Einstellungen → Tastenkombinationen**.
 
 ## Bauen
 

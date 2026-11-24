@@ -736,6 +736,10 @@ void App::UpdateTitle() {
 
 void App::StartView() {
     ++gen_;
+    posFades_.clear();
+    lastHoverPos_ = -1;
+    enterActive_ = false;
+    RequestEnter();
     thumbs_.CancelBelow(gen_);
     meta_.SetGeneration(gen_);
     // abgebrochene Vorschau-Auftraege duerfen neu angefordert werden
@@ -1633,6 +1637,15 @@ void App::UpdateFacets() {
 
 void App::Refilter() {
     refilterPending_ = false;
+    {   // neues Suchergebnis (Suchtext oder Filter geaendert): hereingleiten
+        std::wstring sig = search_ + L'\x1F' + FiltersText();
+        if (sig != enterSig_) {
+            enterSig_ = sig;
+            RequestEnter();
+        }
+        posFades_.clear();   // Positionen koennen sich verschieben
+        lastHoverPos_ = hoverPos_;
+    }
     KillTimer(hwnd_, kTimerRefilter);
     ComputeDateBounds();
     int focusIdx = (focus_ >= 0 && focus_ < static_cast<int>(visible_.size())) ? static_cast<int>(visible_[focus_]) : -1;
@@ -2567,7 +2580,7 @@ std::wstring App::TypeName(const FileEntry& e) {
 // ---------------------------------------------------------------------------
 
 bool App::AnimateStep(float dt) {
-    bool more = false;
+    bool more = AnimFadesStep();   // Hover ausblenden, Hereingleiten
     // bildratenunabhaengige Annaeherung: gleicher Verlauf bei 60, 120 oder 144 Hz
     const float kPanel = 1.0f - std::exp(-dt / 47.0f), kScroll = 1.0f - std::exp(-dt / 44.0f);
     const float step = dt / 15.6f;   // Bezug der frueheren Geschwindigkeiten (ein Timer-Tick)

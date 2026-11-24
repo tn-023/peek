@@ -467,6 +467,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         case HitType::SettingsViewerFullscreen: ShowViewerFullscreenMenu(h->rc); break;
         case HitType::SettingsSingleClick: ShowSingleClickMenu(h->rc); break;
         case HitType::SettingsCheckBoxes: ShowCheckBoxMenu(h->rc); break;
+        case HitType::SettingsAnimations: ShowAnimationsMenu(h->rc); break;
         case HitType::SettingsGeoClick: ShowGeoClickMenu(h->rc); break;
         case HitType::SettingsViewerSmall: ShowViewerSmallMenu(h->rc); break;
         case HitType::SettingsShortcuts:
@@ -1900,6 +1901,24 @@ void App::ShowCheckBoxMenu(const D2D1_RECT_F& rc) {
     if (cmd < 100 || cmd > 101) return;
     settings_.checkBoxes = cmd == 101;
     settings_.Save();
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void App::ShowAnimationsMenu(const D2D1_RECT_F& rc) {
+    std::vector<MenuItem> items;
+    for (int i = 0; i < 2; ++i) {
+        MenuItem m;
+        m.id = 100 + i;
+        m.text = T(kCheckBoxNames[i]);   // Aus (Standard) / Ein
+        m.checked = (settings_.animations ? 1 : 0) == i;
+        items.push_back(m);
+    }
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
+    if (cmd < 100 || cmd > 101) return;
+    settings_.animations = cmd == 101;
+    settings_.Save();
+    hoverFades_.clear();
+    posFades_.clear();
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 

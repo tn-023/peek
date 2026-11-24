@@ -57,6 +57,17 @@ D2D1_COLOR_F WithAlpha(D2D1_COLOR_F c, float a) {
     return c;
 }
 
+// Farbe zwischen a (0) und b (1); fuer ausblendende Hover-Effekte
+D2D1_COLOR_F MixColor(const D2D1_COLOR_F& a, const D2D1_COLOR_F& b, float k) {
+    k = std::clamp(k, 0.0f, 1.0f);
+    return D2D1::ColorF(a.r + (b.r - a.r) * k, a.g + (b.g - a.g) * k, a.b + (b.b - a.b) * k, a.a + (b.a - a.a) * k);
+}
+
+// etwas heller (Hover auf Knoepfen in Akzentfarbe)
+D2D1_COLOR_F Brighter(const D2D1_COLOR_F& c) {
+    return D2D1::ColorF(std::min(1.0f, c.r * 1.15f + 0.05f), std::min(1.0f, c.g * 1.15f + 0.05f), std::min(1.0f, c.b * 1.15f + 0.05f), c.a);
+}
+
 std::wstring Thousands(uint64_t n) { return FormatThousands(n); }
 
 float Ease(float t) { return t * t * (3 - 2 * t); }
@@ -719,6 +730,7 @@ void App::Paint() {
     ID2D1DeviceContext* dc = r_.dc();
     Theme t = MakeTheme(dark_, backdrop_);
     ++frame_;
+    TrackHoverFades();   // vor dem Leeren: hits_ ist noch das vorige Bild
     hits_.clear();
     double paintStart = NowMs();
     // fertige Vorschaubilder hochladen: waehrend einer Animation nur wenige Millisekunden je Bild
@@ -853,7 +865,7 @@ void App::PaintTopBar(ID2D1DeviceContext* dc) {
         D2D1_RECT_F rc = D2D1::RectF(x, y, x + 36, y + h);
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({rc, enabled ? type : HitType::None, 0});
-        if (enabled && hoverHit_ == idx) FillRound(dc, rc, 5, t.hover);
+        if (float ha_ = enabled ? Hov(idx) : 0.0f; ha_ > 0) FillRound(dc, rc, 5, WithAlpha(t.hover, t.hover.a * ha_));
         wchar_t g[2] = {glyph, 0};
         DrawText(dc, g, rc, r_.Icon(14), enabled ? t.text : t.text3);
         x += 40;
@@ -922,8 +934,8 @@ void App::PaintTopBar(ID2D1DeviceContext* dc) {
             if (dropCrumb_ == static_cast<int>(i)) {
                 FillRound(dc, sr, 4, WithAlpha(accent_, 0.3f));
                 dc->DrawRoundedRectangle(D2D1::RoundedRect(sr, 4, 4), r_.Brush(accent_), 1.5f);
-            } else if (hoverHit_ == idx) {
-                FillRound(dc, sr, 4, t.hover);
+            } else if (float ha_ = Hov(idx); ha_ > 0) {
+                FillRound(dc, sr, 4, WithAlpha(t.hover, t.hover.a * ha_));
             }
             DrawText(dc, segs[i].first, D2D1::RectF(sr.left + 8, sr.top, sr.right + 40, sr.bottom), f,
                      i + 1 == segs.size() ? t.text : t.text2);
@@ -934,7 +946,7 @@ void App::PaintTopBar(ID2D1DeviceContext* dc) {
             hits_.push_back({cr, HitType::CrumbChevron, static_cast<int>(i)});
             bool open = openMenu_ == 1000 + static_cast<int>(i);
             if (open) FillRound(dc, cr, 4, t.press);
-            else if (hoverHit_ == cIdx) FillRound(dc, cr, 4, t.hover);
+            else if (float ha_ = Hov(cIdx); ha_ > 0) FillRound(dc, cr, 4, WithAlpha(t.hover, t.hover.a * ha_));
             wchar_t g[2] = {static_cast<wchar_t>(open ? 0xE70D : 0xE76C), 0};
             DrawText(dc, g, cr, r_.Icon(9), t.text2);
             cx += chevW;
@@ -945,7 +957,7 @@ void App::PaintTopBar(ID2D1DeviceContext* dc) {
     searchRc_ = sb;
     int sIdx = static_cast<int>(hits_.size());
     hits_.push_back({sb, HitType::Search, 0});
-    FillRound(dc, sb, 5, searchFocus_ ? t.layer : (hoverHit_ == sIdx ? t.chipHover : t.chip));
+    FillRound(dc, sb, 5, searchFocus_ ? t.layer : (MixColor(t.chip, t.chipHover, Hov(sIdx))));
     if (searchFocus_) {
         D2D1_RECT_F line = D2D1::RectF(sb.left + 1, sb.bottom - 2, sb.right - 1, sb.bottom);
         dc->FillRoundedRectangle(D2D1::RoundedRect(line, 1, 1), r_.Brush(accent_));
@@ -963,7 +975,7 @@ void App::PaintTopBar(ID2D1DeviceContext* dc) {
         D2D1_RECT_F cr = D2D1::RectF(sb.right - 32, sb.top + 4, sb.right - 4, sb.bottom - 4);
         int cIdx = static_cast<int>(hits_.size());
         hits_.push_back({cr, HitType::SearchClear, 0});
-        if (hoverHit_ == cIdx) FillRound(dc, cr, 4, t.hover);
+        if (float ha_ = Hov(cIdx); ha_ > 0) FillRound(dc, cr, 4, WithAlpha(t.hover, t.hover.a * ha_));
         wchar_t x2[2] = {0xE711, 0};
         DrawText(dc, x2, cr, r_.Icon(10), t.text2);
     }
@@ -1041,7 +1053,7 @@ void App::PaintChips(ID2D1DeviceContext* dc) {
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({rc, HitType::SortButton, 0});
         if (openMenu_ == static_cast<int>(ChipId::Sort)) FillRound(dc, rc, 5, t.press);
-        else if (hoverHit_ == idx) FillRound(dc, rc, 5, t.hover);
+        else if (float ha_ = Hov(idx); ha_ > 0) FillRound(dc, rc, 5, WithAlpha(t.hover, t.hover.a * ha_));
         float tx = rc.left + 12;
         wchar_t gs[2] = {0xE8CB, 0};
         DrawText(dc, gs, D2D1::RectF(tx, rc.top, tx + 18, rc.bottom), r_.Icon(13), accent_);
@@ -1063,7 +1075,7 @@ void App::PaintChips(ID2D1DeviceContext* dc) {
         D2D1_RECT_F rc = D2D1::RectF(right - w, y, right, y + h);
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({rc, saved ? HitType::DeleteSearch : HitType::SaveSearch, 0});
-        if (hoverHit_ == idx) FillRound(dc, rc, 5, t.hover);
+        if (float ha_ = Hov(idx); ha_ > 0) FillRound(dc, rc, 5, WithAlpha(t.hover, t.hover.a * ha_));
         float tx = rc.left + 12;
         wchar_t gs[2] = {static_cast<wchar_t>(saved ? 0xE74D : 0xE74E), 0};
         DrawText(dc, gs, D2D1::RectF(tx, rc.top, tx + 18, rc.bottom), r_.Icon(13), t.text2);
@@ -1117,7 +1129,7 @@ void App::PaintChips(ID2D1DeviceContext* dc) {
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({rc, HitType::MoreFilters, 0});
         if (openMenu_ == 2000) FillRound(dc, rc, 5, t.press);
-        else if (hoverHit_ == idx) FillRound(dc, rc, 5, t.hover);
+        else if (float ha_ = Hov(idx); ha_ > 0) FillRound(dc, rc, 5, WithAlpha(t.hover, t.hover.a * ha_));
         else if (anyActive) FillRound(dc, rc, 5, WithAlpha(accent_, 0.12f));   // ein verborgener Filter ist aktiv
         wchar_t gm[2] = {0xE712, 0};
         DrawText(dc, gm, rc, r_.Icon(14), anyActive ? accent_ : t.text);
@@ -1128,7 +1140,7 @@ void App::PaintChips(ID2D1DeviceContext* dc) {
         D2D1_RECT_F rc = D2D1::RectF(right - resetW, y, right, y + h);
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({rc, HitType::ResetFilters, 0});
-        if (hoverHit_ == idx) FillRound(dc, rc, h / 2, t.hover);
+        if (float ha_ = Hov(idx); ha_ > 0) FillRound(dc, rc, h / 2, WithAlpha(t.hover, t.hover.a * ha_));
         DrawText(dc, T(L"Zurücksetzen"), D2D1::RectF(rc.left + 12, rc.top, rc.right + 20, rc.bottom), fr, accent_);
         right = rc.left - 8;
     }
@@ -1153,11 +1165,11 @@ void App::PaintChips(ID2D1DeviceContext* dc) {
         D2D1_COLOR_F fg;
         if (flat) {
             if (open) FillRound(dc, rc, 5, t.press);
-            else if (hoverHit_ == idx) FillRound(dc, rc, 5, t.hover);
+            else if (float ha_ = Hov(idx); ha_ > 0) FillRound(dc, rc, 5, WithAlpha(t.hover, t.hover.a * ha_));
             else if (active) FillRound(dc, rc, 5, WithAlpha(accent_, 0.12f));
             fg = active ? accent_ : t.text;
         } else {
-            D2D1_COLOR_F bg = active ? accent_ : (hoverHit_ == idx ? t.chipHover : t.chip);
+            D2D1_COLOR_F bg = active ? accent_ : (MixColor(t.chip, t.chipHover, Hov(idx)));
             FillRound(dc, rc, h / 2, bg);
             fg = active ? t.onAccent : t.text;
         }
@@ -1245,8 +1257,7 @@ void App::PaintSearchHistory(ID2D1DeviceContext* dc) {
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({pills[i], HitType::SearchParam, static_cast<int>(i)});
         D2D1_COLOR_F bg = accent_;
-        if (hoverHit_ == idx) bg = D2D1::ColorF(std::min(1.0f, bg.r * 1.15f + 0.05f), std::min(1.0f, bg.g * 1.15f + 0.05f),
-                                                std::min(1.0f, bg.b * 1.15f + 0.05f), 1);
+        bg = MixColor(bg, Brighter(bg), Hov(idx));
         FillRound(dc, pills[i], ph / 2, bg);
         DrawText(dc, params[i].label, pills[i], r_.Text(12.5f, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER),
                  D2D1::ColorF(1, 1, 1, 1));
@@ -1258,7 +1269,7 @@ void App::PaintSearchHistory(ID2D1DeviceContext* dc) {
                      r_.Brush(D2D1::ColorF(1, 1, 1, 0.08f)), 1.0f);
         int dIdx = static_cast<int>(hits_.size());
         hits_.push_back({dr, HitType::DupSearch, 0});
-        if (hoverHit_ == dIdx) dc->FillRoundedRectangle(D2D1::RoundedRect(dr, 4, 4), r_.Brush(D2D1::ColorF(1, 1, 1, 0.08f)));
+        if (float ha_ = Hov(dIdx); ha_ > 0) dc->FillRoundedRectangle(D2D1::RoundedRect(dr, 4, 4), r_.Brush(D2D1::ColorF(1, 1, 1, 0.08f * ha_)));
         wchar_t gc[2] = {0xE8C8, 0};
         DrawText(dc, gc, D2D1::RectF(dr.left + 6, dr.top, dr.left + 28, dr.bottom), r_.Icon(12), dim);
         DrawText(dc, T(L"Duplikate suchen"), D2D1::RectF(dr.left + 34, dr.top, dr.right, dr.bottom), f, white);
@@ -1274,8 +1285,8 @@ void App::PaintSearchHistory(ID2D1DeviceContext* dc) {
         hits_.push_back({row, HitType::SearchHistItem, static_cast<int>(i)});
         int dIdx = static_cast<int>(hits_.size());
         hits_.push_back({del, HitType::SearchHistDel, static_cast<int>(i)});
-        if (hoverHit_ == idx || hoverHit_ == dIdx)
-            dc->FillRoundedRectangle(D2D1::RoundedRect(row, 4, 4), r_.Brush(D2D1::ColorF(1, 1, 1, 0.08f)));
+        if (float ha_ = std::max(Hov(idx), Hov(dIdx)); ha_ > 0)
+            dc->FillRoundedRectangle(D2D1::RoundedRect(row, 4, 4), r_.Brush(D2D1::ColorF(1, 1, 1, 0.08f * ha_)));
         wchar_t gh[2] = {0xE81C, 0};
         DrawText(dc, gh, D2D1::RectF(row.left + 6, row.top, row.left + 28, row.bottom), r_.Icon(12), dim);
         DrawText(dc, h[i], D2D1::RectF(row.left + 34, row.top, del.left - 4, row.bottom), f, white);
@@ -1291,7 +1302,7 @@ void App::PaintSearchHistory(ID2D1DeviceContext* dc) {
     D2D1_RECT_F all = D2D1::RectF(rc.left + 4, y, rc.right - 4, y + rowH);
     int aIdx = static_cast<int>(hits_.size());
     hits_.push_back({all, HitType::SearchHistClear, 0});
-    if (hoverHit_ == aIdx) dc->FillRoundedRectangle(D2D1::RoundedRect(all, 4, 4), r_.Brush(D2D1::ColorF(1, 1, 1, 0.08f)));
+    if (float ha_ = Hov(aIdx); ha_ > 0) dc->FillRoundedRectangle(D2D1::RoundedRect(all, 4, 4), r_.Brush(D2D1::ColorF(1, 1, 1, 0.08f * ha_)));
     wchar_t gd[2] = {0xE74D, 0};
     DrawText(dc, gd, D2D1::RectF(all.left + 6, all.top, all.left + 28, all.bottom), r_.Icon(12), accent_);
     DrawText(dc, T(L"Alle l\u00f6schen"), D2D1::RectF(all.left + 34, all.top, all.right, all.bottom), f, accent_);
@@ -1324,7 +1335,7 @@ void App::PaintSidebar(ID2D1DeviceContext* dc) {
         D2D1_RECT_F ar = D2D1::RectF(ox + 8, y, ox + sidebarW_ - 8, y + ih);
         int aIdx = static_cast<int>(hits_.size());
         hits_.push_back({ar, HitType::SidebarAdd, 0});
-        if (hoverHit_ == aIdx) FillRound(dc, ar, 5, t.hover);
+        if (float ha_ = Hov(aIdx); ha_ > 0) FillRound(dc, ar, 5, WithAlpha(t.hover, t.hover.a * ha_));
         wchar_t ga[2] = {0xE710, 0};
         DrawText(dc, ga, D2D1::RectF(ar.left + 10, ar.top, ar.left + 34, ar.top + 34), r_.Icon(12), t.text2);
         r_.DrawWrapped(T(L"Ordner hinzufügen"), textX, ar.top + (ih - th) / 2, textW, fw, t.text2);
@@ -1358,7 +1369,8 @@ void App::PaintSidebar(ID2D1DeviceContext* dc) {
             FillRound(dc, rc, 5, WithAlpha(accent_, 0.25f));
             dc->DrawRoundedRectangle(D2D1::RoundedRect(rc, 5, 5), r_.Brush(accent_), 1.5f);
         }
-        if (active || dragging || hoverHit_ == idx) FillRound(dc, rc, 5, (active || dragging) ? t.press : t.hover);
+        if (active || dragging) FillRound(dc, rc, 5, t.press);
+        else if (float ha_ = Hov(idx); ha_ > 0) FillRound(dc, rc, 5, WithAlpha(t.hover, t.hover.a * ha_));
         if (active) FillRound(dc, D2D1::RectF(rc.left, rc.top + 10, rc.left + 3, rc.bottom - 10), 1.5f, accent_);
         wchar_t g[2] = {it.glyph, 0};
         DrawText(dc, g, D2D1::RectF(rc.left + 10, rc.top, rc.left + 34, rc.top + 34), r_.Icon(14), t.text2);
@@ -1386,7 +1398,7 @@ void App::PaintSidebar(ID2D1DeviceContext* dc) {
     D2D1_RECT_F gr = D2D1::RectF(ox + 8, bottom - 46, ox + sidebarW_ - 8, bottom - 10);
     int gIdx = static_cast<int>(hits_.size());
     hits_.push_back({gr, HitType::SettingsButton, 0});
-    if (hoverHit_ == gIdx) FillRound(dc, gr, 5, t.hover);
+    if (float ha_ = Hov(gIdx); ha_ > 0) FillRound(dc, gr, 5, WithAlpha(t.hover, t.hover.a * ha_));
     wchar_t gg[2] = {0xE713, 0};
     DrawText(dc, gg, D2D1::RectF(gr.left + 10, gr.top, gr.left + 34, gr.bottom), r_.Icon(15), t.text2);
     DrawText(dc, T(L"Einstellungen"), D2D1::RectF(gr.left + 40, gr.top, gr.right, gr.bottom), r_.Text(13), t.text);
@@ -1419,7 +1431,7 @@ void App::PaintGrid(ID2D1DeviceContext* dc) {
             D2D1_RECT_F bb = D2D1::RectF(br.right - 16 - bw, br.top + 6, br.right - 16, br.bottom - 6);
             int idx = static_cast<int>(hits_.size());
             hits_.push_back({bb, HitType::ClearBookmarks, 0});
-            FillRound(dc, bb, 5, hoverHit_ == idx ? t.chipHover : t.chip);
+            FillRound(dc, bb, 5, MixColor(t.chip, t.chipHover, Hov(idx)));
             wchar_t gd[2] = {0xE74D, 0};
             DrawText(dc, gd, D2D1::RectF(bb.left + 10, bb.top, bb.left + 28, bb.bottom), r_.Icon(12), t.text2);
             DrawText(dc, bl, D2D1::RectF(bb.left + 34, bb.top, bb.right, bb.bottom), bf, t.text);
@@ -1429,7 +1441,7 @@ void App::PaintGrid(ID2D1DeviceContext* dc) {
             D2D1_RECT_F kb = D2D1::RectF(bb.left - 8 - kw, bb.top, bb.left - 8, bb.bottom);
             int kIdx = static_cast<int>(hits_.size());
             hits_.push_back({kb, HitType::BookmarkSheet, 0});
-            FillRound(dc, kb, 5, hoverHit_ == kIdx ? t.chipHover : t.chip);
+            FillRound(dc, kb, 5, MixColor(t.chip, t.chipHover, Hov(kIdx)));
             wchar_t gk[2] = {0xECA5, 0};
             DrawText(dc, gk, D2D1::RectF(kb.left + 10, kb.top, kb.left + 28, kb.bottom), r_.Icon(12), t.text2);
             DrawText(dc, kl, D2D1::RectF(kb.left + 34, kb.top, kb.right, kb.bottom), bf, t.text);
@@ -1462,6 +1474,23 @@ void App::PaintGrid(ID2D1DeviceContext* dc) {
         int rows = static_cast<int>(rowTop_.size()) - 1;
         int firstRow = RowAtY(std::max(0.0f, scroll_ - 8));
         int lastRow = firstRow;
+        // Hereingleiten: sichtbare Positionen (Versatz zwischen den Elementen passt sich der Anzahl an)
+        if (enterPending_ || enterActive_) {
+            int pFirst = -1, pLast = -1;
+            for (int row = firstRow; row < rows && 8 + rowTop_[row] - scroll_ <= gh; ++row) {
+                if (rowHeader_[row] >= 0) continue;
+                if (pFirst < 0) pFirst = FirstPosOfRow(row);
+                pLast = RowEnd(row);
+            }
+            if (enterPending_ && pFirst >= 0) {
+                enterPending_ = false;
+                enterActive_ = true;
+                enterT0_ = GetTickCount();
+                enterFirst_ = pFirst;
+                enterCount_ = std::max(1, pLast - pFirst);
+                StartAnimation();
+            }
+        }
         for (int row = firstRow; row < rows; ++row) {
             if (8 + rowTop_[row] - scroll_ > gh) break;
             lastRow = row;
@@ -1489,6 +1518,22 @@ void App::PaintGrid(ID2D1DeviceContext* dc) {
                 float dy = gridRc_.top - scroll_;
                 rc.top += dy;
                 rc.bottom += dy;
+                const float ep = enterActive_ ? EnterProgress(pos) : 1.0f;
+                if (ep <= 0) continue;
+                if (ep < 1) {   // Kacheln gleiten von links, Zeilen von unten herein
+                    D2D1_MATRIX_3X2_F old;
+                    dc->GetTransform(&old);
+                    const float off = (1 - ep) * (list ? 12.0f : 16.0f);
+                    dc->SetTransform(D2D1::Matrix3x2F::Translation(list ? 0 : -off, list ? off : 0) * old);
+                    dc->PushLayer(D2D1::LayerParameters1(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                                                         D2D1::IdentityMatrix(), ep, nullptr, D2D1_LAYER_OPTIONS1_NONE),
+                                  nullptr);
+                    if (list) PaintListRow(dc, pos, rc);
+                    else PaintTile(dc, pos, rc);
+                    dc->PopLayer();
+                    dc->SetTransform(old);
+                    continue;
+                }
                 if (list) PaintListRow(dc, pos, rc);
                 else PaintTile(dc, pos, rc);
             }
@@ -1536,8 +1581,8 @@ void App::PaintTile(ID2D1DeviceContext* dc, int pos, const D2D1_RECT_F& cell) {
     if (sel) {
         FillRound(dc, inner, 6, WithAlpha(accent_, dark_ ? 0.30f : 0.22f));
         dc->DrawRoundedRectangle(D2D1::RoundedRect(inner, 6, 6), r_.Brush(WithAlpha(accent_, 0.9f)), 1.0f);
-    } else if (hov) {
-        FillRound(dc, inner, 6, t.hover);
+    } else if (float ha = PosHov(pos); ha > 0) {
+        FillRound(dc, inner, 6, WithAlpha(t.hover, t.hover.a * ha));
     }
     if (foc && !sel) dc->DrawRoundedRectangle(D2D1::RoundedRect(inner, 6, 6), r_.Brush(t.text3), 1.0f);
     if (pos == dropPos_) {
@@ -1820,7 +1865,7 @@ void App::PaintListHeader(ID2D1DeviceContext* dc) {
         rc.right = std::min(rc.right, headerRc_.right - 14);
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({rc, HitType::ListHeader, c});
-        if (hoverHit_ == idx) FillRound(dc, rc, 4, t.hover);
+        if (float ha_ = Hov(idx); ha_ > 0) FillRound(dc, rc, 4, WithAlpha(t.hover, t.hover.a * ha_));
         bool sorted = settings_.sortKey == kColSort[c];
         float tx = rc.left + (c == 0 ? 40 : 8);
         float lw = r_.MeasureText(T(kColName[c]), f);
@@ -1849,7 +1894,7 @@ void App::PaintListRow(ID2D1DeviceContext* dc, int pos, const D2D1_RECT_F& row) 
     bool sel = selected_.count(idx) != 0;
     D2D1_RECT_F inner = D2D1::RectF(row.left, row.top + 1, row.right, row.bottom - 1);
     if (sel) FillRound(dc, inner, 4, WithAlpha(accent_, dark_ ? 0.30f : 0.22f));
-    else if (pos == hoverPos_) FillRound(dc, inner, 4, t.hover);
+    else if (float ha = PosHov(pos); ha > 0) FillRound(dc, inner, 4, WithAlpha(t.hover, t.hover.a * ha));
     if (pos == focus_ && !sel) dc->DrawRoundedRectangle(D2D1::RoundedRect(inner, 4, 4), r_.Brush(t.text3), 1.0f);
     if (pos == dropPos_) {
         FillRound(dc, inner, 4, WithAlpha(accent_, 0.25f));
@@ -1968,7 +2013,7 @@ void App::PaintStatus(ID2D1DeviceContext* dc) {
         D2D1_RECT_F rc = D2D1::RectF(4, y + 3, 36, H_ - 3);
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({rc, HitType::SlideshowStart, 0, N_(L"Diashow starten")});
-        if (hoverHit_ == idx) FillRound(dc, rc, 4, t.hover);
+        if (float ha_ = Hov(idx); ha_ > 0) FillRound(dc, rc, 4, WithAlpha(t.hover, t.hover.a * ha_));
         wchar_t g[2] = {0xE768, 0};
         DrawText(dc, g, rc, r_.Icon(13), t.text);
         x = 46;
@@ -2048,7 +2093,7 @@ void App::PaintStatus(ID2D1DeviceContext* dc) {
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({rc, type, 0});
         if (active) FillRound(dc, rc, 4, t.press);
-        else if (hoverHit_ == idx) FillRound(dc, rc, 4, t.hover);
+        else if (float ha_ = Hov(idx); ha_ > 0) FillRound(dc, rc, 4, WithAlpha(t.hover, t.hover.a * ha_));
         if (symbol >= 0) {
             drawSymbol(rc, symbol, active ? accent_ : t.text);
         } else {
@@ -2143,7 +2188,7 @@ void App::PaintInfoPanel(ID2D1DeviceContext* dc, const D2D1_RECT_F& rc, const st
         D2D1_RECT_F br = D2D1::RectF(x0, rc.bottom - 50, x0 + bw, rc.bottom - 16);
         int bi = static_cast<int>(hits_.size());
         hits_.push_back({br, HitType::InfoStripMeta, static_cast<int>(sel.front())});
-        FillRound(dc, br, 5, hoverHit_ == bi ? t.chipHover : t.chip);
+        FillRound(dc, br, 5, MixColor(t.chip, t.chipHover, Hov(bi)));
         wchar_t gd[2] = {0xE74D, 0};
         DrawText(dc, gd, D2D1::RectF(br.left + 12, br.top, br.left + 30, br.bottom), r_.Icon(12), t.text2);
         DrawText(dc, label, D2D1::RectF(br.left + 36, br.top, br.right - 8, br.bottom), bf, t.text);
@@ -2412,7 +2457,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         D2D1_RECT_F xr = D2D1::RectF(W_ - 48, 0, W_, 44);
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({xr, HitType::ViewerClose, 0});
-        if (hoverHit_ == idx) dc->FillRectangle(xr, r_.Brush(D2D1::ColorF(0.77f, 0.17f, 0.11f, 1)));
+        if (float ha_ = Hov(idx); ha_ > 0) dc->FillRectangle(xr, r_.Brush(D2D1::ColorF(0.77f, 0.17f, 0.11f, ha_)));
         wchar_t gx[2] = {0xE8BB, 0};
         DrawText(dc, gx, xr, r_.Icon(11), D2D1::ColorF(1, 1, 1, 0.95f));
         if (!viewer_.toast.empty() && GetTickCount() < viewer_.toastUntil) {
@@ -2644,8 +2689,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
             int idx = static_cast<int>(hits_.size());
             hits_.push_back({rc, type, 0});
             // Hover: dunkelgrau-transparent statt schwarz, damit es auch auf schwarzem Hintergrund sichtbar ist
-            dc->FillRectangle(rc, r_.Brush(hoverHit_ == idx ? D2D1::ColorF(0.32f, 0.32f, 0.32f, 0.72f)
-                                                            : D2D1::ColorF(0, 0, 0, 0.4f)));
+            dc->FillRectangle(rc, r_.Brush(MixColor(D2D1::ColorF(0, 0, 0, 0.4f), D2D1::ColorF(0.32f, 0.32f, 0.32f, 0.72f), Hov(idx))));
             wchar_t g[2] = {glyph, 0};
             DrawText(dc, g, rc, r_.Icon(18), white);
         };
@@ -2687,8 +2731,8 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         D2D1_RECT_F rc = D2D1::RectF(left, btnY, right, btnY + height);
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({rc, type, 0});
-        if (hoverHit_ == idx) dc->FillRectangle(rc, r_.Brush(danger ? D2D1::ColorF(0.77f, 0.17f, 0.11f, 1)
-                                                                    : D2D1::ColorF(1, 1, 1, 0.14f)));
+        if (float ha_ = Hov(idx); ha_ > 0 && !(active && ha_ < 1))
+            dc->FillRectangle(rc, r_.Brush(danger ? D2D1::ColorF(0.77f, 0.17f, 0.11f, ha_) : D2D1::ColorF(1, 1, 1, 0.14f * ha_)));
         else if (active) dc->FillRectangle(rc, r_.Brush(D2D1::ColorF(1, 1, 1, 0.1f)));
         wchar_t g[2] = {glyph, 0};
         DrawText(dc, g, rc, r_.Icon(13), D2D1::ColorF(1, 1, 1, 1));
@@ -2708,11 +2752,10 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
         hits_.push_back({cancel, HitType::CropCancel, 0});
         int si = static_cast<int>(hits_.size());
         hits_.push_back({save, HitType::CropSave, 0});
-        FillRound(dc, cancel, 5, D2D1::ColorF(1, 1, 1, hoverHit_ == ci ? 0.2f : 0.12f));
+        FillRound(dc, cancel, 5, D2D1::ColorF(1, 1, 1, 0.12f + 0.08f * Hov(ci)));
         DrawText(dc, T(L"Abbrechen"), cancel, bf, white);
         D2D1_COLOR_F sa = accent_;
-        if (hoverHit_ == si) sa = D2D1::ColorF(std::min(1.0f, sa.r * 1.15f + 0.05f), std::min(1.0f, sa.g * 1.15f + 0.05f),
-                                              std::min(1.0f, sa.b * 1.15f + 0.05f), 1);
+        sa = MixColor(sa, Brighter(sa), Hov(si));
         FillRound(dc, save, 5, sa);
         DrawText(dc, T(L"Speichern"), save, bf, D2D1::ColorF(1, 1, 1, 1));
     } else if (ba > 0.001f) {
@@ -2725,7 +2768,7 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
             D2D1_RECT_F rc = D2D1::RectF(0, by, backW, by + barH);
             int bi = static_cast<int>(hits_.size());
             hits_.push_back({rc, HitType::ViewerBack, 0});
-            if (hoverHit_ == bi) dc->FillRectangle(rc, r_.Brush(D2D1::ColorF(1, 1, 1, 0.14f)));
+            if (float ha_ = Hov(bi); ha_ > 0) dc->FillRectangle(rc, r_.Brush(D2D1::ColorF(1, 1, 1, 0.14f * ha_)));
             wchar_t gb[2] = {0xE72B, 0};
             DrawText(dc, gb, rc, r_.Icon(18), white);
             nameX = backW + 16;
@@ -2812,7 +2855,7 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
     D2D1_RECT_F back = D2D1::RectF(12, 12, 48, 48);
     int bIdx = static_cast<int>(hits_.size());
     hits_.push_back({back, HitType::SettingsBack, 0});
-    if (hoverHit_ == bIdx) FillRound(dc, back, 5, t.hover);
+    if (float ha_ = Hov(bIdx); ha_ > 0) FillRound(dc, back, 5, WithAlpha(t.hover, t.hover.a * ha_));
     wchar_t gb[2] = {0xE72B, 0};
     DrawText(dc, gb, back, r_.Icon(14), t.text);
     DrawText(dc, T(L"Einstellungen"), D2D1::RectF(60, 10, W_ - 20, 50), r_.Text(22, DWRITE_FONT_WEIGHT_SEMI_BOLD), t.text);
@@ -2850,7 +2893,7 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
         D2D1_RECT_F rc = D2D1::RectF(bx, by, bx + w, by + 32);
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({rc, type, 0});
-        FillRound(dc, rc, 5, hoverHit_ == idx ? t.chipHover : t.layer);
+        FillRound(dc, rc, 5, MixColor(t.layer, t.chipHover, Hov(idx)));
         DrawText(dc, label, rc, bf, danger ? t.danger : t.text);
         return w;
     };
@@ -2859,7 +2902,7 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
     DrawText(dc, T(L"Darstellung"), D2D1::RectF(x0, y, x1, y + 28), fh, t.text);
     y += 34;
     {
-        D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 8 + 7 * 56);
+        D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 8 + 8 * 56);
         FillRound(dc, rc, 8, t.chip);
         auto dropRow = [&](float ry, const wchar_t* label, HitType type, const std::wstring& cur) {
             DrawText(dc, label, D2D1::RectF(x0 + 20, ry, x1 - 260, ry + 56), r_.Text(13), t.text);
@@ -2868,7 +2911,7 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
             D2D1_RECT_F dd = D2D1::RectF(x1 - 20 - w, ry + 12, x1 - 20, ry + 44);
             int idx = static_cast<int>(hits_.size());
             hits_.push_back({dd, type, 0});
-            FillRound(dc, dd, 5, hoverHit_ == idx ? t.chipHover : t.layer);
+            FillRound(dc, dd, 5, MixColor(t.layer, t.chipHover, Hov(idx)));
             DrawText(dc, cur, D2D1::RectF(dd.left + 12, dd.top, dd.right - 30, dd.bottom), bf, t.text);
             wchar_t g[2] = {0xE70D, 0};
             DrawText(dc, g, D2D1::RectF(dd.right - 30, dd.top, dd.right - 8, dd.bottom), r_.Icon(11), t.text2);
@@ -2891,6 +2934,8 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
         dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 340), D2D1::Point2F(x1 - 16, rc.top + 340), r_.Brush(t.stroke), 1.0f);
         dropRow(rc.top + 340, T(L"Klick auf den Aufnahmeort"), HitType::SettingsGeoClick,
                 T(kGeoClickNames[std::clamp(settings_.geoClick, 0, 1)]));
+        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 396), D2D1::Point2F(x1 - 16, rc.top + 396), r_.Brush(t.stroke), 1.0f);
+        dropRow(rc.top + 396, T(L"Animationen"), HitType::SettingsAnimations, T(kCheckBoxNames[settings_.animations ? 1 : 0]));
         y = rc.bottom + 28;
     }
 
@@ -2901,7 +2946,7 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
         D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 56);
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({rc, HitType::SettingsShortcuts, 0});
-        FillRound(dc, rc, 8, hoverHit_ == idx ? t.chipHover : t.chip);
+        FillRound(dc, rc, 8, MixColor(t.chip, t.chipHover, Hov(idx)));
         wchar_t gk[2] = {0xE765, 0};
         DrawText(dc, gk, D2D1::RectF(x0 + 16, rc.top, x0 + 44, rc.bottom), r_.Icon(16), t.text);
         DrawText(dc, T(L"Alle Tastenkombinationen anzeigen"), D2D1::RectF(x0 + 56, rc.top, x1 - 50, rc.bottom), r_.Text(13), t.text);
@@ -3087,7 +3132,7 @@ void App::PaintShortcuts(ID2D1DeviceContext* dc) {
     D2D1_RECT_F back = D2D1::RectF(12, 12, 48, 48);
     int bIdx = static_cast<int>(hits_.size());
     hits_.push_back({back, HitType::SettingsBack, 0});
-    if (hoverHit_ == bIdx) FillRound(dc, back, 5, t.hover);
+    if (float ha_ = Hov(bIdx); ha_ > 0) FillRound(dc, back, 5, WithAlpha(t.hover, t.hover.a * ha_));
     wchar_t gb[2] = {0xE72B, 0};
     DrawText(dc, gb, back, r_.Icon(14), t.text);
     DrawText(dc, T(L"Tastenkombinationen"), D2D1::RectF(60, 10, W_ - 20, 50), r_.Text(22, DWRITE_FONT_WEIGHT_SEMI_BOLD), t.text);
@@ -3148,10 +3193,8 @@ void App::PaintSheet(ID2D1DeviceContext* dc) {
         D2D1_RECT_F rc = D2D1::RectF(right - w, 10, right, toolH - 10);
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({rc, type, 0});
-        D2D1_COLOR_F bg = primary ? accent_ : (hoverHit_ == idx ? t.chipHover : t.chip);
-        if (primary && hoverHit_ == idx)
-            bg = D2D1::ColorF(std::min(1.0f, bg.r * 1.15f + 0.05f), std::min(1.0f, bg.g * 1.15f + 0.05f),
-                              std::min(1.0f, bg.b * 1.15f + 0.05f), 1);
+        D2D1_COLOR_F bg = primary ? accent_ : (MixColor(t.chip, t.chipHover, Hov(idx)));
+        bg = MixColor(bg, Brighter(bg), (primary) ? Hov(idx) : 0.0f);
         FillRound(dc, rc, 5, bg);
         DrawText(dc, label, rc, bf, primary ? D2D1::ColorF(1, 1, 1, 1) : t.text);
         return rc.left;
@@ -3179,7 +3222,7 @@ void App::PaintSheet(ID2D1DeviceContext* dc) {
         int idx = static_cast<int>(hits_.size());
         if (enabled) hits_.push_back({rc, type, 0});
         if (active) FillRound(dc, rc, 5, WithAlpha(accent_, 0.14f));
-        else if (enabled && hoverHit_ == idx) FillRound(dc, rc, 5, t.hover);
+        else if (float ha_ = enabled ? Hov(idx) : 0.0f; ha_ > 0) FillRound(dc, rc, 5, WithAlpha(t.hover, t.hover.a * ha_));
         D2D1_COLOR_F fg = !enabled ? t.text3 : (active ? accent_ : t.text);
         float tx = rc.left + 12;
         if (glyph) {
@@ -3201,7 +3244,7 @@ void App::PaintSheet(ID2D1DeviceContext* dc) {
             D2D1_RECT_F rc = D2D1::RectF(ox, oy + 2, ox + 28, oy + oh - 2);
             int idx = static_cast<int>(hits_.size());
             hits_.push_back({rc, type, 0});
-            FillRound(dc, rc, 5, hoverHit_ == idx ? t.chipHover : t.chip);
+            FillRound(dc, rc, 5, MixColor(t.chip, t.chipHover, Hov(idx)));
             wchar_t g[2] = {glyph, 0};
             DrawText(dc, g, rc, r_.Icon(11), t.text);
             ox = rc.right;
@@ -3381,7 +3424,7 @@ void App::PaintSheet(ID2D1DeviceContext* dc) {
         b.lastUse = frame_;
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({rc, HitType::SheetStrip, static_cast<int>(i)});
-        if (hoverHit_ == idx) FillRound(dc, D2D1::RectF(rc.left - 4, rc.top - 4, rc.right + 4, rc.bottom + 4), 6, t.hover);
+        if (float ha_ = Hov(idx); ha_ > 0) FillRound(dc, D2D1::RectF(rc.left - 4, rc.top - 4, rc.right + 4, rc.bottom + 4), 6, WithAlpha(t.hover, t.hover.a * ha_));
         float opacity = it.on ? 1.0f : 0.3f;
         if (s.dragging && s.press == static_cast<int>(i)) opacity = 0.2f;
         if (b.bmp) DrawBitmapFit(dc, &b, rc, 2.0f, opacity);
@@ -3444,10 +3487,8 @@ void App::PaintAtlas(ID2D1DeviceContext* dc) {
         D2D1_RECT_F rc = D2D1::RectF(right - w, 10, right, toolH - 10);
         int idx = static_cast<int>(hits_.size());
         if (enabled) hits_.push_back({rc, type, 0});
-        D2D1_COLOR_F bg = primary ? accent_ : (hoverHit_ == idx ? t.chipHover : t.chip);
-        if (primary && enabled && hoverHit_ == idx)
-            bg = D2D1::ColorF(std::min(1.0f, bg.r * 1.15f + 0.05f), std::min(1.0f, bg.g * 1.15f + 0.05f),
-                              std::min(1.0f, bg.b * 1.15f + 0.05f), 1);
+        D2D1_COLOR_F bg = primary ? accent_ : (MixColor(t.chip, t.chipHover, Hov(idx)));
+        bg = MixColor(bg, Brighter(bg), (primary && enabled) ? Hov(idx) : 0.0f);
         if (primary && !enabled) bg = t.chip;
         FillRound(dc, rc, 5, bg);
         DrawText(dc, label, rc, bf, !enabled ? t.text3 : (primary ? D2D1::ColorF(1, 1, 1, 1) : t.text));
@@ -3479,7 +3520,7 @@ void App::PaintAtlas(ID2D1DeviceContext* dc) {
             D2D1_RECT_F rc = D2D1::RectF(ox, oy + 2, ox + 28, oy + oh - 2);
             int idx = static_cast<int>(hits_.size());
             if (on) hits_.push_back({rc, type, 0});
-            FillRound(dc, rc, 5, on && hoverHit_ == idx ? t.chipHover : t.chip);
+            FillRound(dc, rc, 5, on && MixColor(t.chip, t.chipHover, Hov(idx)));
             wchar_t g[2] = {glyph, 0};
             DrawText(dc, g, rc, r_.Icon(11), on ? t.text : t.text3);
             ox = rc.right;
@@ -3631,8 +3672,8 @@ void App::PaintDup(ID2D1DeviceContext* dc) {
         int idx = static_cast<int>(hits_.size());
         if (enabled) hits_.push_back({rc, type, 0});
         // Rot zum Loeschen: in beiden Farbschemata dasselbe kraeftige Rot (das helle Rot fuer Texte waere zu grell)
-        D2D1_COLOR_F bg = danger && enabled ? D2D1::ColorF(0.77f, 0.17f, 0.11f, 1) : (hoverHit_ == idx ? t.chipHover : t.chip);
-        if (danger && enabled && hoverHit_ == idx) bg = D2D1::ColorF(0.85f, 0.22f, 0.15f, 1);
+        D2D1_COLOR_F bg = danger && enabled ? D2D1::ColorF(0.77f, 0.17f, 0.11f, 1) : (MixColor(t.chip, t.chipHover, Hov(idx)));
+        if (danger && enabled) bg = MixColor(bg, D2D1::ColorF(0.85f, 0.22f, 0.15f, 1), Hov(idx));
         FillRound(dc, rc, 5, bg);
         D2D1_COLOR_F fg = !enabled ? t.text3 : (danger ? D2D1::ColorF(1, 1, 1, 1) : t.text);
         D2D1_RECT_F lr = rc;
@@ -3741,7 +3782,7 @@ void App::PaintDup(ID2D1DeviceContext* dc) {
                     D2D1_RECT_F tb = D2D1::RectF(xThumb, y + (rowH - bh) / 2, xThumb + bw, y + (rowH + bh) / 2);
                     int tIdx = static_cast<int>(hits_.size());
                     hits_.push_back({clip(tb), HitType::DupThumb, code});
-                    if (hoverHit_ == rIdx || hoverHit_ == tIdx) FillRound(dc, row, 4, t.hover);
+                    if (float ha_ = std::max(Hov(rIdx), Hov(tIdx)); ha_ > 0) FillRound(dc, row, 4, WithAlpha(t.hover, t.hover.a * ha_));
                     D2D1_RECT_F cb = D2D1::RectF(xCheck, std::round(y + rowH / 2 - 8), xCheck + 16, std::round(y + rowH / 2 + 8));
                     PaintCheck(dc, cb, it.checked ? 1 : 0, hoverHit_ == rIdx);
                     // Vorschaubild: das gespeicherte mit bis zu 320 px Kantenlaenge
@@ -3813,7 +3854,7 @@ void App::PaintDup(ID2D1DeviceContext* dc) {
             D2D1_RECT_F rc = D2D1::RectF(zx - 30, y0 + 3, zx, H_ - 3);
             int idx = static_cast<int>(hits_.size());
             hits_.push_back({rc, type, 0});
-            if (hoverHit_ == idx) FillRound(dc, rc, 4, t.hover);
+            if (float ha_ = Hov(idx); ha_ > 0) FillRound(dc, rc, 4, WithAlpha(t.hover, t.hover.a * ha_));
             wchar_t g[2] = {glyph, 0};
             DrawText(dc, g, rc, r_.Icon(12), t.text);
             zx = rc.left - 2;

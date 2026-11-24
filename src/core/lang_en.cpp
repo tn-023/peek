@@ -66,6 +66,7 @@ extern const LangPair kEnglish[] = {
     {L"An die Ansicht anpassen", L"Fit to view"},
     {L"Andere App auswählen …", L"Choose another app …"},
     {L"Anhalten / fortsetzen", L"Pause / continue"},
+    {L"Animationen", L"Animations"},
     {L"Ansicht", L"View"},
     {L"Ansicht verschieben", L"Move the view"},
     {L"Aufgenommen", L"Captured"},

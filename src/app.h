@@ -39,7 +39,7 @@ enum class HitType {
     ViewerClose, ViewerBack, ViewerMin, ViewerMax, ViewerPrev, ViewerNext, ViewerInfo, ViewerCrop, CropSave, CropCancel,
     ClearBookmarks, SearchHistItem, SearchHistDel, SearchHistClear, SearchParam,
     ViewCloud,
-    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen, SettingsSingleClick, SettingsCheckBoxes, SelectAll, SlideshowStart, ViewerSlideshow, InfoGeo, SettingsGeoClick, TimelineGroup, TimelineScrub, ViewTimeline,
+    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen, SettingsSingleClick, SettingsCheckBoxes, SettingsAnimations, SelectAll, SlideshowStart, ViewerSlideshow, InfoGeo, SettingsGeoClick, TimelineGroup, TimelineScrub, ViewTimeline,
     SheetCancel, SheetCreate, SheetOrient, SheetColsMinus, SheetColsPlus, SheetRowsMinus, SheetRowsPlus, SheetNames,
     SheetExts, SheetQuality, SheetPrev, SheetNext, SheetHeadline, SheetCheck, SheetCell, SheetStripCheck, SheetStrip,
     BookmarkSheet,
@@ -346,6 +346,25 @@ private:
     std::vector<std::vector<uint32_t>> dupRes_;   // Ergebnis des Threads (Indizes in dupIn_)
     uint64_t dupResGen_ = 0;
     std::vector<FileEntry> dupIn_;                // durchsuchte Bilder (Kopien, im UI-Thread)
+    // Animationen (Einstellung "Animationen", anim.cpp): Hereingleiten in Kacheln/Liste, Hover blendet aus
+    struct HoverFade { HitType type; int a; D2D1_RECT_F rc; DWORD t0; };
+    std::vector<HoverFade> hoverFades_;
+    std::vector<std::pair<int, DWORD>> posFades_;   // Kachel/Zeile (Position) und Beginn des Ausblendens
+    bool lastHovValid_ = false;
+    HitType lastHovType_{};
+    int lastHovA_ = 0;
+    D2D1_RECT_F lastHovRc_{};
+    int lastHoverPos_ = -1;
+    bool enterPending_ = false, enterActive_ = false;
+    DWORD enterT0_ = 0;
+    std::wstring enterSig_;
+    int enterFirst_ = 0, enterCount_ = 1;            // sichtbare Positionen im aktuellen Bild
+    float Hov(int idx) const;                        // 1 = unter der Maus, dazwischen: blendet aus
+    float PosHov(int pos) const;
+    void TrackHoverFades();
+    bool AnimFadesStep();
+    void RequestEnter();
+    float EnterProgress(int pos) const;              // 0 .. 1 (geglaettet), 1 = an seinem Platz
     // Metadaten entfernen (stripmeta.cpp)
     bool CanStripMetadata(const FileEntry& e) const;
     void RemoveMetadata(uint32_t index);
@@ -926,6 +945,7 @@ private:
     void ShowViewerFullscreenMenu(const D2D1_RECT_F& rc);
     void ShowSingleClickMenu(const D2D1_RECT_F& rc);
     void ShowCheckBoxMenu(const D2D1_RECT_F& rc);
+    void ShowAnimationsMenu(const D2D1_RECT_F& rc);
     void ShowGeoClickMenu(const D2D1_RECT_F& rc);
     std::wstring GeoText(const FileEntry& e);
     void GeoClick(uint32_t idx);

@@ -95,6 +95,8 @@ void App::SetViewMode(int mode) {
     }
     settings_.viewMode = mode;
     hoverPos_ = -1;
+    enterActive_ = false;
+    RequestEnter();   // Kacheln bzw. Liste gleiten herein (nur mit der Einstellung "Animationen")
     Layout();
     if (mode != 2 && focus_ >= 0) ScrollToPos(focus_);
     if (mode == 3 || old == 3) Refilter();   // Zeitleiste braucht die Aufnahmedaten (NeedsMeta)

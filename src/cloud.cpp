@@ -321,6 +321,17 @@ void App::CloudSync() {
     float vw = c.view.right - c.view.left, vh = std::max(1.0f, c.view.bottom - c.view.top);
     bool resized = c.va > 0 && std::fabs(vw / vh - c.va) > 0.04f;
     const bool regroup = gk != c.groupKey;
+    if (resized && c.version == visibleVersion_ && !regroup) {
+        // Seitenleiste auf/zu oder Fenstergroesse geaendert: die Karten nicht neu anordnen, wenn der Blick auf einer
+        // bestimmten Stelle liegt (gefahren, gezoomt oder ein Bild ausgewaehlt) - sonst flog die angesehene Karte
+        // an einen ganz anderen Platz und die Kamera hinterher. Die Kamera bleibt, die Mitte bleibt die Mitte.
+        if (c.camUser || c.sel >= 0) {
+            c.va = vw / vh;
+            resized = false;
+        } else if (inSizeMove_) {
+            resized = false;   // Uebersicht: erst nach dem Loslassen einmal neu anordnen (nicht bei jedem Schritt)
+        }
+    }
     if (c.version == visibleVersion_ && !resized && !regroup) return;
     c.version = visibleVersion_;
     c.groupKey = gk;

@@ -43,7 +43,7 @@ enum class HitType {
     SheetCancel, SheetCreate, SheetOrient, SheetColsMinus, SheetColsPlus, SheetRowsMinus, SheetRowsPlus, SheetNames,
     SheetExts, SheetQuality, SheetPrev, SheetNext, SheetHeadline, SheetCheck, SheetCell, SheetStripCheck, SheetStrip,
     BookmarkSheet,
-    DupSearch, DupCancel, DupDelete, DupCheck, DupThumb,
+    DupSearch, DupCancel, DupDelete, DupCheck, DupThumb, DupScrollbar, DupSlider, DupZoomIn, DupZoomOut,
     AtlasCancel, AtlasCreate, AtlasColsMinus, AtlasColsPlus, AtlasRowsMinus, AtlasRowsPlus, AtlasTile,
     CompareMode, CompareClose
 };
@@ -332,6 +332,9 @@ private:
         std::wstring toast;
         DWORD toastUntil = 0;
         wchar_t toastGlyph = 0xE74D;
+        bool sbDrag = false, sliderDrag = false;
+        float sbOffset = 0;
+        D2D1_RECT_F sbTrack{}, sbThumb{}, slider{};
     } dup_;
     struct DupInput { std::wstring path; uint64_t size; int64_t mtime; };
     std::thread dupThread_;
@@ -348,6 +351,13 @@ private:
     void OnDupMessage(WPARAM wp);
     void PaintDup(ID2D1DeviceContext* dc);
     float DupContentH() const;
+    size_t DupShown() const;              // angezeigte Gruppen (hoechstens 100 Duplikate)
+    float DupRowH() const;
+    float DupListTop() const { return 90; }
+    float DupListBottom() const { return H_ - 30; }
+    void DupScrollTo(float s);
+    void DupSetThumb(int edge);
+    void DupMouseUp();
     void DupMouseDown(float x, float y, bool dbl);
     void DupMouseMove(float x, float y);
     void DupWheel(int delta);

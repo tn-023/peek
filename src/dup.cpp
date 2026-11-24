@@ -236,26 +236,80 @@ void App::OnDupMessage(WPARAM wp) {
 // Eingaben
 // ---------------------------------------------------------------------------
 
+void App::DupScrollTo(float v) {
+    const float maxS = std::max(0.0f, DupContentH() - (DupListBottom() - DupListTop()));
+    dup_.scroll = std::clamp(v, 0.0f, maxS);
+    InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+// Groesse der Vorschaubilder; der Bildlauf bleibt ungefaehr an derselben Stelle der Liste
+void App::DupSetThumb(int edge) {
+    edge = std::clamp(edge, 44, 320);
+    if (edge == settings_.dupThumb) return;
+    const float oldH = DupContentH();
+    const float frac = oldH > 0 ? dup_.scroll / oldH : 0;
+    settings_.dupThumb = edge;
+    DupScrollTo(frac * DupContentH());
+}
+
 void App::DupMouseDown(float x, float y, bool dbl) {
     const Hit* h = HitAt(x, y);
     if (!h) return;
+    auto& d = dup_;
     const int g = h->a >> 16, i = h->a & 0xFFFF;
-    auto valid = [&] { return g >= 0 && g < static_cast<int>(dup_.groups.size()) && i < static_cast<int>(dup_.groups[g].size()); };
+    auto valid = [&] { return g >= 0 && g < static_cast<int>(DupShown()) && i < static_cast<int>(d.groups[g].size()); };
     switch (h->type) {
     case HitType::DupCancel: CloseDuplicates(); return;
     case HitType::DupDelete: if (!dbl) DupDelete(); break;
     case HitType::DupCheck:
-        if (valid()) dup_.groups[g][i].checked = !dup_.groups[g][i].checked;
+        if (valid()) d.groups[g][i].checked = !d.groups[g][i].checked;
         break;
-    case HitType::DupThumb:
-        if (dbl && valid()) DupCompare(g, i);
+    case HitType::DupThumb:   // Klick auf das Vorschaubild: vergleichen
+        if (valid()) DupCompare(g, i);
+        return;
+    case HitType::DupScrollbar: {
+        const float viewH = DupListBottom() - DupListTop();
+        const float maxS = std::max(0.0f, DupContentH() - viewH);
+        const float thumbH = d.sbThumb.bottom - d.sbThumb.top, trackH = d.sbTrack.bottom - d.sbTrack.top;
+        if (y < d.sbThumb.top || y >= d.sbThumb.bottom) {   // neben dem Griff: Griff mittig dorthin
+            float rel = (y - thumbH / 2 - d.sbTrack.top) / std::max(1.0f, trackH - thumbH);
+            DupScrollTo(std::clamp(rel, 0.0f, 1.0f) * maxS);
+            d.sbOffset = thumbH / 2;
+        } else {
+            d.sbOffset = y - d.sbThumb.top;
+        }
+        d.sbDrag = true;
         break;
+    }
+    case HitType::DupSlider:
+        d.sliderDrag = true;
+        DupMouseMove(x, y);
+        break;
+    case HitType::DupZoomIn: DupSetThumb(settings_.dupThumb + 24); break;
+    case HitType::DupZoomOut: DupSetThumb(settings_.dupThumb - 24); break;
     default: break;
     }
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 void App::DupMouseMove(float x, float y) {
+    auto& d = dup_;
+    if (d.sbDrag) {
+        const float viewH = DupListBottom() - DupListTop();
+        const float maxS = std::max(0.0f, DupContentH() - viewH);
+        const float thumbH = d.sbThumb.bottom - d.sbThumb.top, trackH = d.sbTrack.bottom - d.sbTrack.top;
+        float rel = (y - d.sbOffset - d.sbTrack.top) / std::max(1.0f, trackH - thumbH);
+        DupScrollTo(std::clamp(rel, 0.0f, 1.0f) * maxS);
+        return;
+    }
+    if (d.sliderDrag) {
+        float w = d.slider.right - d.slider.left - 12;
+        if (w > 0) {
+            float frac = std::clamp((x - d.slider.left - 6) / w, 0.0f, 1.0f);
+            DupSetThumb(44 + static_cast<int>(std::round(frac * 276 / 4)) * 4);
+        }
+        return;
+    }
     int hh = -1;
     for (int i = static_cast<int>(hits_.size()) - 1; i >= 0; --i)
         if (hits_[i].type != HitType::None && Inside(hits_[i].rc, x, y)) { hh = i; break; }
@@ -265,24 +319,47 @@ void App::DupMouseMove(float x, float y) {
     }
 }
 
-void App::DupWheel(int delta) {
-    const float maxS = std::max(0.0f, DupContentH() - (H_ - 90));
-    dup_.scroll = std::clamp(dup_.scroll - delta / 120.0f * 72.0f, 0.0f, maxS);
+void App::DupMouseUp() {
+    if (dup_.sliderDrag) settings_.Save();
+    dup_.sbDrag = dup_.sliderDrag = false;
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
+void App::DupWheel(int delta) {
+    if (GetKeyState(VK_CONTROL) < 0) {   // Strg+Mausrad: Vorschaubilder groesser/kleiner
+        DupSetThumb(settings_.dupThumb + (delta > 0 ? 16 : -16));
+        settings_.Save();
+        return;
+    }
+    DupScrollTo(dup_.scroll - delta / 120.0f * 72.0f);
+}
+
 bool App::DupKey(WPARAM vk) {
-    const float page = std::max(60.0f, H_ - 140);
+    const float page = std::max(60.0f, DupListBottom() - DupListTop() - 40);
+    const bool ctrl = GetKeyState(VK_CONTROL) < 0;
     switch (vk) {
     case VK_ESCAPE:
     case VK_BACK: CloseDuplicates(); return true;
     case VK_DELETE: DupDelete(); return true;
-    case VK_UP: DupWheel(60); return true;
-    case VK_DOWN: DupWheel(-60); return true;
-    case VK_PRIOR: DupWheel(static_cast<int>(page / 72.0f * 120)); return true;
-    case VK_NEXT: DupWheel(-static_cast<int>(page / 72.0f * 120)); return true;
-    case VK_HOME: dup_.scroll = 0; InvalidateRect(hwnd_, nullptr, FALSE); return true;
-    case VK_END: DupWheel(-1000000); return true;
+    case VK_UP: DupScrollTo(dup_.scroll - 40); return true;
+    case VK_DOWN: DupScrollTo(dup_.scroll + 40); return true;
+    case VK_PRIOR: DupScrollTo(dup_.scroll - page); return true;
+    case VK_NEXT: DupScrollTo(dup_.scroll + page); return true;
+    case VK_HOME: DupScrollTo(0); return true;
+    case VK_END: DupScrollTo(1e9f); return true;
+    case VK_ADD:
+    case VK_OEM_PLUS:
+    case VK_SUBTRACT:
+    case VK_OEM_MINUS:
+        if (ctrl || vk == VK_ADD || vk == VK_SUBTRACT) {   // Strg + / Strg -: Vorschaubilder zoomen
+            DupSetThumb(settings_.dupThumb + ((vk == VK_ADD || vk == VK_OEM_PLUS) ? 24 : -24));
+            settings_.Save();
+        }
+        return true;
+    case '0':
+    case VK_NUMPAD0:
+        if (ctrl) { DupSetThumb(120); settings_.Save(); }
+        return true;
     default: return vk != VK_F4;
     }
 }
@@ -291,7 +368,9 @@ void App::DupDelete() {
     auto& d = dup_;
     if (d.busy) return;
     std::vector<std::wstring> paths;
-    for (auto& g : d.groups) {
+    const size_t shown = DupShown();
+    for (size_t gi = 0; gi < shown; ++gi) {
+        auto& g = d.groups[gi];
         size_t cnt = 0;
         for (auto& it : g) cnt += it.checked ? 1 : 0;
         if (cnt == g.size()) {   // nie alle Bilder einer Gruppe: eines muss bleiben
@@ -301,12 +380,8 @@ void App::DupDelete() {
             SetTimer(hwnd_, kTimerToast, 3900, nullptr);
             // zur Gruppe blaettern
             float y = 0;
-            for (auto& g2 : d.groups) {
-                if (&g2 == &g) break;
-                y += 38 + 56.0f * g2.size();
-            }
-            d.scroll = std::clamp(y, 0.0f, std::max(0.0f, DupContentH() - (H_ - 90)));
-            InvalidateRect(hwnd_, nullptr, FALSE);
+            for (size_t k = 0; k < gi; ++k) y += 38 + DupRowH() * d.groups[k].size();
+            DupScrollTo(y);
             return;
         }
         for (auto& it : g)
@@ -337,8 +412,7 @@ void App::DupForget(const std::vector<std::wstring>& paths) {
             g[0].checked = false;   // das verbleibende beste Bild nie vorgemerkt lassen
     }
     gs.erase(std::remove_if(gs.begin(), gs.end(), [](const auto& g) { return g.size() < 2; }), gs.end());
-    dup_.scroll = std::clamp(dup_.scroll, 0.0f, std::max(0.0f, DupContentH() - (H_ - 90)));
-    InvalidateRect(hwnd_, nullptr, FALSE);
+    DupScrollTo(dup_.scroll);
 }
 
 // Vergleich: links das beste Bild der Gruppe, rechts das gewaehlte (beim besten selbst: das naechste)

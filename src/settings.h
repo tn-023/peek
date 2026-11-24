@@ -6,6 +6,7 @@ namespace peek {
 
 struct Settings {
     int tileSize = 160;
+    int dupThumb = 120;     // Duplikatsuche: Kantenlaenge der Vorschaubilder (44 .. 320)
     bool sidebar = true;
     bool infoPanel = false;
     bool viewerSmooth = false;   // Betrachter: beim Vergroessern glaetten statt Pixel vergroessern

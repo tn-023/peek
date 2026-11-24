@@ -390,6 +390,7 @@ extern const LangPair kEnglish[] = {
     {L"Vorschaubilder größer / kleiner", L"Larger / smaller thumbnails"},
     {L"Vorschaubildgröße stufenlos", L"Thumbnail size, continuous"},
     {L"WIC nicht verfügbar.", L"WIC not available."},
+    {L"Weitere {0} Duplikate werden nach dem Löschen angezeigt.", L"{0} more duplicates will be shown after deleting."},
     {L"Wie Windows (Standard)", L"Same as Windows (default)"},
     {L"Wird geladen …", L"Loading …"},
     {L"Zeilen", L"Rows"},

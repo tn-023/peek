@@ -235,7 +235,7 @@ void App::OnMouseMove(float x, float y, WPARAM keys) {
     if (sheet_.open) { SheetMouseMove(x, y); return; }
     if (atlas_.open) { AtlasMouseMove(x, y); return; }
     if (compare_.open) { CompareMouseMove(x, y); return; }
-    if (dup_.open) { DupMouseMove(x, y); return; }
+    if (dup_.open && !autoScroll_) { DupMouseMove(x, y); return; }
     if ((tl_.scrub || tl_.pan) && TimelineMouseMove(x, y)) return;
     if (autoScroll_) {
         autoMouseY_ = y;
@@ -766,7 +766,7 @@ void App::OnLButtonUp(float x, float y) {
     if (sheet_.open) { SheetMouseUp(); return; }
     if (atlas_.open) return;
     if (compare_.open) { CompareMouseUp(); return; }
-    if (dup_.open) return;
+    if (dup_.open) { DupMouseUp(); return; }
     if (TimelineMouseUp()) return;
     if (cloud_.down && !viewer_.open) {
         CloudMouseUp(x, y);

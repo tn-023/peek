@@ -334,9 +334,11 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             CropMouseDown(X(lp), Y(lp), true);
             return 0;
         }
-        if (!viewer_.open && !settingsOpen_) {
+        if (!viewer_.open && !settingsOpen_ && !compare_.open && !sheet_.open && !atlas_.open) {
             float x = X(lp), y = Y(lp);
-            if (x >= gridRc_.left && x < gridRc_.right && y >= gridRc_.top && y < gridRc_.bottom) {
+            const bool inList = dup_.open ? (y >= DupListTop() && y < DupListBottom())
+                                          : (x >= gridRc_.left && x < gridRc_.right && y >= gridRc_.top && y < gridRc_.bottom);
+            if (inList) {
                 autoScroll_ = true;
                 autoSticky_ = false;
                 autoAnchor_ = D2D1::Point2F(x, y);
@@ -345,7 +347,7 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 autoStart_ = GetTickCount();
                 tl_.vel = 0;
                 SetCapture(hwnd_);
-                SetCursor(LoadCursorW(nullptr, settings_.viewMode == 3 ? IDC_SIZEWE : IDC_SIZENS));
+                SetCursor(LoadCursorW(nullptr, settings_.viewMode == 3 && !dup_.open ? IDC_SIZEWE : IDC_SIZENS));
                 StartAnimation();
                 InvalidateRect(hwnd_, nullptr, FALSE);
             }
@@ -466,7 +468,7 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             GetCursorPos(&pt);
             ScreenToClient(hwnd_, &pt);
             if (autoScroll_) {
-                SetCursor(LoadCursorW(nullptr, settings_.viewMode == 3 ? IDC_SIZEWE : IDC_SIZENS));   // Zeitleiste: waagerecht
+                SetCursor(LoadCursorW(nullptr, settings_.viewMode == 3 && !dup_.open ? IDC_SIZEWE : IDC_SIZENS));   // Zeitleiste: waagerecht
                 return TRUE;
             }
             if (atlas_.open || compare_.open) {
@@ -2586,7 +2588,16 @@ bool App::AnimateStep(float dt) {
             more = true;
         }
     }
-    if (autoScroll_ && settings_.viewMode == 3) {
+    if (autoScroll_ && dup_.open) {   // Duplikatsuche: eigene Liste
+        float dy = autoMouseY_ - autoAnchor_.y;
+        const float dead = 12;
+        if (std::fabs(dy) > dead) {
+            float v = std::fabs(dy) - dead;
+            float speed = v * 0.06f + v * v * 0.0008f;
+            DupScrollTo(dup_.scroll + (dy > 0 ? speed : -speed) * step);
+        }
+        more = true;
+    } else if (autoScroll_ && settings_.viewMode == 3) {
         // Zeitleiste: mit der mittleren Maustaste waagerecht scrollen (wie senkrecht in Liste und Kacheln)
         float dx = autoMouseX_ - autoAnchor_.x;
         const float dead = 12;

@@ -133,6 +133,7 @@ void Settings::Load() {
         g_ini = ReadLegacy(JoinPath(dir, kLegacy));   // einmalige Uebernahme, Save() verschluesselt und loescht
     }
     tileSize = std::clamp(ReadInt(L"View", L"TileSize", 160), 64, 384);
+    dupThumb = std::clamp(ReadInt(L"View", L"DupThumb", 120), 44, 320);
     sidebar = ReadInt(L"View", L"Sidebar", 1) != 0;
     infoPanel = ReadInt(L"View", L"InfoPanel", 0) != 0;
     viewMode = std::clamp(ReadInt(L"View", L"ViewMode", 0), 0, 3);
@@ -215,6 +216,7 @@ void Settings::Save() const {
     auto WriteStr = [&](const wchar_t* sec, const wchar_t* key, const std::wstring& v) { m[sec][key] = v; };
     auto WriteInt = [&](const wchar_t* sec, const wchar_t* key, int v) { m[sec][key] = std::to_wstring(v); };
     WriteInt(L"View", L"TileSize", tileSize);
+    WriteInt(L"View", L"DupThumb", dupThumb);
     WriteInt(L"View", L"Sidebar", sidebar ? 1 : 0);
     WriteInt(L"View", L"InfoPanel", infoPanel ? 1 : 0);
     WriteInt(L"View", L"ViewMode", viewMode);

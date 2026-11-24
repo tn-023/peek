@@ -259,11 +259,26 @@ void App::TimelineSync() {
                 break;
             }
     }
-    float maxScroll = std::max(0.0f, t.contentW - (gridRc_.right - gridRc_.left));
-    t.scroll = std::clamp(t.scroll, 0.0f, maxScroll);
-    t.target = std::clamp(t.target, 0.0f, maxScroll);
+    float minScroll = TimelineScrollMin(), maxScroll = TimelineScrollMax();
+    t.scroll = std::clamp(t.scroll, minScroll, maxScroll);
+    t.target = std::clamp(t.target, minScroll, maxScroll);
     t.colX.clear();
     TimelineMapColumns();
+}
+
+// Bildlauf: am Anfang und Ende so weit, dass die erste bzw. letzte Spalte in der Mitte steht (dort ist sie am groessten)
+float App::TimelineScrollMin() const {
+    const auto& t = tl_;
+    if (t.cols.empty()) return 0;
+    const float vw = gridRc_.right - gridRc_.left;
+    return std::min(0.0f, t.cols.front().x + t.cols.front().s / 2 - vw / 2);
+}
+
+float App::TimelineScrollMax() const {
+    const auto& t = tl_;
+    if (t.cols.empty()) return 0;
+    const float vw = gridRc_.right - gridRc_.left;
+    return std::max({TimelineScrollMin(), t.contentW - vw, t.cols.back().x + t.cols.back().s / 2 - vw / 2});
 }
 
 // Spalten neben der Bildmitte schrumpfen (um ihre Ecke oben links); die Abstaende zwischen den Spalten bleiben
@@ -421,9 +436,9 @@ void App::TimelineScrubAt(float x, bool immediate) {
     auto& t = tl_;
     float w = std::max(1.0f, t.chartW);   // Breite der Uebersicht
     float vw = gridRc_.right - gridRc_.left;
-    float maxScroll = std::max(0.0f, t.contentW - vw);
+    float minScroll = TimelineScrollMin(), maxScroll = TimelineScrollMax();
     float wx = std::clamp((x - t.chartL) / w, 0.0f, 1.0f) * t.contentW;
-    t.target = std::clamp(wx - vw / 2, 0.0f, maxScroll);
+    t.target = std::clamp(wx - vw / 2, minScroll, maxScroll);
     if (immediate) t.scroll = t.target;
     StartAnimation();
 }
@@ -456,7 +471,7 @@ bool App::TimelineMouseMove(float x, float /*y*/) {
     if (t.pan) {
         if (std::fabs(x - t.panX) > GetSystemMetrics(SM_CXDRAG)) t.panMoved = true;
         if (!t.panMoved) return true;
-        float maxScroll = std::max(0.0f, t.contentW - (gridRc_.right - gridRc_.left));
+        float minScroll = TimelineScrollMin(), maxScroll = TimelineScrollMax();
         // Geschwindigkeit fuer das Weiterlaufen nach dem Loslassen (geglaettet, DIP je ms)
         double now = NowMs();
         double dtm = now - t.lastT;
@@ -467,7 +482,7 @@ bool App::TimelineMouseMove(float x, float /*y*/) {
         }
         t.lastX = x;
         t.lastT = now;
-        t.scroll = t.target = std::clamp(t.panScroll - (x - t.panX), 0.0f, maxScroll);
+        t.scroll = t.target = std::clamp(t.panScroll - (x - t.panX), minScroll, maxScroll);
         InvalidateRect(hwnd_, nullptr, FALSE);
         return true;
     }
@@ -519,27 +534,27 @@ bool App::TimelineMouseUp() {
 
 void App::TimelineWheel(int delta) {
     auto& t = tl_;
-    float maxScroll = std::max(0.0f, t.contentW - (gridRc_.right - gridRc_.left));
+    float minScroll = TimelineScrollMin(), maxScroll = TimelineScrollMax();
     t.vel = 0;
-    t.target = std::clamp(t.target - delta / 120.0f * 260.0f, 0.0f, maxScroll);
+    t.target = std::clamp(t.target - delta / 120.0f * 260.0f, minScroll, maxScroll);
     StartAnimation();
 }
 
 bool App::TimelineKey(WPARAM vk) {
     auto& t = tl_;
     float vw = gridRc_.right - gridRc_.left;
-    float maxScroll = std::max(0.0f, t.contentW - vw);
+    float minScroll = TimelineScrollMin(), maxScroll = TimelineScrollMax();
     t.vel = 0;
     switch (vk) {
     case VK_LEFT: t.target -= vw * 0.5f; break;
     case VK_RIGHT: t.target += vw * 0.5f; break;
     case VK_PRIOR: t.target -= vw * 0.9f; break;
     case VK_NEXT: t.target += vw * 0.9f; break;
-    case VK_HOME: t.target = 0; break;
+    case VK_HOME: t.target = minScroll; break;
     case VK_END: t.target = maxScroll; break;
     default: return false;
     }
-    t.target = std::clamp(t.target, 0.0f, maxScroll);
+    t.target = std::clamp(t.target, minScroll, maxScroll);
     StartAnimation();
     return true;
 }
@@ -549,13 +564,13 @@ bool App::TimelineStep(float dt) {
     auto& t = tl_;
     bool more = false;
     float vw = gridRc_.right - gridRc_.left;
-    float maxScroll = std::max(0.0f, t.contentW - vw);
+    float minScroll = TimelineScrollMin(), maxScroll = TimelineScrollMax();
     if (!t.pan && t.vel != 0) {
         // Weiterlaufen nach dem Anschieben, sanft abbremsend
         t.scroll += t.vel * dt;
         t.vel *= std::exp(-dt / 380.0f);
-        if (t.scroll <= 0 || t.scroll >= maxScroll || std::fabs(t.vel) < 0.01f) t.vel = 0;
-        t.scroll = std::clamp(t.scroll, 0.0f, maxScroll);
+        if (t.scroll <= minScroll || t.scroll >= maxScroll || std::fabs(t.vel) < 0.01f) t.vel = 0;
+        t.scroll = std::clamp(t.scroll, minScroll, maxScroll);
         t.target = t.scroll;
         more = true;
     }
@@ -563,7 +578,7 @@ bool App::TimelineStep(float dt) {
         if (NowMs() - t.animT0 > kTlAnimMs + kTlStaggerMax) t.anim = false;
         else more = true;
     }
-    t.target = std::clamp(t.target, 0.0f, maxScroll);
+    t.target = std::clamp(t.target, minScroll, maxScroll);
     if (!t.pan) {
         float d = t.target - t.scroll;
         if (std::fabs(d) < 0.5f) t.scroll = t.target;
@@ -706,7 +721,7 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
                 if (m < static_cast<int>(g.mosaic.size())) drawThumb(entries_[visible_[g.mosaic[m]]], mr, rad, 0);
                 else FillRound(dc, mr, rad, cardBg);
             }
-            FillRound(dc, rc, rad, D2D1::ColorF(0, 0, 0, hoverHit_ == idx ? 0.38f : 0.5f));
+            FillRound(dc, rc, rad, D2D1::ColorF(0, 0, 0, 0.5f - 0.12f * Hov(idx)));
             IDWriteTextFormat* fc = r_.Text(std::round(std::clamp(ss * 0.16f, 22.0f, 48.0f)), DWRITE_FONT_WEIGHT_SEMI_BOLD,
                                             DWRITE_TEXT_ALIGNMENT_CENTER);
             IDWriteTextFormat* fh = r_.Text(13, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
@@ -739,9 +754,9 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
         if (sel) {
             D2D1_RECT_F fr = D2D1::RectF(rc.left - 1.5f, rc.top - 1.5f, rc.right + 1.5f, rc.bottom + 1.5f);
             dc->DrawRoundedRectangle(D2D1::RoundedRect(fr, rad + 1.5f, rad + 1.5f), r_.Brush(accent_), 2.5f);
-        } else if (it.pos == hoverPos_) {
+        } else if (float ha = PosHov(it.pos); ha > 0) {   // unter der Maus (blendet mit Animationen schnell aus)
             D2D1_RECT_F hr = D2D1::RectF(rc.left - 1, rc.top - 1, rc.right + 1, rc.bottom + 1);
-            dc->DrawRoundedRectangle(D2D1::RoundedRect(hr, rad + 1, rad + 1), r_.Brush(D2D1::ColorF(1, 1, 1, 0.95f)), 2.0f);
+            dc->DrawRoundedRectangle(D2D1::RoundedRect(hr, rad + 1, rad + 1), r_.Brush(D2D1::ColorF(1, 1, 1, 0.95f * ha)), 2.0f);
         } else if (it.pos == focus_ && !moving) {
             D2D1_RECT_F in = D2D1::RectF(rc.left + 0.5f, rc.top + 0.5f, rc.right - 0.5f, rc.bottom - 0.5f);
             dc->DrawRoundedRectangle(D2D1::RoundedRect(in, rad, rad), r_.Brush(text2), 1.0f);
@@ -767,7 +782,7 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
     const float kx = cw / std::max(1.0f, t.contentW);
     int maxCount = 1;
     for (const auto& g : t.groups) maxCount = std::max(maxCount, g.count);
-    const float vx0 = cl + t.scroll * kx, vx1 = cl + std::min(t.contentW, t.scroll + vw) * kx;
+    const float vx0 = cl + std::max(0.0f, t.scroll) * kx, vx1 = cl + std::clamp(t.scroll + vw, 0.0f, t.contentW) * kx;
     const D2D1_COLOR_F barC = dark_ ? D2D1::ColorF(1, 1, 1, 0.26f) : D2D1::ColorF(0, 0, 0, 0.2f);
     dc->FillRectangle(D2D1::RectF(cl, barBottom, cr, barBottom + 1), r_.Brush(barC));
     IDWriteTextFormat* fy = r_.Text(11, DWRITE_FONT_WEIGHT_NORMAL);

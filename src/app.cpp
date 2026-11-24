@@ -276,7 +276,12 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         if (renameHost_) FinishRename(true);
         settings_.maximized = (wp == SIZE_MAXIMIZED);
         r_.Resize();
-        InvalidateRect(hwnd_, nullptr, FALSE);
+        if (frameSwitch_) {
+            Paint();
+            ValidateRect(hwnd_, nullptr);
+        } else {
+            InvalidateRect(hwnd_, nullptr, FALSE);
+        }
         return 0;
     case WM_PAINT: {
         PAINTSTRUCT ps;
@@ -2289,7 +2294,11 @@ void App::SetCaptionless(bool on) {
     if (captionless_ == on) return;
     captionless_ = on;
     viewerBarRc_ = {};
+    // die Client-Flaeche waechst bzw. schrumpft oben: im selben Schritt neu zeichnen (WM_SIZE), sonst zeigt Windows
+    // kurz den alten Inhalt verschoben bzw. eine leere Flaeche (Flackern)
+    frameSwitch_ = true;
     SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+    frameSwitch_ = false;
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 

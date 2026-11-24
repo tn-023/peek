@@ -350,6 +350,8 @@ private:
     struct HoverFade { HitType type; int a; D2D1_RECT_F rc; DWORD t0; };
     std::vector<HoverFade> hoverFades_;
     std::vector<std::pair<int, DWORD>> posFades_;   // Kachel/Zeile (Position) und Beginn des Ausblendens
+    std::vector<std::pair<int, DWORD>> cloudFades_; // Wolke: Karte und Beginn des Ausblendens
+    float CloudHoverFade(int card) const;
     bool lastHovValid_ = false;
     HitType lastHovType_{};
     int lastHovA_ = 0;
@@ -375,7 +377,8 @@ private:
         ComPtr<ID2D1Bitmap> bmp;            // fliegendes Bild (schliessen)
     } zoom_;
     std::unordered_map<int, D2D1_RECT_F> drawnThumbs_;   // Position -> gezeichnetes Vorschaubild (dieses Bild)
-    int viewerOpenReq_ = -1;               // Betrachter nach dem naechsten Bild oeffnen (Ansicht festhalten)
+    int viewerOpenReq_ = -1;
+    bool frameSwitch_ = false;             // Titelleiste wird gerade ein-/ausgeblendet: sofort neu zeichnen               // Betrachter nach dem naechsten Bild oeffnen (Ansicht festhalten)
     bool TryZoomOpen(int pos);
     bool ThumbRectFor(int pos, D2D1_RECT_F& rc) const;   // Vorschaubild im letzten Bild (alle vier Ansichten)
     void DrawZoomImage(ID2D1DeviceContext* dc, ID2D1Bitmap* b, const D2D1_RECT_F& from, const D2D1_RECT_F& to, float k);
@@ -593,6 +596,8 @@ private:
     void TimelineScrubAt(float x, bool immediate);
     bool TimelineMouseDown(float x, float y, WPARAM keys);
     float TimelineShrink(float x, float s, float& fog) const;
+    float TimelineScrollMin() const;
+    float TimelineScrollMax() const;
     void TimelineMapColumns();
     D2D1_RECT_F TimelineItemRect(const TimelineItem& it) const;
     int TimelineItemAt(float x, float y) const;

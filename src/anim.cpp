@@ -10,7 +10,7 @@
 namespace peek {
 
 namespace {
-constexpr DWORD kHoverFadeMs = 320;
+constexpr DWORD kHoverFadeMs = 90;
 constexpr double kZoomOpenMs = 200, kZoomCloseMs = 180;
 constexpr float kEnterMs = 220, kEnterSpreadMs = 130;   // Dauer je Element, groesster Versatz
 constexpr float kEnterStaggerMs = 12;
@@ -19,7 +19,7 @@ float FadeAlpha(DWORD t0, DWORD now) {
     float t = static_cast<float>(now - t0) / kHoverFadeMs;
     if (t >= 1) return 0;
     float u = 1 - t;
-    return 0.42f * u * u;   // springt sofort auf etwa 40 % und verklingt dann langsam
+    return u * u;   // von voll aus sehr schnell weg
 }
 
 float EaseOut(float t) {
@@ -51,6 +51,14 @@ float App::Hov(int idx) const {
     return best;
 }
 
+float App::CloudHoverFade(int card) const {
+    if (!settings_.animations) return 0;
+    const DWORD now = GetTickCount();
+    for (auto& [k, t0] : cloudFades_)
+        if (k == card) return FadeAlpha(t0, now);
+    return 0;
+}
+
 float App::PosHov(int pos) const {
     if (pos < 0) return 0;
     if (pos == hoverPos_) return 1;
@@ -67,6 +75,7 @@ void App::TrackHoverFades() {
     if (!settings_.animations) {
         hoverFades_.clear();
         posFades_.clear();
+        cloudFades_.clear();
         lastHovValid_ = false;
         lastHoverPos_ = hoverPos_;
         return;
@@ -108,7 +117,9 @@ bool App::AnimFadesStep() {
                       hoverFades_.end());
     posFades_.erase(std::remove_if(posFades_.begin(), posFades_.end(), [&](const auto& f) { return now - f.second >= kHoverFadeMs; }),
                     posFades_.end());
-    bool more = !hoverFades_.empty() || !posFades_.empty();
+    cloudFades_.erase(std::remove_if(cloudFades_.begin(), cloudFades_.end(), [&](const auto& f) { return now - f.second >= kHoverFadeMs; }),
+                      cloudFades_.end());
+    bool more = !hoverFades_.empty() || !posFades_.empty() || !cloudFades_.empty();
     if (zoom_.active) {
         if (NowMs() - zoom_.t0 >= (zoom_.closing ? kZoomCloseMs : kZoomOpenMs)) {
             zoom_ = ZoomAnim{};
@@ -206,11 +217,16 @@ void App::ZoomOpenNow(int pos) {
         zoom_ = ZoomAnim{};
         return;
     }
-    ZoomAnim keep = zoom_;
-    OpenViewer(pos);
-    zoom_ = keep;
+    // schon vor dem Oeffnen aktiv: das erste Bild nach dem Wegfall der Titelleiste (sofort in WM_SIZE gezeichnet)
+    // zeigt bereits die festgehaltene Ansicht an ihrer alten Stelle
     zoom_.active = true;
     zoom_.closing = false;
+    zoom_.t0 = NowMs();
+    OpenViewer(pos);
+    if (!viewer_.open) {
+        zoom_ = ZoomAnim{};
+        return;
+    }
     zoom_.t0 = NowMs();
     StartAnimation();
 }
@@ -226,6 +242,10 @@ void App::PaintZoomOpen(ID2D1DeviceContext* dc) {
         float x = (zoom_.snapOrigin.x - o.x) / s, y = (zoom_.snapOrigin.y - o.y) / s;
         dc->DrawBitmap(zoom_.snap.Get(), D2D1::RectF(x, y, x + px.width / s, y + px.height / s), 1.0f,
                        D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
+        // oben frei gewordener Streifen (vorher Titelleiste): mit der obersten Zeile der Ansicht fuellen
+        if (y > 0.5f)
+            dc->DrawBitmap(zoom_.snap.Get(), D2D1::RectF(x, 0, x + px.width / s, y + 0.5f), 1.0f,
+                           D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR, D2D1::RectF(0, 0, px.width / s, 1.0f / s));
     }
     dc->FillRectangle(D2D1::RectF(0, 0, W_, H_), r_.Brush(D2D1::ColorF(0, 0, 0, k)));
     if (viewer_.pos < 0 || viewer_.pos >= static_cast<int>(visible_.size())) return;

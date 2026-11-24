@@ -668,6 +668,7 @@ bool App::CloudStep(float dt) {
         c.order.erase(std::remove(c.order.begin(), c.order.end(), -1), c.order.end());
         c.sel = c.sel >= 0 ? remap[c.sel] : -1;
         c.hover = c.hover >= 0 ? remap[c.hover] : -1;
+        cloudFades_.clear();
         c.block = c.block >= 0 ? remap[c.block] : -1;
         c.drawn.clear();
         c.stepSel = c.sel;
@@ -1460,14 +1461,14 @@ void App::PaintCloud(ID2D1DeviceContext* dc) {
         for (auto& p : wantFull) c.full.insert(p);
     }
     // Hervorhebung unter der Maus (nicht, solange ein Bild ausgewaehlt ist)
-    if (c.hover >= 0 && c.sel < 0) {
-        for (auto& dw : c.drawn)
-            if (dw.card == c.hover) {
-                float rad = std::min(5.0f, kRound * std::min(dw.rc.right - dw.rc.left, dw.rc.bottom - dw.rc.top));
-                D2D1_RECT_F hr = D2D1::RectF(dw.rc.left - 1, dw.rc.top - 1, dw.rc.right + 1, dw.rc.bottom + 1);
-                dc->DrawRoundedRectangle(D2D1::RoundedRect(hr, rad + 1, rad + 1), r_.Brush(D2D1::ColorF(1, 1, 1, 0.95f)), 2.0f);
-                break;
-            }
+    if (c.sel < 0 && (c.hover >= 0 || !cloudFades_.empty())) {
+        for (auto& dw : c.drawn) {
+            float a = dw.card == c.hover ? 1.0f : CloudHoverFade(dw.card);
+            if (a <= 0) continue;
+            float rad = std::min(5.0f, kRound * std::min(dw.rc.right - dw.rc.left, dw.rc.bottom - dw.rc.top));
+            D2D1_RECT_F hr = D2D1::RectF(dw.rc.left - 1, dw.rc.top - 1, dw.rc.right + 1, dw.rc.bottom + 1);
+            dc->DrawRoundedRectangle(D2D1::RoundedRect(hr, rad + 1, rad + 1), r_.Brush(D2D1::ColorF(1, 1, 1, 0.95f * a)), 2.0f);
+        }
     }
     // Ausgewaehltes Bild: Metadaten darunter
     if (c.sel >= 0) {
@@ -1638,6 +1639,10 @@ void App::CloudMouseMove(float x, float y) {
     }
     int h = c.sel >= 0 ? -1 : CloudPick(x, y);   // waehrend einer Auswahl keine Hervorhebung anderer Bilder
     if (h != c.hover) {
+        if (settings_.animations && c.hover >= 0) {   // Rahmen der bisherigen Karte blendet schnell aus
+            cloudFades_.push_back({c.hover, GetTickCount()});
+            StartAnimation();
+        }
         c.hover = h;
         InvalidateRect(hwnd_, nullptr, FALSE);
     }

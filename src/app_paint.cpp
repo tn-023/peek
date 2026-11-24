@@ -3520,7 +3520,7 @@ void App::PaintAtlas(ID2D1DeviceContext* dc) {
             D2D1_RECT_F rc = D2D1::RectF(ox, oy + 2, ox + 28, oy + oh - 2);
             int idx = static_cast<int>(hits_.size());
             if (on) hits_.push_back({rc, type, 0});
-            FillRound(dc, rc, 5, on && MixColor(t.chip, t.chipHover, Hov(idx)));
+            FillRound(dc, rc, 5, on ? MixColor(t.chip, t.chipHover, Hov(idx)) : t.chip);
             wchar_t g[2] = {glyph, 0};
             DrawText(dc, g, rc, r_.Icon(11), on ? t.text : t.text3);
             ox = rc.right;

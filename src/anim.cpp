@@ -10,7 +10,7 @@
 namespace peek {
 
 namespace {
-constexpr DWORD kHoverFadeMs = 140;
+constexpr DWORD kHoverFadeMs = 320;
 constexpr double kZoomOpenMs = 200, kZoomCloseMs = 180;
 constexpr float kEnterMs = 220, kEnterSpreadMs = 130;   // Dauer je Element, groesster Versatz
 constexpr float kEnterStaggerMs = 12;
@@ -19,7 +19,7 @@ float FadeAlpha(DWORD t0, DWORD now) {
     float t = static_cast<float>(now - t0) / kHoverFadeMs;
     if (t >= 1) return 0;
     float u = 1 - t;
-    return u * u * u;   // steil abfallend: auf langen Listen nur eine kurze Spur, die sanft verklingt
+    return 0.42f * u * u;   // springt sofort auf etwa 40 % und verklingt dann langsam
 }
 
 float EaseOut(float t) {
@@ -163,16 +163,16 @@ D2D1_RECT_F App::ScreenToDip(const D2D1_RECT_F& r) const {
 
 // Oeffnen aus Kacheln oder Liste: erst die Ansicht im naechsten Bild festhalten, dann oeffnen (WM_APP_ZOOMOPEN)
 bool App::TryZoomOpen(int pos) {
-    if (!settings_.animations || viewer_.open || settingsOpen_ || (settings_.viewMode != 0 && settings_.viewMode != 1)) return false;
+    if (!settings_.animations || viewer_.open || settingsOpen_) return false;
     if (pos < 0 || pos >= static_cast<int>(visible_.size())) return false;
-    auto it = drawnThumbs_.find(pos);
-    if (it == drawnThumbs_.end()) return false;
+    D2D1_RECT_F thumb{};
+    if (!ThumbRectFor(pos, thumb)) return false;
     const FileEntry& e = entries_[visible_[pos]];
     auto b = bmps_.find(e.path);
     if (b == bmps_.end() || !b->second.bmp) return false;   // ohne Vorschaubild: sofort oeffnen
     zoom_ = ZoomAnim{};
     zoom_.pos = pos;
-    zoom_.fromScr = DipToScreen(it->second);
+    zoom_.fromScr = DipToScreen(thumb);
     viewerOpenReq_ = pos;
     InvalidateRect(hwnd_, nullptr, FALSE);
     return true;
@@ -239,13 +239,13 @@ void App::PaintZoomOpen(ID2D1DeviceContext* dc) {
     auto fb = fullBmps_.find(e.path);
     if (fb != fullBmps_.end() && fb->second.bmp) b = fb->second.bmp.Get();
     else if (auto tb = bmps_.find(e.path); tb != bmps_.end() && tb->second.bmp) b = tb->second.bmp.Get();
-    if (b) dc->DrawBitmap(b, LerpRect(from, to, k), 1.0f, D2D1_INTERPOLATION_MODE_LINEAR);
+    if (b) DrawZoomImage(dc, b, from, to, k);
 }
 
 // Schliessen (vor dem eigentlichen Schliessen): wo das Bild steht und welches Bild es ist
 void App::ZoomCloseBegin() {
     zoom_ = ZoomAnim{};
-    if (!settings_.animations || viewer_.slide || viewer_.shell || viewer_.crop || (settings_.viewMode != 0 && settings_.viewMode != 1)) return;
+    if (!settings_.animations || viewer_.slide || viewer_.shell || viewer_.crop) return;
     if (viewer_.pos < 0 || viewer_.pos >= static_cast<int>(visible_.size())) return;
     if (viewer_.rotation != 0) return;
     const FileEntry& e = entries_[visible_[viewer_.pos]];
@@ -270,12 +270,48 @@ void App::PaintZoomOverlay(ID2D1DeviceContext* dc) {
     dc->FillRectangle(D2D1::RectF(0, 0, W_, H_), r_.Brush(D2D1::ColorF(0, 0, 0, 1 - k)));
     if (!zoom_.bmp) return;
     D2D1_RECT_F from = ScreenToDip(zoom_.fromScr);
-    auto it = drawnThumbs_.find(zoom_.pos);
-    if (it == drawnThumbs_.end()) {   // Vorschaubild nicht sichtbar: nur ausblenden
+    D2D1_RECT_F thumb{};
+    if (!ThumbRectFor(zoom_.pos, thumb)) {   // Vorschaubild nicht sichtbar: nur ausblenden
         dc->DrawBitmap(zoom_.bmp.Get(), from, 1 - k, D2D1_INTERPOLATION_MODE_LINEAR);
         return;
     }
-    dc->DrawBitmap(zoom_.bmp.Get(), LerpRect(from, it->second, k), 1.0f, D2D1_INTERPOLATION_MODE_LINEAR);
+    DrawZoomImage(dc, zoom_.bmp.Get(), from, thumb, k);
+}
+
+// Vorschaubild der Position: Kacheln/Liste/Zeitleiste aus dem letzten Bild, Wolke aus den gezeichneten Karten
+bool App::ThumbRectFor(int pos, D2D1_RECT_F& rc) const {
+    if (pos < 0 || pos >= static_cast<int>(visible_.size())) return false;
+    if (settings_.viewMode == 2) {
+        const std::wstring& path = entries_[visible_[pos]].path;
+        for (auto it = cloud_.drawn.rbegin(); it != cloud_.drawn.rend(); ++it)
+            if (it->card >= 0 && it->card < static_cast<int>(cloud_.cards.size()) && cloud_.cards[it->card].path == path) {
+                rc = it->rc;
+                return rc.right - rc.left > 1;
+            }
+        return false;
+    }
+    auto it = drawnThumbs_.find(pos);
+    if (it == drawnThumbs_.end()) return false;
+    rc = it->second;
+    return true;
+}
+
+// Bild zwischen zwei Flaechen: es fuellt die jeweilige Flaeche (beschnitten, wo das Seitenverhaeltnis abweicht,
+// z. B. quadratische Kacheln der Zeitleiste); Ausschnitt und Bild wandern gemeinsam
+void App::DrawZoomImage(ID2D1DeviceContext* dc, ID2D1Bitmap* b, const D2D1_RECT_F& from, const D2D1_RECT_F& to, float k) {
+    D2D1_SIZE_F sz = b->GetSize();
+    if (sz.width <= 0 || sz.height <= 0) return;
+    auto cover = [&](const D2D1_RECT_F& r) {
+        float w = r.right - r.left, h = r.bottom - r.top;
+        float s = std::max(w / sz.width, h / sz.height);
+        float cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+        return D2D1::RectF(cx - sz.width * s / 2, cy - sz.height * s / 2, cx + sz.width * s / 2, cy + sz.height * s / 2);
+    };
+    D2D1_RECT_F clip = LerpRect(from, to, k);
+    D2D1_RECT_F img = LerpRect(cover(from), cover(to), k);
+    dc->PushAxisAlignedClip(clip, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    dc->DrawBitmap(b, img, 1.0f, D2D1_INTERPOLATION_MODE_LINEAR);
+    dc->PopAxisAlignedClip();
 }
 
 }  // namespace peek

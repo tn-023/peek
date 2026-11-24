@@ -377,6 +377,8 @@ private:
     std::unordered_map<int, D2D1_RECT_F> drawnThumbs_;   // Position -> gezeichnetes Vorschaubild (dieses Bild)
     int viewerOpenReq_ = -1;               // Betrachter nach dem naechsten Bild oeffnen (Ansicht festhalten)
     bool TryZoomOpen(int pos);
+    bool ThumbRectFor(int pos, D2D1_RECT_F& rc) const;   // Vorschaubild im letzten Bild (alle vier Ansichten)
+    void DrawZoomImage(ID2D1DeviceContext* dc, ID2D1Bitmap* b, const D2D1_RECT_F& from, const D2D1_RECT_F& to, float k);
     void SnapForZoom(ID2D1DeviceContext* dc);
     void ZoomOpenNow(int pos);
     void ZoomCloseBegin();                 // in CloseViewer, vor dem Schliessen

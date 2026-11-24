@@ -200,6 +200,7 @@ private:
     std::vector<std::wstring> SelectedPaths() const;
     void DeleteSelection();
     void ToggleFullscreen(bool workArea = false);   // workArea: rahmenlos ueber dem Arbeitsbereich (Taskleiste bleibt sichtbar)
+    void ToggleFullscreenImpl(bool workArea);
     void StartSlideshow(bool fromGrid);
     void SlideshowFromGrid();
     void BeginSlideshow(bool fromGrid, bool intro);

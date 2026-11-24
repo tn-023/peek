@@ -2332,6 +2332,14 @@ LRESULT App::CaptionHitTest(LPARAM lp, LRESULT def) {
 }
 
 void App::ToggleFullscreen(bool workArea) {
+    // Fenster waechst bzw. schrumpft: im selben Schritt neu zeichnen (WM_SIZE), sonst zeigt Windows kurz den alten
+    // Inhalt verschoben oder gestreckt (Ruckeln, z. B. beim Oeffnen des Bildbetrachters im Vollbild)
+    frameSwitch_ = true;
+    ToggleFullscreenImpl(workArea);
+    frameSwitch_ = false;
+}
+
+void App::ToggleFullscreenImpl(bool workArea) {
     if (viewer_.open) viewer_.ownFullscreen = false;   // Benutzer hat selbst umgeschaltet
     DWORD style = static_cast<DWORD>(GetWindowLongW(hwnd_, GWL_STYLE));
     if (!fullscreen_) {

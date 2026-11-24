@@ -254,6 +254,8 @@ void App::ZoomOpenNow(int pos) {
 void App::PaintZoomOpen(ID2D1DeviceContext* dc) {
     const float k = EaseOut(static_cast<float>((NowMs() - zoom_.t0) / kZoomOpenMs));
     const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
+    // ausserhalb der festgehaltenen Ansicht (Betrachter im Vollbild: das Fenster ist gerade gewachsen) gleich schwarz
+    dc->FillRectangle(D2D1::RectF(0, 0, W_, H_), r_.Brush(D2D1::ColorF(0, 0, 0, 1)));
     if (zoom_.snap) {
         POINT o{0, 0};
         ClientToScreen(hwnd_, &o);

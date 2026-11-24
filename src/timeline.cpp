@@ -651,7 +651,7 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
     const float rad = 6;
     dc->PushAxisAlignedClip(D2D1::RectF(area.left, area.top, area.right, area.bottom - kTlSlider + 6), D2D1_ANTIALIAS_MODE_ALIASED);
     const float viewW = vw / zoom;   // sichtbare Breite in Weltkoordinaten
-    if (zoom != 1.0f) dc->SetTransform(D2D1::Matrix3x2F::Scale(zoom, zoom, D2D1::Point2F(area.left, area.top)) * Base());
+    if (zoom != 1.0f) dc->SetTransform(D2D1::Matrix3x2F::Scale(zoom, zoom, D2D1::Point2F(area.left, area.top)));
 
     // 1) Zeitangaben (hinter den Kacheln); bleiben am linken Rand stehen, bis die Gruppe vorbei ist
     IDWriteTextFormat* fSmall = r_.Text(kTlSmall, DWRITE_FONT_WEIGHT_NORMAL);
@@ -773,7 +773,7 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
             D2D1::Matrix3x2F m;
             dc->GetTransform(&m);
             D2D1_POINT_2F a = m.TransformPoint(D2D1::Point2F(rc.left, rc.top)), b = m.TransformPoint(D2D1::Point2F(rc.right, rc.bottom));
-            drawnThumbs_[it.pos] = D2D1::RectF(a.x, a.y - ContentY(), b.x, b.y - ContentY());   // Inhaltskoordinaten
+            drawnThumbs_[it.pos] = D2D1::RectF(a.x, a.y, b.x, b.y);
         }
         if (e.kind == Kind::Video) {
             float c = std::clamp(ss * 0.09f, 9.0f, 15.0f);
@@ -803,7 +803,7 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
         if (it.stack || (it.x + it.s >= wx0 && it.x <= wx1)) continue;
         EnsureThumb(entries_[visible_[it.pos]], 1, frame_);
     }
-    if (zoom != 1.0f) dc->SetTransform(Base());
+    if (zoom != 1.0f) dc->SetTransform(D2D1::Matrix3x2F::Identity());
     dc->PopAxisAlignedClip();
 
     // 3) Uebersicht statt Bildlaufleiste: je Zeitraum ein Balken (Breite wie auf dem Zeitstrahl, Hoehe nach Anzahl),

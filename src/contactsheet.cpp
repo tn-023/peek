@@ -171,7 +171,7 @@ void App::SheetMouseDown(float x, float y) {
         }
         float sc = r_.scale();
         POINT pt = {static_cast<LONG>(h->rc.left * sc), static_cast<LONG>((h->rc.bottom + 4) * sc)};
-        ContentToScreen(pt);
+        ClientToScreen(hwnd_, &pt);
         UINT cmd = ShowPopupMenu(hwnd_, items, pt, accent_);
         if (cmd >= 100 && cmd <= 102) {
             settings_.sheetQuality = static_cast<int>(cmd) - 100;

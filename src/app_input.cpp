@@ -286,7 +286,7 @@ void App::OnMouseMove(float x, float y, WPARAM keys) {
     }
     if (marquee_) {
         GetCursorPos(&marqueeMouse_);
-        ScreenToContent(marqueeMouse_);
+        ScreenToClient(hwnd_, &marqueeMouse_);
         UpdateMarquee();
         if (y < gridRc_.top || y > gridRc_.bottom) StartAnimation();
         return;
@@ -330,7 +330,7 @@ void App::OnMouseMove(float x, float y, WPARAM keys) {
     if (lDown_ && downPos_ >= 0 && (keys & MK_LBUTTON)) {
         POINT pt;
         GetCursorPos(&pt);
-        ScreenToContent(pt);
+        ScreenToClient(hwnd_, &pt);
         if (std::abs(pt.x - downPt_.x) > GetSystemMetrics(SM_CXDRAG) ||
             std::abs(pt.y - downPt_.y) > GetSystemMetrics(SM_CYDRAG)) {
             if (rowMarquee_) {
@@ -392,16 +392,6 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
     SetFocus(hwnd_);
     tipShown_ = false;
     KillTimer(hwnd_, kTimerTip);
-    // Fensterknoepfe (selbst gezeichnete Titelleiste)
-    if (const Hit* ch = HitAt(x, y); ch && (ch->type == HitType::CapMin || ch->type == HitType::CapMax || ch->type == HitType::CapClose)) {
-        if (ch->type == HitType::CapMin) ShowWindow(hwnd_, SW_MINIMIZE);
-        else if (ch->type == HitType::CapMax) ShowWindow(hwnd_, IsZoomed(hwnd_) ? SW_RESTORE : SW_MAXIMIZE);
-        else {   // Schliessen erst beim Loslassen (sonst landet das Loslassen im Fenster dahinter)
-            capPress_ = HitType::CapClose;
-            SetCapture(hwnd_);
-        }
-        return;
-    }
     if (sheet_.open) { SheetMouseDown(x, y); return; }
     if (atlas_.open) { AtlasMouseDown(x, y); return; }
     if (compare_.open) { CompareMouseDown(x, y); return; }
@@ -725,7 +715,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
             marqueeStart_ = D2D1::Point2F(x, y - gridRc_.top + scroll_);
             marqueeCur_ = marqueeStart_;
             GetCursorPos(&marqueeMouse_);
-            ScreenToContent(marqueeMouse_);
+            ScreenToClient(hwnd_, &marqueeMouse_);
             UpdateMarquee();
         } else if (!(keys & (MK_CONTROL | MK_SHIFT))) {
             selected_.clear();
@@ -735,7 +725,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
     }
     POINT pt;
     GetCursorPos(&pt);
-    ScreenToContent(pt);
+    ScreenToClient(hwnd_, &pt);
     lDown_ = true;
     downPt_ = pt;
     downPos_ = pos;
@@ -772,13 +762,6 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
 
 void App::OnLButtonUp(float x, float y) {
     settingsScrollDrag_ = false;
-    if (capPress_ != HitType::None) {
-        HitType p = capPress_;
-        capPress_ = HitType::None;
-        if (GetCapture() == hwnd_) ReleaseCapture();
-        if (const Hit* h = HitAt(x, y); h && h->type == p) PostMessageW(hwnd_, WM_CLOSE, 0, 0);
-        return;
-    }
     if (viewerPress_ != HitType::None) {
         HitType p = viewerPress_;
         viewerPress_ = HitType::None;
@@ -860,7 +843,7 @@ void App::OnLButtonUp(float x, float y) {
         settings_.viewMode != 2) {
         POINT up;
         GetCursorPos(&up);
-        ScreenToContent(up);
+        ScreenToClient(hwnd_, &up);
         bool still = std::abs(up.x - downPt_.x) <= GetSystemMetrics(SM_CXDRAG) &&
                      std::abs(up.y - downPt_.y) <= GetSystemMetrics(SM_CYDRAG);
         if (still && GridPosAt(x, y) == downPos_) {
@@ -1379,8 +1362,8 @@ void App::OnChar(wchar_t c) {
 // Menues (eigene, dunkle Popup-Menues)
 // ---------------------------------------------------------------------------
 
-static POINT BelowRect(HWND hwnd, float offY, const D2D1_RECT_F& rc, float scale, float gap) {
-    POINT pt = {static_cast<LONG>(rc.left * scale), static_cast<LONG>((rc.bottom + gap + offY) * scale)};
+static POINT BelowRect(HWND hwnd, const D2D1_RECT_F& rc, float scale, float gap) {
+    POINT pt = {static_cast<LONG>(rc.left * scale), static_cast<LONG>((rc.bottom + gap) * scale)};
     ClientToScreen(hwnd, &pt);
     return pt;
 }
@@ -1469,7 +1452,7 @@ void App::ShowChipMenu(ChipId id, const D2D1_RECT_F& rc) {
     openMenu_ = static_cast<int>(id);
     InvalidateRect(hwnd_, nullptr, FALSE);
     UpdateWindow(hwnd_);
-    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, ContentY(), rc, r_.scale(), 4), accent_);
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
     openMenu_ = -1;
     lastMenu_ = static_cast<int>(id);
     lastMenuClose_ = GetTickCount();
@@ -1528,7 +1511,7 @@ void App::ShowMoreFiltersMenu(const D2D1_RECT_F& rc) {
     openMenu_ = 2000;
     InvalidateRect(hwnd_, nullptr, FALSE);
     UpdateWindow(hwnd_);
-    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, ContentY(), rc, r_.scale(), 4), accent_);
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
     openMenu_ = -1;
     lastMenu_ = 2000;
     lastMenuClose_ = GetTickCount();
@@ -1559,7 +1542,7 @@ void App::ShowSortMenu(const D2D1_RECT_F& rc) {
         openMenu_ = static_cast<int>(ChipId::Sort);
         InvalidateRect(hwnd_, nullptr, FALSE);
         UpdateWindow(hwnd_);
-        UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, ContentY(), rc, r_.scale(), 4), accent_);
+        UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
         openMenu_ = -1;
         lastMenu_ = static_cast<int>(ChipId::Sort);
         lastMenuClose_ = GetTickCount();
@@ -1600,7 +1583,7 @@ void App::ShowSortMenu(const D2D1_RECT_F& rc) {
     openMenu_ = static_cast<int>(ChipId::Sort);
     InvalidateRect(hwnd_, nullptr, FALSE);
     UpdateWindow(hwnd_);
-    POINT pt = BelowRect(hwnd_, ContentY(), rc, r_.scale(), 4);
+    POINT pt = BelowRect(hwnd_, rc, r_.scale(), 4);
     UINT cmd = ShowPopupMenu(hwnd_, items, pt, accent_);
     openMenu_ = -1;
     lastMenu_ = static_cast<int>(ChipId::Sort);
@@ -1664,7 +1647,7 @@ void App::ShowCrumbMenu(int index, const D2D1_RECT_F& rc) {
     openMenu_ = 1000 + index;
     InvalidateRect(hwnd_, nullptr, FALSE);
     UpdateWindow(hwnd_);
-    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, ContentY(), rc, r_.scale(), 6), accent_);
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 6), accent_);
     openMenu_ = -1;
     lastMenu_ = 1000 + index;
     lastMenuClose_ = GetTickCount();
@@ -1832,7 +1815,7 @@ void App::ShowThemeMenu(const D2D1_RECT_F& rc) {
         m.checked = settings_.theme == i;
         items.push_back(m);
     }
-    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, ContentY(), rc, r_.scale(), 4), accent_);
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
     if (cmd < 100 || cmd > 102) return;
     settings_.theme = static_cast<int>(cmd) - 100;
     settings_.Save();
@@ -1849,7 +1832,7 @@ void App::ShowLanguageMenu(const D2D1_RECT_F& rc) {
         m.checked = settings_.language == i;
         items.push_back(m);
     }
-    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, ContentY(), rc, r_.scale(), 4), accent_);
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
     if (cmd < 100 || cmd > 102) return;
     settings_.language = static_cast<int>(cmd) - 100;
     langOverride_ = -1;
@@ -1866,7 +1849,7 @@ void App::ShowViewerFullscreenMenu(const D2D1_RECT_F& rc) {
         m.checked = (settings_.viewerFullscreen ? 0 : 1) == i;
         items.push_back(m);
     }
-    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, ContentY(), rc, r_.scale(), 4), accent_);
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
     if (cmd < 100 || cmd > 101) return;
     settings_.viewerFullscreen = cmd == 100;
     settings_.Save();
@@ -1882,7 +1865,7 @@ void App::ShowSingleClickMenu(const D2D1_RECT_F& rc) {
         m.checked = (settings_.singleClick ? 1 : 0) == i;
         items.push_back(m);
     }
-    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, ContentY(), rc, r_.scale(), 4), accent_);
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
     if (cmd < 100 || cmd > 101) return;
     settings_.singleClick = cmd == 101;
     settings_.Save();
@@ -1898,7 +1881,7 @@ void App::ShowGeoClickMenu(const D2D1_RECT_F& rc) {
         m.checked = settings_.geoClick == i;
         items.push_back(m);
     }
-    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, ContentY(), rc, r_.scale(), 4), accent_);
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
     if (cmd < 100 || cmd > 101) return;
     settings_.geoClick = static_cast<int>(cmd - 100);
     settings_.Save();
@@ -1914,7 +1897,7 @@ void App::ShowCheckBoxMenu(const D2D1_RECT_F& rc) {
         m.checked = (settings_.checkBoxes ? 1 : 0) == i;
         items.push_back(m);
     }
-    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, ContentY(), rc, r_.scale(), 4), accent_);
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
     if (cmd < 100 || cmd > 101) return;
     settings_.checkBoxes = cmd == 101;
     settings_.Save();
@@ -1930,7 +1913,7 @@ void App::ShowAnimationsMenu(const D2D1_RECT_F& rc) {
         m.checked = (settings_.animations ? 1 : 0) == i;
         items.push_back(m);
     }
-    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, ContentY(), rc, r_.scale(), 4), accent_);
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
     if (cmd < 100 || cmd > 101) return;
     settings_.animations = cmd == 101;
     settings_.Save();
@@ -1948,7 +1931,7 @@ void App::ShowViewerSmallMenu(const D2D1_RECT_F& rc) {
         m.checked = settings_.viewerSmall == i;
         items.push_back(m);
     }
-    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, ContentY(), rc, r_.scale(), 4), accent_);
+    UINT cmd = ShowPopupMenu(hwnd_, items, BelowRect(hwnd_, rc, r_.scale(), 4), accent_);
     if (cmd < 100 || cmd > 101) return;
     settings_.viewerSmall = static_cast<int>(cmd) - 100;
     settings_.Save();

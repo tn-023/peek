@@ -376,7 +376,7 @@ void App::OpenDatePicker(ChipId chip, const D2D1_RECT_F& anchor) {
     ComputeDateBounds();
     float s = r_.scale();
     POINT pt = {static_cast<LONG>(anchor.left * s), static_cast<LONG>((anchor.bottom + 4) * s)};
-    ContentToScreen(pt);
+    ClientToScreen(hwnd_, &pt);
     openMenu_ = static_cast<int>(chip);
     InvalidateRect(hwnd_, nullptr, FALSE);
     UpdateWindow(hwnd_);

@@ -158,7 +158,7 @@ void App::OpenRenameField(D2D1_RECT_F nr, float fieldH, const std::wstring& text
     }
     float s = r_.scale();
     POINT p0 = {static_cast<LONG>(nr.left * s), static_cast<LONG>(nr.top * s)};
-    ContentToScreen(p0);
+    ClientToScreen(hwnd_, &p0);
     int w = static_cast<int>((nr.right - nr.left) * s), h = static_cast<int>(fieldH * s);
     renameHost_ = CreateWindowExW(WS_EX_TOOLWINDOW, kRenameClass, L"", WS_POPUP | WS_CLIPCHILDREN, p0.x, p0.y, w, h, hwnd_,
                                   nullptr, GetModuleHandleW(nullptr), nullptr);

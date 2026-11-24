@@ -101,10 +101,6 @@ bool App::Init(HINSTANCE inst, int show) {
     hwnd_ = CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP, wc.lpszClassName, L"peek", WS_OVERLAPPEDWINDOW, x, y, w, h,
                             nullptr, nullptr, inst, this);
     if (!hwnd_) return false;
-    // peek zeichnet die Titelleiste selbst (obere Leiste mit den Fensterknoepfen): die Fensterhoehe aendert sich
-    // nie mehr, auch nicht beim Oeffnen des Bildbetrachters (kein Verrutschen, kein Flackern)
-    captionless_ = true;
-    SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
 
     ApplyTheme();
     if (!r_.Init(hwnd_)) {
@@ -270,43 +266,7 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         MarkUiActivity();
     const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
     auto X = [&](LPARAM l) { return static_cast<float>(GET_X_LPARAM(l)) / s; };
-    auto Y = [&](LPARAM l) { return static_cast<float>(GET_Y_LPARAM(l)) / s - ContentY(); };   // unter der Titelleiste
-
-    // Fensterknoepfe der Titelleiste zeichnet Windows (Mica: Rahmen ueber die ganze Flaeche); Darueberfahren,
-    // Druecken und Andock-Layouts uebernimmt DWM
-    if (backdrop_ && ContentY() > 0) {
-        // Treffer der drei Knoepfe selbst bestimmen: DWM kennt ihre Lage (auch maximiert, wo seine eigene
-        // Trefferpruefung um den Fensterrand daneben liegt)
-        if (msg == WM_NCHITTEST) {
-            RECT b{}, wr{};
-            if (SUCCEEDED(DwmGetWindowAttribute(hwnd_, DWMWA_CAPTION_BUTTON_BOUNDS, &b, sizeof(b))) && GetWindowRect(hwnd_, &wr) &&
-                b.right > b.left) {
-                POINT p = {GET_X_LPARAM(lp) - wr.left, GET_Y_LPARAM(lp) - wr.top};
-                if (PtInRect(&b, p)) {
-                    const int w = std::max<LONG>(1, (b.right - b.left) / 3);
-                    const int i = std::clamp(static_cast<int>((p.x - b.left) / w), 0, 2);
-                    return i == 0 ? HTMINBUTTON : i == 1 ? HTMAXBUTTON : HTCLOSE;
-                }
-            }
-        }
-        // Druecken und Loslassen auf den Knoepfen: selbst ausfuehren
-        if ((msg == WM_NCLBUTTONDOWN || msg == WM_NCLBUTTONDBLCLK) && (wp == HTMINBUTTON || wp == HTMAXBUTTON || wp == HTCLOSE)) {
-            ncPress_ = static_cast<int>(wp);
-            return 0;
-        }
-        if (msg == WM_NCLBUTTONUP && (wp == HTMINBUTTON || wp == HTMAXBUTTON || wp == HTCLOSE)) {
-            const bool same = ncPress_ == static_cast<int>(wp);
-            ncPress_ = 0;
-            if (same) {
-                if (wp == HTMINBUTTON) ShowWindow(hwnd_, SW_MINIMIZE);
-                else if (wp == HTMAXBUTTON) ShowWindow(hwnd_, IsZoomed(hwnd_) ? SW_RESTORE : SW_MAXIMIZE);
-                else PostMessageW(hwnd_, WM_SYSCOMMAND, SC_CLOSE, 0);
-            }
-            return 0;
-        }
-        LRESULT dr = 0;   // Darueberfahren und Andock-Layouts: DWM
-        if (DwmDefWindowProc(hwnd_, msg, wp, lp, &dr)) return dr;
-    }
+    auto Y = [&](LPARAM l) { return static_cast<float>(GET_Y_LPARAM(l)) / s; };
 
     switch (msg) {
     case WM_MOVE:
@@ -346,13 +306,11 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             auto p = reinterpret_cast<NCCALCSIZE_PARAMS*>(lp);
             LONG top = p->rgrc[0].top;
             LRESULT r = DefWindowProcW(hwnd_, msg, wp, lp);
-            const LONG defTop = p->rgrc[0].top;   // dort begaenne der Inhalt mit der Titelleiste von Windows
             p->rgrc[0].top = top;
             if (IsZoomed(hwnd_) && !fullscreen_) {   // maximiert ragt das Fenster um den Rahmen ueber den Bildschirm
                 UINT dpi = GetDpiForWindow(hwnd_);
                 p->rgrc[0].top += GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
             }
-            titlePx_ = static_cast<float>(std::max<LONG>(0, defTop - p->rgrc[0].top));
             return r;
         }
         break;
@@ -426,50 +384,6 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         OnMouseMove(X(lp), Y(lp), wp);
         return 0;
     }
-    case WM_ACTIVATE:   // Fensterknoepfe: aktives bzw. inaktives Fenster
-        InvalidateRect(hwnd_, nullptr, FALSE);
-        break;
-    // Maximieren-Knopf (HTMAXBUTTON): Windows schickt hier Nicht-Client-Nachrichten
-    case WM_NCMOUSEMOVE:
-        if (wp == HTMAXBUTTON) {
-            POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
-            ScreenToContent(pt);
-            int hh = -1;
-            for (int i = static_cast<int>(hits_.size()) - 1; i >= 0; --i)
-                if ((hits_[i].type == HitType::CapMax || hits_[i].type == HitType::ViewerMax) && pt.x / s >= hits_[i].rc.left &&
-                    pt.x / s < hits_[i].rc.right && pt.y / s >= hits_[i].rc.top && pt.y / s < hits_[i].rc.bottom) {
-                    hh = i;
-                    break;
-                }
-            if (hh != hoverHit_) {
-                hoverHit_ = hh;
-                hoverPos_ = -1;
-                InvalidateRect(hwnd_, nullptr, FALSE);
-            }
-            TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE | TME_NONCLIENT, hwnd_, 0};
-            TrackMouseEvent(&tme);
-            return 0;
-        }
-        break;
-    case WM_NCMOUSELEAVE:
-        if (hoverHit_ >= 0 && hoverHit_ < static_cast<int>(hits_.size()) &&
-            (hits_[hoverHit_].type == HitType::CapMax || hits_[hoverHit_].type == HitType::ViewerMax)) {
-            hoverHit_ = -1;
-            InvalidateRect(hwnd_, nullptr, FALSE);
-        }
-        break;
-    case WM_NCLBUTTONDOWN:
-        if (wp == HTMAXBUTTON) return 0;   // nicht von Windows zeichnen lassen
-        break;
-    case WM_NCLBUTTONDBLCLK:
-        if (wp == HTMAXBUTTON) return 0;
-        break;
-    case WM_NCLBUTTONUP:
-        if (wp == HTMAXBUTTON) {
-            ShowWindow(hwnd_, IsZoomed(hwnd_) ? SW_RESTORE : SW_MAXIMIZE);
-            return 0;
-        }
-        break;
     case WM_MOUSELEAVE:
         tipShown_ = false;
         KillTimer(hwnd_, kTimerTip);
@@ -541,7 +455,7 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         return TRUE;
     case WM_MOUSEWHEEL: {
         POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
-        ScreenToContent(pt);
+        ScreenToClient(hwnd_, &pt);
         OnWheel(pt.x / s, pt.y / s, GET_WHEEL_DELTA_WPARAM(wp), GET_KEYSTATE_WPARAM(wp));
         return 0;
     }
@@ -557,7 +471,7 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         if (LOWORD(lp) == HTCLIENT) {
             POINT pt;
             GetCursorPos(&pt);
-            ScreenToContent(pt);
+            ScreenToClient(hwnd_, &pt);
             if (autoScroll_) {
                 SetCursor(LoadCursorW(nullptr, settings_.viewMode == 3 && !dup_.open ? IDC_SIZEWE : IDC_SIZENS));   // Zeitleiste: waagerecht
                 return TRUE;
@@ -2383,7 +2297,6 @@ void App::GeoClick(uint32_t idx) {
 }
 
 void App::SetCaptionless(bool on) {
-    if (!on) return;   // die Titelleiste von Windows kommt nicht zurueck (peek zeichnet sie selbst)
     if (captionless_ == on) return;
     captionless_ = on;
     viewerBarRc_ = {};
@@ -2399,7 +2312,7 @@ void App::SetCaptionless(bool on) {
 LRESULT App::CaptionHitTest(LPARAM lp, LRESULT def) {
     if (def != HTCLIENT || fullscreen_) return def;
     POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
-    ScreenToClient(hwnd_, &pt);   // Fensterkoordinaten (Rand oben)
+    ScreenToClient(hwnd_, &pt);
     UINT dpi = GetDpiForWindow(hwnd_);
     int frame = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
     RECT cr;
@@ -2410,14 +2323,7 @@ LRESULT App::CaptionHitTest(LPARAM lp, LRESULT def) {
         return HTTOP;
     }
     const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
-    const float cy = ContentY();
-    float x = pt.x / s, y = pt.y / s - cy;   // Inhaltskoordinaten
-    // Maximieren-Knopf: als solcher melden (Windows 11 zeigt dann beim Darueberfahren die Andock-Layouts)
-    if (const Hit* h = HitAt(x, y); h && (h->type == HitType::CapMax || h->type == HitType::ViewerMax)) return HTMAXBUTTON;
-    if (cy > 0) {   // eigene Titelleiste: verschiebt das Fenster (ausser auf selbst gezeichneten Knoepfen)
-        if (y < 0 && !HitAt(x, y)) return HTCAPTION;
-        return def;
-    }
+    float x = pt.x / s, y = pt.y / s;
     D2D1_RECT_F bar{};
     if (compare_.open) bar = D2D1::RectF(0, 0, W_, 48);
     else if (viewer_.open && !viewer_.crop) bar = viewerBarRc_;
@@ -2490,7 +2396,7 @@ DWORD App::OnDragOver(const std::vector<std::wstring>& paths, POINT screen, DWOR
     }
     if (viewer_.open || settingsOpen_ || sheet_.open || atlas_.open || compare_.open || dup_.open || paths.empty()) return DROPEFFECT_NONE;
     POINT pt = screen;
-    ScreenToContent(pt);
+    ScreenToClient(hwnd_, &pt);
     float x = pt.x / r_.scale(), y = pt.y / r_.scale();
     int crumb = -1;
     bool side = false;
@@ -2546,7 +2452,7 @@ DWORD App::OnDragOver(const std::vector<std::wstring>& paths, POINT screen, DWOR
 
 DWORD App::OnDrop(const std::vector<std::wstring>& paths, POINT screen, DWORD keys, DWORD allowed) {
     POINT pt = screen;
-    ScreenToContent(pt);
+    ScreenToClient(hwnd_, &pt);
     float x = pt.x / r_.scale(), y = pt.y / r_.scale();
     const Hit* h = HitAt(x, y);
     dropPos_ = dropSideItem_ = dropCrumb_ = -1;

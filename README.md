@@ -163,8 +163,10 @@ Data is stored in `%LOCALAPPDATA%\peek`. With an empty file `peek.portable` next
 
 - **Views:** tiles, list, image cloud, timeline. Previews for images, SVG, videos, PDF, PSD, AI.
 - **Image viewer:** JPEG, PNG, GIF, BMP, WebP, AVIF, TIFF, ICO, SVG, TGA, HEIC/HEIF (requires Microsoft's free “HEIF Image Extensions” and the “HEVC Video Extensions” from the Store). Zoom, rotate, crop, slideshow with cross-fades. SVG stays sharp at every zoom level. Full screen or inside the peek window.
-- **Filters and search:** terms, source, pattern, calendar, search parameters, search history.
+- **Filters and search:** terms, source, pattern, calendar, search parameters, search history. Save a search with its place, filters and sort order; it appears in the sidebar.
+- **Duplicates:** finds visually identical images in the current view, also smaller, re-saved or converted copies. A list with the best copy kept; the others go to the recycle bin in one step. A click on a thumbnail compares it with the best copy.
 - **Location:** GPS coordinates from the photos in the info panel; a click copies them or opens OpenStreetMap in the browser.
+- **Remove metadata:** from the info panel, for JPEG, PNG and WebP. Lossless: the image data stays unchanged.
 - **Bookmarks and collections:** mark with a star, index folders while peek is running.
 - **Compare:** two images side by side with synchronized zoom, or overlaid with a divider at the mouse pointer.
 - **Contact sheet:** A4 portrait/landscape, freely chosen grid, reorder images by dragging. PDF with embedded font.

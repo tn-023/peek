@@ -1,6 +1,6 @@
 # peek – Technical concept
 
-> Status: 23 Nov 2026, version 1.6.8. Translated from the German original. Since 1.6 the interface is available in German and English; UI labels are quoted in German (the source language of the texts), with the English text where helpful.
+> Status: 24 Nov 2026, version 1.6.9. Translated from the German original. Since 1.6 the interface is available in German and English; UI labels are quoted in German (the source language of the texts), with the English text where helpful.
 
 ## Goals & requirements
 

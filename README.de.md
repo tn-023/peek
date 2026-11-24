@@ -161,8 +161,10 @@ Daten liegen in `%LOCALAPPDATA%\peek`. Mit einer leeren Datei `peek.portable` ne
 
 - **Ansichten:** Kacheln, Liste, Bilderwolke, Zeitleiste. Vorschau für Bilder, SVG, Videos, PDF, PSD, AI.
 - **Bildbetrachter:** JPEG, PNG, GIF, BMP, WebP, AVIF, TIFF, ICO, SVG, TGA, HEIC/HEIF (benötigt die kostenlosen „HEIF-Bilderweiterungen“ und die „HEVC-Videoerweiterungen“ von Microsoft aus dem Store). Zoom, Drehen, Zuschneiden, Diashow mit Überblendungen. SVG bleibt in jeder Zoomstufe scharf. Im Vollbild oder im peek-Fenster.
-- **Filter und Suche:** Begriffe, Quelle, Muster, Kalender, Suchparameter, Suchverlauf.
+- **Filter und Suche:** Begriffe, Quelle, Muster, Kalender, Suchparameter, Suchverlauf. Suchen mit Ort, Filtern und Sortierung speichern; sie stehen in der Seitenleiste.
+- **Duplikate:** findet visuell identische Bilder in der aktuellen Ansicht, auch verkleinerte, neu gespeicherte oder umgewandelte Kopien. Eine Liste, in der die beste Fassung bleibt; die übrigen kommen in einem Schritt in den Papierkorb. Ein Klick auf ein Vorschaubild vergleicht es mit der besten Fassung.
 - **Aufnahmeort:** GPS-Koordinaten der Fotos im Info-Bereich; ein Klick kopiert sie oder öffnet OpenStreetMap im Browser.
+- **Metadaten entfernen:** im Info-Bereich, für JPEG, PNG und WebP. Verlustfrei: Die Bilddaten bleiben unverändert.
 - **Merkliste und Sammlungen:** vormerken mit Stern, Ordner indexieren, solange peek läuft.
 - **Vergleichen:** zwei Bilder nebeneinander, Zoom synchron. Oder übereinander mit Trennlinie am Mauszeiger.
 - **Kontaktabzug:** A4 hoch/quer, Raster frei wählbar, Bilder per Ziehen sortieren. PDF mit eingebetteter Schrift.

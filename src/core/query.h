@@ -23,6 +23,7 @@ struct Query {
     std::vector<std::wstring> wildcards;  // mit * oder ?
     std::vector<std::wstring> exts;       // ext:jpg,png
     std::vector<std::wstring> cams;       // cam:x-t5
+    std::vector<std::wstring> prompts, models, loras;   // Angaben zur Bilderzeugung
     NumCond width, height, megapixel, size, durationSec;
     NumCond date;                         // Unix-Sekunden
     NumCond taken;                        // Aufnahmedatum (nur Dateien mit Aufnahmedatum)
@@ -42,6 +43,7 @@ struct MatchInput {
     std::wstring_view folder;  // Ordnerpfad
     std::wstring_view ext;     // ohne Punkt
     std::wstring_view camera;
+    std::wstring_view prompt, model, lora;   // Bilderzeugung (Modelle/LoRAs zeilenweise)
     Kind kind = Kind::Other;
     uint32_t width = 0, height = 0;
     uint64_t size = 0;

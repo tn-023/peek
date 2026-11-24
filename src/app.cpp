@@ -1313,6 +1313,7 @@ void App::OnMetaResults() {
                 e.lat = r.row.lat;
                 e.lon = r.row.lon;
                 e.cameraLower = FoldForMatch(ToLower(e.camera));
+                e.SetAi(r.row.ai);
             }
             changed = true;
         }
@@ -1559,6 +1560,9 @@ bool App::PassFilters(const FileEntry& e, int skip) const {
         mi.folder = e.folderLower;
         mi.ext = e.ext;
         mi.camera = e.cameraLower;
+        mi.prompt = e.aiPrompt;
+        mi.model = e.aiModels;
+        mi.lora = e.aiLoras;
         mi.kind = e.kind;
         mi.width = e.width;
         mi.height = e.height;

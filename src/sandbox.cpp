@@ -25,6 +25,7 @@ namespace {
 constexpr uint32_t kMagic = 0x6B656570;   // "peek"
 constexpr uint32_t kMaxPathChars = 32768;
 constexpr uint32_t kMaxCameraChars = 256;
+constexpr uint32_t kMaxAiChars = 16384;
 constexpr wchar_t kContainerName[] = L"peek.dekoder";
 
 enum class Op : uint32_t { DecodeImage = 1, SvgRegion, VideoThumb, DocThumb, ImageMeta, VideoMeta, DocMeta, ProbeOpen, TakePixels, EmbeddedThumb, PhotoDetails };
@@ -47,6 +48,7 @@ struct Reply {
     uint32_t mw = 0, mh = 0, mdur = 0;
     int64_t taken = 0;
     uint32_t cameraChars = 0;
+    uint32_t aiChars = 0;
     uint32_t geo = 0;
     double lat = 0, lon = 0;
 };
@@ -502,15 +504,20 @@ bool Remote(Worker* w, Op op, const std::wstring& path, const Params& prm, Pixel
         !w->Io(true, const_cast<wchar_t*>(path.data()), rq.pathChars * sizeof(wchar_t), deadline))
         return false;
     Reply rp;
-    if (!w->Io(false, &rp, sizeof(rp), deadline) || rp.magic != kMagic || rp.cameraChars > kMaxCameraChars) return false;
+    if (!w->Io(false, &rp, sizeof(rp), deadline) || rp.magic != kMagic || rp.cameraChars > kMaxCameraChars ||
+        rp.aiChars > kMaxAiChars)
+        return false;
     std::wstring camera(rp.cameraChars, L'\0');
     if (rp.cameraChars && !w->Io(false, camera.data(), rp.cameraChars * sizeof(wchar_t), deadline)) return false;
+    std::wstring ai(rp.aiChars, L'\0');
+    if (rp.aiChars && !w->Io(false, ai.data(), rp.aiChars * sizeof(wchar_t), deadline)) return false;
     if (meta) {
         meta->width = rp.mw;
         meta->height = rp.mh;
         meta->durationMs = rp.mdur;
         meta->taken = rp.taken;
         meta->camera = std::move(camera);
+        meta->ai = std::move(ai);
         // Worker nicht blind vertrauen: nur gueltige Koordinaten
         meta->hasGeo = rp.geo == 1 && std::isfinite(rp.lat) && std::isfinite(rp.lon) && std::fabs(rp.lat) <= 90 &&
                        std::fabs(rp.lon) <= 180;
@@ -744,8 +751,11 @@ int RunDecoderWorker(HANDLE pipe) {
         rp.lon = meta.lon;
         if (meta.camera.size() > kMaxCameraChars) meta.camera.resize(kMaxCameraChars);
         rp.cameraChars = static_cast<uint32_t>(meta.camera.size());
+        if (meta.ai.size() > kMaxAiChars) meta.ai.clear();
+        rp.aiChars = static_cast<uint32_t>(meta.ai.size());
         if (!PipeWrite(pipe, &rp, sizeof(rp)) ||
-            (rp.cameraChars && !PipeWrite(pipe, meta.camera.data(), rp.cameraChars * sizeof(wchar_t))))
+            (rp.cameraChars && !PipeWrite(pipe, meta.camera.data(), rp.cameraChars * sizeof(wchar_t))) ||
+            (rp.aiChars && !PipeWrite(pipe, meta.ai.data(), rp.aiChars * sizeof(wchar_t))))
             break;
         if (rp.bytes) {
             Request take;

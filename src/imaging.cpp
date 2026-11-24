@@ -1,4 +1,5 @@
 #include "imaging.h"
+#include "core/aimeta.h"
 #include "svgimaging.h"
 #include "fileinput.h"
 #include "core/tga.h"
@@ -831,6 +832,51 @@ std::wstring PropString(const PROPVARIANT& v) {
 
 } // namespace
 
+// PNG: Textbloecke (tEXt, unkomprimiertes iTXt) mit Angaben zur Bilderzeugung; Bilddaten werden uebersprungen
+static void ReadPngAi(const std::wstring& path, MetaRow& m) {
+    ComPtr<IStream> in = OpenInputStream(path);
+    if (!in) return;
+    auto readAll = [&](void* buf, ULONG n) {
+        ULONG got = 0;
+        return SUCCEEDED(in->Read(buf, n, &got)) && got == n;
+    };
+    uint8_t sig[8];
+    if (!readAll(sig, 8) || sig[0] != 0x89 || sig[1] != 'P' || sig[2] != 'N' || sig[3] != 'G') return;
+    AiMeta ai;
+    uint64_t textBytes = 0;
+    for (int chunks = 0; chunks < 100000; ++chunks) {
+        uint8_t h[8];
+        if (!readAll(h, 8)) break;
+        const uint32_t len = (uint32_t(h[0]) << 24) | (uint32_t(h[1]) << 16) | (uint32_t(h[2]) << 8) | h[3];
+        if (len > 0x7FFFFFFFu) break;
+        const bool tEXt = memcmp(h + 4, "tEXt", 4) == 0, iTXt = memcmp(h + 4, "iTXt", 4) == 0;
+        if (memcmp(h + 4, "IEND", 4) == 0) break;
+        if ((tEXt || iTXt) && len <= (16u << 20) && textBytes + len <= (32u << 20)) {
+            std::string body(len, '\0');
+            if (len && !readAll(body.data(), len)) break;
+            textBytes += len;
+            size_t z = body.find('\0');
+            if (z != std::string::npos && z < 80) {
+                std::string key = body.substr(0, z);
+                if (tEXt) ParseAiText(key, std::string_view(body).substr(z + 1), ai);
+                else if (z + 2 < body.size() && body[z + 1] == 0) {   // iTXt ohne Kompression: Sprache\0 Schluessel\0 Text
+                    size_t lang = body.find('\0', z + 3);
+                    size_t tk = lang == std::string::npos ? std::string::npos : body.find('\0', lang + 1);
+                    if (tk != std::string::npos) ParseAiText(key, std::string_view(body).substr(tk + 1), ai);
+                }
+            }
+            LARGE_INTEGER crc;
+            crc.QuadPart = 4;
+            if (FAILED(in->Seek(crc, STREAM_SEEK_CUR, nullptr))) break;
+        } else {
+            LARGE_INTEGER skip;
+            skip.QuadPart = static_cast<LONGLONG>(len) + 4;
+            if (FAILED(in->Seek(skip, STREAM_SEEK_CUR, nullptr))) break;
+        }
+    }
+    m.ai = EncodeAi(ai);
+}
+
 bool ReadImageMeta(const std::wstring& path, MetaRow& m) {
     if (IsSvgPath(path)) {   // SVG: Groesse aus width/height bzw. viewBox
         float w = 0, h = 0;
@@ -950,6 +996,10 @@ bool ReadImageMeta(const std::wstring& path, MetaRow& m) {
             m.lat = ex.lat;
             m.lon = ex.lon;
         }
+    }
+    {
+        size_t dot = path.find_last_of(L'.');
+        if (dot != std::wstring::npos && _wcsicmp(path.c_str() + dot, L".png") == 0) ReadPngAi(path, m);
     }
     return true;
 }

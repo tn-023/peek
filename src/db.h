@@ -13,6 +13,7 @@ struct MetaRow {
     std::wstring camera;
     bool hasGeo = false;   // Aufnahmeort (Grad, Norden/Osten positiv)
     double lat = 0, lon = 0;
+    std::wstring ai;       // Bilderzeugung, kompakt (core/aimeta.h)
 };
 
 class Database {

@@ -416,6 +416,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
                 return;
             case HitType::ViewerCrop: StopSlideshow(true); EnterCrop(); return;
             case HitType::InfoGeo: GeoClick(static_cast<uint32_t>(h->a)); return;
+            case HitType::InfoStripMeta: StopSlideshow(true); RemoveMetadata(static_cast<uint32_t>(h->a)); return;
             case HitType::ViewerSlideshow:
                 if (viewer_.slide) StopSlideshow(true);
                 else StartSlideshow(false);
@@ -509,6 +510,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         case HitType::ViewCloud: SetViewMode(2); break;
         case HitType::SlideshowStart: StartSlideshow(true); break;
         case HitType::InfoGeo: GeoClick(static_cast<uint32_t>(a)); break;
+        case HitType::InfoStripMeta: RemoveMetadata(static_cast<uint32_t>(a)); break;
         case HitType::ViewTimeline: SetViewMode(3); break;
         case HitType::TimelineGroup: TimelineToggle(a); break;
         case HitType::TimelineScrub:

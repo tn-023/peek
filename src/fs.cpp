@@ -1,5 +1,6 @@
 #include "fs.h"
 #include "core/textutil.h"
+#include "core/aimeta.h"
 
 #include <cwctype>
 
@@ -121,6 +122,17 @@ std::wstring ParentPath(const std::wstring& path) {
     if (pos == 2 && p[1] == L':') return p.substr(0, 3);  // Laufwerkswurzel
     if (pos < 2) return {};
     return p.substr(0, pos);
+}
+
+void FileEntry::SetAi(const std::wstring& compact) {
+    aiPrompt.clear();
+    aiModels.clear();
+    aiLoras.clear();
+    if (compact.empty()) return;
+    AiMeta m = DecodeAi(compact);
+    aiPrompt = FoldForMatch(ToLower(m.prompt));
+    for (auto& x : m.models) aiModels += FoldForMatch(ToLower(x)) + L"\n";
+    for (auto& x : m.loras) aiLoras += FoldForMatch(ToLower(x)) + L"\n";
 }
 
 std::wstring FileNameOf(const std::wstring& path) {

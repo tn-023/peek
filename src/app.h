@@ -43,7 +43,7 @@ enum class HitType {
     SheetCancel, SheetCreate, SheetOrient, SheetColsMinus, SheetColsPlus, SheetRowsMinus, SheetRowsPlus, SheetNames,
     SheetExts, SheetQuality, SheetPrev, SheetNext, SheetHeadline, SheetCheck, SheetCell, SheetStripCheck, SheetStrip,
     BookmarkSheet,
-    SaveSearch, DeleteSearch,
+    SaveSearch, DeleteSearch, InfoStripMeta,
     DupSearch, DupCancel, DupDelete, DupCheck, DupThumb, DupScrollbar, DupSlider, DupZoomIn, DupZoomOut,
     AtlasCancel, AtlasCreate, AtlasColsMinus, AtlasColsPlus, AtlasRowsMinus, AtlasRowsPlus, AtlasTile,
     CompareMode, CompareClose
@@ -346,6 +346,9 @@ private:
     std::vector<std::vector<uint32_t>> dupRes_;   // Ergebnis des Threads (Indizes in dupIn_)
     uint64_t dupResGen_ = 0;
     std::vector<FileEntry> dupIn_;                // durchsuchte Bilder (Kopien, im UI-Thread)
+    // Metadaten entfernen (stripmeta.cpp)
+    bool CanStripMetadata(const FileEntry& e) const;
+    void RemoveMetadata(uint32_t index);
     // Gespeicherte Suchen (savedsearch.cpp)
     int forceRecursive_ = -1;             // Navigate: Unterordner wie gespeichert (-1 = wie sonst)
     int pendingSaved_ = -1;               // nach dem Einlesen: Filter dieser Suche anwenden

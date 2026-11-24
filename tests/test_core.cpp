@@ -9,6 +9,8 @@
 #include "core/tga.h"
 #include "core/heif.h"
 #include "core/phash.h"
+#include "core/aimeta.h"
+#include "core/metastrip.h"
 
 #include <algorithm>
 #include <random>
@@ -542,8 +544,153 @@ static void TestPHash() {
     CHECK(HasCopySuffix(L"IMG_1 - Kopie (3).jpg") && !HasCopySuffix(L"Urlaub (Italien).jpg") && !HasCopySuffix(L"(2).jpg"));
 }
 
+
+static void TestAiMeta() {
+    // ComfyUI: Umschalter, Verketten, LoRA-Kette, nicht angeschlossene Lader, Sprachmodell-Zweig aus
+    const char* comfy = R"({
+ "29": {"inputs": {"filename_prefix": "Krea2_turbo", "images": ["30:8", 0]}, "class_type": "SaveImage"},
+ "51": {"inputs": {"lora_name": "krea2_dotmatrix.safetensors", "strength_model": 1}, "class_type": "LoraLoader"},
+ "30:6": {"inputs": {"text": ["30:28", 0], "clip": ["30:11", 0]}, "class_type": "CLIPTextEncode"},
+ "30:10": {"inputs": {"unet_name": "krea2_turbo_fp8_scaled.safetensors"}, "class_type": "UNETLoader"},
+ "30:13": {"inputs": {"conditioning": ["30:6", 0]}, "class_type": "ConditioningZeroOut"},
+ "30:15": {"inputs": {"lora_name": "krea2_YFG-Aarchy.safetensors", "strength_model": 0.64, "model": ["30:10", 0]}, "class_type": "LoraLoaderModelOnly"},
+ "30:16": {"inputs": {"prompt": ["30:17", 0]}, "class_type": "TextGenerate"},
+ "30:17": {"inputs": {"string_a": ["30:18", 0], "string_b": ["30:19", 0], "delimiter": ""}, "class_type": "StringConcatenate"},
+ "30:18": {"inputs": {"value": "You are an expert prompt engineer."}, "class_type": "PrimitiveStringMultiline"},
+ "30:19": {"inputs": {"value": "A medical transporter space ship. Ärzte \"gold\""}, "class_type": "PrimitiveStringMultiline"},
+ "30:20": {"inputs": {"source": ["30:21", 0]}, "class_type": "PreviewAny"},
+ "30:21": {"inputs": {"switch": ["30:24", 0], "on_false": ["30:19", 0], "on_true": ["30:16", 0]}, "class_type": "ComfySwitchNode"},
+ "30:22": {"inputs": {"switch": ["30:23", 0], "on_false": ["30:10", 0], "on_true": ["30:15", 0]}, "class_type": "ComfySwitchNode"},
+ "30:23": {"inputs": {"value": true}, "class_type": "PrimitiveBoolean"},
+ "30:24": {"inputs": {"value": false}, "class_type": "PrimitiveBoolean"},
+ "30:27": {"inputs": {"string_a": ["30:20", 0], "string_b": "", "delimiter": ", "}, "class_type": "StringConcatenate"},
+ "30:28": {"inputs": {"switch": ["30:23", 0], "on_false": ["30:20", 0], "on_true": ["30:27", 0]}, "class_type": "ComfySwitchNode"},
+ "30:3": {"inputs": {"seed": 296298843030243, "steps": 4, "cfg": 1.0, "model": ["30:22", 0], "positive": ["30:6", 0], "negative": ["30:13", 0]}, "class_type": "KSampler"}
+})";
+    AiMeta m;
+    ParseAiText("prompt", comfy, m);
+    CHECK(m.prompt == L"A medical transporter space ship. Ärzte \"gold\"");
+    CHECK(m.models.size() == 1 && m.models[0] == L"krea2_turbo_fp8_scaled");
+    CHECK(m.loras.size() == 1 && m.loras[0] == L"krea2_YFG-Aarchy");
+    // Kompaktform hin und zurueck
+    AiMeta back = DecodeAi(EncodeAi(m));
+    CHECK(back.prompt == m.prompt && back.models == m.models && back.loras == m.loras);
+    CHECK(EncodeAi(AiMeta{}).empty() && DecodeAi(L"").Empty());
+
+    // Automatic1111
+    AiMeta a;
+    ParseAiText("parameters",
+                "a castle on a hill <lora:detail_tweaker:0.5>, sunset\nNegative prompt: blurry\n"
+                "Steps: 20, Sampler: DPM++ 2M, CFG scale: 7, Seed: 1, Model hash: abc, Model: dreamshaper_8, "
+                "Lora hashes: \"detail_tweaker: 1a2b, film_grain: 3c4d\", Version: v1.9",
+                a);
+    CHECK(a.prompt == L"a castle on a hill <lora:detail_tweaker:0.5>, sunset");
+    CHECK(a.models.size() == 1 && a.models[0] == L"dreamshaper_8");
+    CHECK(a.loras.size() == 2 && a.loras[0] == L"detail_tweaker" && a.loras[1] == L"film_grain");
+
+    // kaputtes JSON, fremde Schluessel
+    AiMeta z;
+    ParseAiText("prompt", "{\"1\": {\"inputs\": [", z);
+    ParseAiText("workflow", "{}", z);
+    ParseAiText("prompt", std::string(200, '['), z);
+    CHECK(z.Empty());
+    CHECK(ModelStem(L"models\\sdxl/juggernaut.SafeTensors") == L"juggernaut");
+
+    // Suche: prompt:, model:, lora:
+    Query q = ParseQuery(L"prompt:transporter model:krea2 lora:aarchy");
+    CHECK(q.prompts.size() == 1 && q.models.size() == 1 && q.loras.size() == 1 && q.terms.empty());
+    MatchInput in;
+    in.name = L"x.png";
+    std::wstring pl = L"a medical transporter", ml = L"krea2_turbo_fp8_scaled", ll = L"krea2_yfg-aarchy";
+    in.prompt = pl;
+    in.model = ml;
+    in.lora = ll;
+    CHECK(Matches(q, in));
+    CHECK(!Matches(ParseQuery(L"lora:dotmatrix"), in));
+    CHECK(!Matches(ParseQuery(L"transporter"), in));   // freie Begriffe suchen nicht im Prompt
+}
+
+static void TestMetaStrip() {
+    // JPEG: SOI, APP0 JFIF, APP1 EXIF (Drehung 6), APP13, COM, DQT, SOS + Daten, EOI, angehaengter Muell
+    std::vector<uint8_t> j = {0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x07, 'J', 'F', 'I', 'F', 0};
+    const uint8_t exif[] = {'E', 'x', 'i', 'f', 0, 0, 'I', 'I', 0x2A, 0, 8, 0, 0, 0, 1, 0, 0x12, 0x01, 3, 0, 1, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0};
+    j.push_back(0xFF); j.push_back(0xE1); j.push_back(0); j.push_back(sizeof(exif) + 2);
+    j.insert(j.end(), exif, exif + sizeof(exif));
+    for (int b : {0xFF, 0xED, 0x00, 0x06, int('P'), int('h'), int('o'), int('t')}) j.push_back(static_cast<uint8_t>(b));
+    for (int b : {0xFF, 0xFE, 0x00, 0x05, int('h'), int('i'), int('!')}) j.push_back(static_cast<uint8_t>(b));
+    for (int b : {0xFF, 0xDB, 0x00, 0x04, 0x00, 0x01}) j.push_back(static_cast<uint8_t>(b));
+    for (int b : {0xFF, 0xDA, 0x00, 0x03, 0x01, 0x12, 0xFF, 0x00, 0x34, 0xFF, 0xD0, 0x56, 0xFF, 0xD9, int('x'), int('y')}) j.push_back(static_cast<uint8_t>(b));
+    std::vector<uint8_t> o;
+    CHECK(StripMetadata(j.data(), j.size(), o));
+    auto has = [&](std::initializer_list<uint8_t> pat) {
+        std::vector<uint8_t> p(pat);
+        return std::search(o.begin(), o.end(), p.begin(), p.end()) != o.end();
+    };
+    CHECK(has({0xFF, 0xE0, 0x00, 0x07, 'J', 'F', 'I', 'F'}));
+    CHECK(!has({0xFF, 0xED}) && !has({0xFF, 0xFE}) && !has({'I', 'I', 0x2A}));
+    CHECK(has({0xFF, 0xDB, 0x00, 0x04, 0x00, 0x01}));
+    CHECK(has({0xFF, 0xDA, 0x00, 0x03, 0x01, 0x12, 0xFF, 0x00, 0x34, 0xFF, 0xD0, 0x56, 0xFF, 0xD9}));
+    CHECK(o.back() == 0xD9);   // angehaengte Daten entfernt
+    ExifInfo ex;
+    size_t off = 0, len = 0;
+    CHECK(JpegFindExif(o.data(), o.size(), off, len) && ExifParse(o.data() + off, len, ex) && ex.orientation == 6);
+    // nach JFIF eingefuegt
+    CHECK(o[2] == 0xFF && o[3] == 0xE0 && o[11] == 0xFF && o[12] == 0xE1);
+
+    // PNG: Textbloecke und Zeit weg, Farbprofil bleibt
+    auto chunk = [](std::vector<uint8_t>& v, const char* t, std::initializer_list<uint8_t> data) {
+        uint32_t n = static_cast<uint32_t>(data.size());
+        for (int k = 3; k >= 0; --k) v.push_back((n >> (8 * k)) & 255);
+        v.insert(v.end(), t, t + 4);
+        v.insert(v.end(), data.begin(), data.end());
+        for (int k = 0; k < 4; ++k) v.push_back(0xAA);   // Pruefsumme wird nur kopiert
+    };
+    std::vector<uint8_t> p = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+    chunk(p, "IHDR", {0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0});
+    chunk(p, "tEXt", {'p', 'r', 'o', 'm', 'p', 't', 0, '{', '}'});
+    chunk(p, "iCCP", {'x', 0, 0, 1});
+    chunk(p, "tIME", {7, 0xE8, 1, 1, 0, 0, 0});
+    chunk(p, "IDAT", {1, 2, 3});
+    chunk(p, "iTXt", {'a', 0, 0, 0, 0, 0, 'b'});
+    chunk(p, "IEND", {});
+    CHECK(StripMetadata(p.data(), p.size(), o));
+    CHECK(!has({'t', 'E', 'X', 't'}) && !has({'t', 'I', 'M', 'E'}) && !has({'i', 'T', 'X', 't'}));
+    CHECK(has({'i', 'C', 'C', 'P'}) && has({'I', 'D', 'A', 'T', 1, 2, 3}) && has({'I', 'E', 'N', 'D'}));
+    CHECK(o.size() == p.size() - (12 + 9) - (12 + 7) - (12 + 7));
+
+    // WebP: EXIF und XMP weg, Kennzeichen geloescht, Laenge stimmt
+    std::vector<uint8_t> w = {'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'E', 'B', 'P'};
+    auto wchunk = [&](const char* t, std::vector<uint8_t> data) {
+        w.insert(w.end(), t, t + 4);
+        uint32_t n = static_cast<uint32_t>(data.size());
+        for (int k = 0; k < 4; ++k) w.push_back((n >> (8 * k)) & 255);
+        w.insert(w.end(), data.begin(), data.end());
+        if (n & 1) w.push_back(0);
+    };
+    wchunk("VP8X", {0x2C, 0, 0, 0, 0, 0, 0, 0, 0, 0});   // ICC + EXIF + XMP
+    wchunk("ICCP", {1, 2, 3});
+    wchunk("VP8L", {9, 9, 9, 9});
+    wchunk("EXIF", {'I', 'I', 0x2A, 0, 8});
+    wchunk("XMP ", {'<', 'x', '>'});
+    uint32_t riff = static_cast<uint32_t>(w.size() - 8);
+    for (int k = 0; k < 4; ++k) w[4 + k] = (riff >> (8 * k)) & 255;
+    CHECK(StripMetadata(w.data(), w.size(), o));
+    CHECK(!has({'E', 'X', 'I', 'F'}) && !has({'X', 'M', 'P', ' '}) && has({'I', 'C', 'C', 'P', 3, 0, 0, 0, 1, 2, 3, 0}));
+    CHECK(o[20] == 0x20);
+    CHECK(o.size() - 8 == (uint32_t(o[4]) | (uint32_t(o[5]) << 8)));
+
+    // unbekannt bzw. kaputt
+    std::vector<uint8_t> bad = {0xFF, 0xD8, 0xFF, 0xE1, 0x7F, 0xFF, 1, 2};
+    CHECK(!StripMetadata(bad.data(), bad.size(), o) && o.empty());
+    const uint8_t gif[] = {'G', 'I', 'F', '8', '9', 'a'};
+    CHECK(!StripMetadata(gif, sizeof(gif), o));
+    CHECK(StripSupportedExt(L"jpeg") && !StripSupportedExt(L"heic"));
+}
+
 int main() {
     TestPHash();
+    TestAiMeta();
+    TestMetaStrip();
     TestHeif();
     TestAtlas();
     TestText();

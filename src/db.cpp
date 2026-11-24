@@ -165,6 +165,16 @@ bool Database::Open(const std::wstring& dir) {
             hasHash = static_cast<bool>(probe);
         }
         if (!hasHash) Exec(thumbs_, "ALTER TABLE thumbs ADD COLUMN phash TEXT;");
+        // Angaben zur Bilderzeugung (seit 1.6.9): Bilder einmal neu lesen
+        bool hasAi = false;
+        {
+            Stmt probe(meta_, "SELECT ai FROM files LIMIT 0;");
+            hasAi = static_cast<bool>(probe);
+        }
+        if (!hasAi) {
+            Exec(meta_, "ALTER TABLE files ADD COLUMN ai TEXT;");
+            Exec(meta_, "UPDATE files SET meta_ok=0 WHERE kind=1;");
+        }
     }
     for (sqlite3* db : {meta_, thumbs_}) {
         Exec(db, "CREATE TABLE IF NOT EXISTS info(key TEXT PRIMARY KEY, value TEXT);");
@@ -186,7 +196,7 @@ void Database::Close() {
 
 bool Database::GetMeta(const std::wstring& path, uint64_t size, int64_t mtime, MetaRow& out) {
     std::lock_guard<std::mutex> lock(metaMutex_);
-    Stmt st(meta_, "SELECT width, height, dur, taken, camera, geo FROM files "
+    Stmt st(meta_, "SELECT width, height, dur, taken, camera, geo, ai FROM files "
                    "WHERE path=?1 AND size=?2 AND mtime=?3 AND meta_ok=1;");
     if (!st) return false;
     st.TextA(1, crypto_.PathKey(path));
@@ -201,6 +211,7 @@ bool Database::GetMeta(const std::wstring& path, uint64_t size, int64_t mtime, M
     std::wstring geo;
     crypto_.FromToken(st.ColTextA(5), geo);
     GeoParse(geo, out.hasGeo, out.lat, out.lon);
+    crypto_.FromToken(st.ColTextA(6), out.ai);
     return true;
 }
 
@@ -220,11 +231,11 @@ void Database::PutMetaBatch(const std::vector<std::pair<FileEntry, MetaRow>>& ro
 void Database::PutFileLocked(const FileEntry& e, const MetaRow* m, int64_t seen) {
     Stmt st(meta_,
             "INSERT INTO files(path, size, mtime, ctime, kind, attrs, meta_ok, width, height, dur, taken,"
-            " camera, seen, geo) VALUES(?1,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)"
+            " camera, seen, geo, ai) VALUES(?1,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)"
             " ON CONFLICT(path) DO UPDATE SET size=excluded.size, mtime=excluded.mtime,"
             " ctime=excluded.ctime, kind=excluded.kind, attrs=excluded.attrs, meta_ok=excluded.meta_ok,"
             " width=excluded.width, height=excluded.height, dur=excluded.dur, taken=excluded.taken,"
-            " camera=excluded.camera, seen=MAX(files.seen, excluded.seen), geo=excluded.geo;");
+            " camera=excluded.camera, seen=MAX(files.seen, excluded.seen), geo=excluded.geo, ai=excluded.ai;");
     if (!st) return;
     st.TextA(1, crypto_.PathKey(e.path));
     st.Int(3, static_cast<int64_t>(e.size));
@@ -240,6 +251,7 @@ void Database::PutFileLocked(const FileEntry& e, const MetaRow* m, int64_t seen)
     st.TextA(13, m ? crypto_.Token(m->camera) : std::string());
     st.Int(14, seen);
     st.TextA(15, m && m->hasGeo ? crypto_.Token(GeoText(true, m->lat, m->lon)) : std::string());
+    st.TextA(16, m ? crypto_.Token(m->ai) : std::string());
     st.Step();
 }
 
@@ -405,7 +417,7 @@ std::vector<FileEntry> Database::LoadUnder(const std::wstring& root) {
     std::string lo, hi;
     RangeKeys(crypto_.PathKey(root), lo, hi);
     std::lock_guard<std::mutex> lock(metaMutex_);
-    Stmt st(meta_, "SELECT path, size, mtime, ctime, kind, attrs, meta_ok, width, height, dur, taken, camera, geo"
+    Stmt st(meta_, "SELECT path, size, mtime, ctime, kind, attrs, meta_ok, width, height, dur, taken, camera, geo, ai"
                    " FROM files WHERE path >= ?1 AND path < ?2;");
     if (!st) return out;
     st.TextA(1, lo);
@@ -429,6 +441,11 @@ std::vector<FileEntry> Database::LoadUnder(const std::wstring& root) {
             std::wstring geo;
             crypto_.FromToken(st.ColTextA(12), geo);
             GeoParse(geo, e.hasGeo, e.lat, e.lon);
+        }
+        {
+            std::wstring ai;
+            crypto_.FromToken(st.ColTextA(13), ai);
+            e.SetAi(ai);
         }
         e.cameraLower = FoldForMatch(ToLower(e.camera));
         e.nameLower = FoldForMatch(ToLower(e.name));

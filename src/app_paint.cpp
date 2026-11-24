@@ -2133,8 +2133,23 @@ void App::PaintInfoPanel(ID2D1DeviceContext* dc, const D2D1_RECT_F& rc, const st
     float y = rc.top + 16;
     IDWriteTextFormat* fl = r_.TextWrap(11.5f);
     IDWriteTextFormat* fv = r_.TextWrap(13);
+    // unten: "Metadaten entfernen" (ein Bild in einem Format, das sich verlustfrei bearbeiten laesst)
+    const bool strip = sel.size() == 1 && CanStripMetadata(entries_[sel.front()]);
+    const float limit = rc.bottom - (strip ? 64.0f : 30.0f);
+    if (strip) {
+        IDWriteTextFormat* bf = r_.Text(13);
+        std::wstring label = T(L"Metadaten entfernen");
+        float bw = std::min(w, r_.MeasureText(label, bf) + 50);
+        D2D1_RECT_F br = D2D1::RectF(x0, rc.bottom - 50, x0 + bw, rc.bottom - 16);
+        int bi = static_cast<int>(hits_.size());
+        hits_.push_back({br, HitType::InfoStripMeta, static_cast<int>(sel.front())});
+        FillRound(dc, br, 5, hoverHit_ == bi ? t.chipHover : t.chip);
+        wchar_t gd[2] = {0xE74D, 0};
+        DrawText(dc, gd, D2D1::RectF(br.left + 12, br.top, br.left + 30, br.bottom), r_.Icon(12), t.text2);
+        DrawText(dc, label, D2D1::RectF(br.left + 36, br.top, br.right - 8, br.bottom), bf, t.text);
+    }
     auto row = [&](const std::wstring& label, const std::wstring& value) {
-        if (value.empty() || y > rc.bottom - 30) return;
+        if (value.empty() || y > limit) return;
         y += r_.DrawWrapped(label, x0, y, w, fl, t.text3) + 2;
         y += r_.DrawWrapped(value, x0, y, w, fv, t.text) + 12;
     };
@@ -2174,7 +2189,7 @@ void App::PaintInfoPanel(ID2D1DeviceContext* dc, const D2D1_RECT_F& rc, const st
         row(T(L"Erstellt"), FormatDate(e.ctime));
         row(T(L"Kamera"), e.camera);
         PhotoDetailRows(e, row);
-        if (e.hasGeo && y <= rc.bottom - 30) {
+        if (e.hasGeo && y <= limit) {
             // Aufnahmeort: wie ein Link (Klick kopiert die Koordinaten oder oeffnet OpenStreetMap, siehe Einstellungen)
             y += r_.DrawWrapped(T(L"Aufnahmeort"), x0, y, w, fl, t.text3) + 2;
             std::wstring gv = GeoText(e);

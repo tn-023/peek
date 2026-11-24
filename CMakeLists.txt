@@ -33,6 +33,8 @@ add_library(peek_core STATIC
   src/core/tga.cpp
   src/core/heif.cpp
   src/core/phash.cpp
+  src/core/aimeta.cpp
+  src/core/metastrip.cpp
 )
 target_include_directories(peek_core PUBLIC src)
 target_compile_definitions(peek_core PUBLIC UNICODE _UNICODE NOMINMAX)
@@ -71,6 +73,7 @@ add_executable(peek WIN32
   src/timeline.cpp
   src/dup.cpp
   src/savedsearch.cpp
+  src/stripmeta.cpp
   src/rendercheck.cpp
   src/renderer.cpp
   src/fs.cpp
@@ -92,7 +95,7 @@ target_link_libraries(peek PRIVATE
   WebP::webp WebP::webpdecoder
   avif
   d3d11 dxgi d2d1 dwrite dcomp dwmapi
-  windowscodecs mfplat mfreadwrite mfuuid
+  windowscodecs mfplat mfreadwrite mfuuid comctl32
   shlwapi shell32 ole32 oleaut32 uuid
   user32 gdi32 advapi32 uxtheme
   runtimeobject shcore fontsub

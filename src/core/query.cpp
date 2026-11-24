@@ -20,7 +20,7 @@ bool NumCond::Test(double v) const {
 }
 
 bool Query::Empty() const {
-    return terms.empty() && excludes.empty() && wildcards.empty() && exts.empty() && cams.empty() &&
+    return terms.empty() && excludes.empty() && wildcards.empty() && exts.empty() && cams.empty() && prompts.empty() && models.empty() && loras.empty() &&
            !width.active() && !height.active() && !megapixel.active() && !size.active() &&
            !durationSec.active() && !date.active() && type < 0;
 }
@@ -182,6 +182,9 @@ Query ParseQuery(std::wstring_view text) {
             else if (key == L"taken" || key == L"captured" || key == L"aufgenommen" || key == L"aufnahme") ok = ParseDateCond(val, q.taken);
             else if (key == L"ext" || key == L"extension" || key == L"endung") SplitList(val, q.exts);
             else if (key == L"cam" || key == L"camera" || key == L"kamera") SplitList(val, q.cams);
+            else if (key == L"prompt") q.prompts.push_back(FoldForMatch(std::wstring(val)));
+            else if (key == L"model") SplitList(val, q.models);
+            else if (key == L"lora") SplitList(val, q.loras);
             else if (key == L"type" || key == L"typ") {
                 if (val == L"image" || val == L"images" || val == L"bild" || val == L"bilder") q.type = static_cast<int>(Kind::Image);
                 else if (val == L"video" || val == L"videos") q.type = static_cast<int>(Kind::Video);
@@ -225,6 +228,14 @@ bool Matches(const Query& q, const MatchInput& in) {
         for (auto& c : q.cams) if (Contains(in.camera, c)) { any = true; break; }
         if (!any) return false;
     }
+    for (auto& p : q.prompts)
+        if (!Contains(in.prompt, p)) return false;
+    auto anyOf = [](const std::vector<std::wstring>& want, std::wstring_view have) {
+        if (want.empty()) return true;
+        for (auto& w : want) if (Contains(have, w)) return true;
+        return false;
+    };
+    if (!anyOf(q.models, in.model) || !anyOf(q.loras, in.lora)) return false;
     if (q.width.active() && !q.width.Test(in.width)) return false;
     if (q.height.active() && !q.height.Test(in.height)) return false;
     if (q.megapixel.active() && !q.megapixel.Test(double(in.width) * in.height / 1e6)) return false;

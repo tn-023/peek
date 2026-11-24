@@ -410,6 +410,10 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             else CompareReset();
             return 0;
         }
+        if (dup_.open) {   // Doppelklick auf ein Vorschaubild: vergleichen; sonst wie ein zweiter Klick
+            DupMouseDown(X(lp), Y(lp), true);
+            return 0;
+        }
         // Doppelklick auf einen Button (Zoom, Blaettern, Umschalter …) wirkt wie zwei Klicks; nur Elemente,
         // Suchfeld und Spaltengriffe haben eine eigene Doppelklick-Funktion
         const Hit* h = HitAt(X(lp), Y(lp));
@@ -432,6 +436,8 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             if (GET_XBUTTON_WPARAM(wp) == XBUTTON1) CloseAtlas();
         } else if (compare_.open) {
             if (GET_XBUTTON_WPARAM(wp) == XBUTTON1) CloseCompare();
+        } else if (dup_.open) {
+            if (GET_XBUTTON_WPARAM(wp) == XBUTTON1) CloseDuplicates();
         } else if (settingsOpen_) {
             if (GET_XBUTTON_WPARAM(wp) == XBUTTON1) CloseSettings();   // Maus-Zurueck schliesst die Einstellungen
         } else if (viewer_.open) ViewerStep(GET_XBUTTON_WPARAM(wp) == XBUTTON1 ? -1 : 1);   // Bilder blaettern
@@ -465,6 +471,11 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             }
             if (atlas_.open || compare_.open) {
                 SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+                return TRUE;
+            }
+            if (dup_.open) {
+                const Hit* dh = HitAt(pt.x / s, pt.y / s);
+                SetCursor(LoadCursorW(nullptr, dh && dh->type == HitType::DupThumb ? IDC_HAND : IDC_ARROW));
                 return TRUE;
             }
             if (sheet_.open) {
@@ -603,6 +614,9 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_APP_RENAME:
         FinishRename(wp == 1);
         return 0;
+    case WM_APP_DUP:
+        OnDupMessage(wp);
+        return 0;
     case WM_APP_ATLAS:
         if (wp == 1) AtlasDone();
         else InvalidateRect(hwnd_, nullptr, FALSE);
@@ -631,6 +645,7 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         InvalidateRect(hwnd_, nullptr, FALSE);
         return TRUE;
     case WM_DESTROY: {
+        StopDupScan();   // laufende Duplikatsuche beenden
         if (sheetThread_.joinable()) {   // laufende PDF-Erstellung beenden
             sheet_.cancel = true;
             sheetThread_.join();
@@ -2336,7 +2351,7 @@ DWORD App::OnDragOver(const std::vector<std::wstring>& paths, POINT screen, DWOR
         }
         return DROPEFFECT_NONE;
     }
-    if (viewer_.open || settingsOpen_ || sheet_.open || atlas_.open || compare_.open || paths.empty()) return DROPEFFECT_NONE;
+    if (viewer_.open || settingsOpen_ || sheet_.open || atlas_.open || compare_.open || dup_.open || paths.empty()) return DROPEFFECT_NONE;
     POINT pt = screen;
     ScreenToClient(hwnd_, &pt);
     float x = pt.x / r_.scale(), y = pt.y / r_.scale();

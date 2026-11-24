@@ -41,6 +41,9 @@ public:
     // Vorschaubilder (JPEG)
     bool GetThumb(const std::wstring& path, uint64_t size, int64_t mtime, std::vector<uint8_t>& jpeg);
     bool HasThumb(const std::wstring& path, uint64_t size, int64_t mtime);
+    // Fingerabdruck des Vorschaubilds (Duplikatsuche); nur zusammen mit einem Vorschaubild gespeichert
+    bool GetHash(const std::wstring& path, uint64_t size, int64_t mtime, uint64_t& hash);
+    void PutHash(const std::wstring& path, uint64_t size, int64_t mtime, uint64_t hash);
     void PutThumb(const std::wstring& path, uint64_t size, int64_t mtime, const std::vector<uint8_t>& jpeg);
 
     // Einstellungen-Seite

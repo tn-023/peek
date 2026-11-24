@@ -1,4 +1,5 @@
 #include "indexer.h"
+#include "core/phash.h"
 #include "thumbs.h"
 #include "docimaging.h"
 #include "sandbox.h"
@@ -104,7 +105,10 @@ bool Indexer::IndexRoot(const std::wstring& root, int64_t stamp) {
             }
             if (!haveThumb && ok) {
                 std::vector<uint8_t> enc;
-                if (EncodeThumb(px, enc)) db_->PutThumb(e.path, e.size, e.mtime, enc);
+                if (EncodeThumb(px, enc)) {
+                    db_->PutThumb(e.path, e.size, e.mtime, enc);
+                    if (e.kind == Kind::Image) db_->PutHash(e.path, e.size, e.mtime, DHash(px.data.data(), px.w, px.h, size_t(px.w) * 4));
+                }
             }
             if (!haveMeta) batch.emplace_back(e, row);
             if (batch.size() >= 100) {

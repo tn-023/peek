@@ -8,8 +8,10 @@
 #include "core/svgcheck.h"
 #include "core/tga.h"
 #include "core/heif.h"
+#include "core/phash.h"
 
 #include <algorithm>
+#include <random>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -463,7 +465,85 @@ static void TestHeif() {
     }
 }
 
+// Duplikatsuche: Fingerabdruck und Gruppen
+static void TestPHash() {
+    // Verlauf mit Muster: Original, halbe Groesse und leicht aufgehellt muessen fast gleich sein
+    auto make = [](uint32_t w, uint32_t h, int bright, bool flip) {
+        std::vector<uint8_t> px(size_t(w) * h * 4);
+        for (uint32_t y = 0; y < h; ++y)
+            for (uint32_t x = 0; x < w; ++x) {
+                uint32_t xx = flip ? w - 1 - x : x;
+                int v = static_cast<int>((xx * 255) / w * 0.6 + ((y * 7 / h) % 2) * 80 + ((xx * 5 / w) % 2) * 50) + bright;
+                uint8_t c = static_cast<uint8_t>(std::clamp(v, 0, 255));
+                uint8_t* p = &px[(size_t(y) * w + x) * 4];
+                p[0] = c; p[1] = c; p[2] = c; p[3] = 255;
+            }
+        return px;
+    };
+    auto a = make(320, 240, 0, false), b = make(160, 120, 0, false), c = make(320, 240, 12, false), d = make(320, 240, 0, true);
+    uint64_t ha = DHash(a.data(), 320, 240, 320 * 4), hb = DHash(b.data(), 160, 120, 160 * 4);
+    uint64_t hc = DHash(c.data(), 320, 240, 320 * 4), hd = DHash(d.data(), 320, 240, 320 * 4);
+    CHECK(DHashUsable(ha));
+    CHECK(HammingDistance(ha, hb) <= 4);
+    CHECK(HammingDistance(ha, hc) <= 4);
+    CHECK(HammingDistance(ha, hd) > 12);   // gespiegelt: ein anderes Bild
+    std::vector<uint8_t> black(size_t(64) * 64 * 4, 0);
+    CHECK(!DHashUsable(DHash(black.data(), 64, 64, 64 * 4)));
+    CHECK(HammingDistance(0, ~uint64_t(0)) == 64);
+
+    // Kandidaten: zwei Paare, ein Einzelstueck, ein unbrauchbarer Wert
+    std::vector<uint64_t> hs = {ha, 0x0F0F0F0F12345678ull, hb, 0, 0x0F0F0F0F12345679ull, hd};
+    auto has = [](const std::vector<std::pair<uint32_t, uint32_t>>& v, uint32_t x, uint32_t y) {
+        return std::find(v.begin(), v.end(), std::make_pair(x, y)) != v.end();
+    };
+    auto pairs = CandidatePairs(hs, 4);
+    CHECK(has(pairs, 0, 2) && has(pairs, 1, 4));
+    CHECK(!has(pairs, 0, 5) && !has(pairs, 0, 3) && !has(pairs, 2, 3));
+    // Vergleich mit allen Paaren bei vielen Zufallswerten: dieselben Paare, jedes genau einmal
+    std::mt19937_64 rnd(3);
+    std::vector<uint64_t> many;
+    for (int i = 0; i < 400; ++i) {
+        uint64_t v = rnd();
+        many.push_back(v);
+        if (i % 5 == 0) many.push_back(v ^ (uint64_t(1) << (rnd() % 64)) ^ (uint64_t(1) << (rnd() % 64)));
+    }
+    for (int dist : {0, 3, 8}) {
+        auto fast = CandidatePairs(many, dist);
+        size_t expect = 0;
+        for (size_t i = 0; i < many.size(); ++i)
+            for (size_t j = i + 1; j < many.size(); ++j)
+                if (DHashUsable(many[i]) && DHashUsable(many[j]) && HammingDistance(many[i], many[j]) <= dist) {
+                    ++expect;
+                    CHECK(has(fast, static_cast<uint32_t>(i), static_cast<uint32_t>(j)));
+                }
+        CHECK(fast.size() == expect);
+    }
+
+    // genaue Pruefung: verkleinert gleich, aufgehellt oder gespiegelt nicht
+    uint8_t sa[kSmallRgbSize], sb[kSmallRgbSize], sc[kSmallRgbSize], sd[kSmallRgbSize];
+    SmallRgb(a.data(), 320, 240, 320 * 4, sa);
+    SmallRgb(b.data(), 160, 120, 160 * 4, sb);
+    SmallRgb(c.data(), 320, 240, 320 * 4, sc);
+    SmallRgb(d.data(), 320, 240, 320 * 4, sd);
+    CHECK(SmallRgbSame(sa, sb));
+    CHECK(!SmallRgbSame(sa, sc));
+    CHECK(!SmallRgbSame(sa, sd));
+    // eine kleine Stelle deutlich anders (Serienbild: etwas hat sich bewegt)
+    auto e = a;
+    for (uint32_t y = 20; y < 50; ++y)
+        for (uint32_t x = 20; x < 50; ++x)
+            for (int k = 0; k < 3; ++k) e[(size_t(y) * 320 + x) * 4 + k] = 255;
+    uint8_t se[kSmallRgbSize];
+    SmallRgb(e.data(), 320, 240, 320 * 4, se);
+    CHECK(!SmallRgbSame(sa, se));
+
+    CHECK(HasCopySuffix(L"IMG_1.jpg") == false);
+    CHECK(HasCopySuffix(L"IMG_1 - Kopie.jpg") && HasCopySuffix(L"IMG_1 (2).JPG") && HasCopySuffix(L"Copy of IMG_1.jpg"));
+    CHECK(HasCopySuffix(L"IMG_1 - Kopie (3).jpg") && !HasCopySuffix(L"Urlaub (Italien).jpg") && !HasCopySuffix(L"(2).jpg"));
+}
+
 int main() {
+    TestPHash();
     TestHeif();
     TestAtlas();
     TestText();

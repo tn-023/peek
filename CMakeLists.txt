@@ -32,6 +32,7 @@ add_library(peek_core STATIC
   src/core/svgcheck.cpp
   src/core/tga.cpp
   src/core/heif.cpp
+  src/core/phash.cpp
 )
 target_include_directories(peek_core PUBLIC src)
 target_compile_definitions(peek_core PUBLIC UNICODE _UNICODE NOMINMAX)
@@ -68,6 +69,7 @@ add_executable(peek WIN32
   src/atlas.cpp
   src/cloud.cpp
   src/timeline.cpp
+  src/dup.cpp
   src/rendercheck.cpp
   src/renderer.cpp
   src/fs.cpp

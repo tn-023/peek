@@ -158,6 +158,13 @@ bool Database::Open(const std::wstring& dir) {
             Exec(meta_, "ALTER TABLE files ADD COLUMN geo TEXT;");
             Exec(meta_, "UPDATE files SET meta_ok=0 WHERE kind=1;");
         }
+        // Fingerabdruck des Vorschaubilds fuer die Duplikatsuche (seit 1.6.9; verschluesselt wie alles andere)
+        bool hasHash = false;
+        {
+            Stmt probe(thumbs_, "SELECT phash FROM thumbs LIMIT 0;");
+            hasHash = static_cast<bool>(probe);
+        }
+        if (!hasHash) Exec(thumbs_, "ALTER TABLE thumbs ADD COLUMN phash TEXT;");
     }
     for (sqlite3* db : {meta_, thumbs_}) {
         Exec(db, "CREATE TABLE IF NOT EXISTS info(key TEXT PRIMARY KEY, value TEXT);");
@@ -458,6 +465,33 @@ bool Database::GetThumb(const std::wstring& path, uint64_t size, int64_t mtime, 
     int n = sqlite3_column_bytes(st.s, 0);
     if (!p || n <= 0) return false;
     return crypto_.Open(p, static_cast<size_t>(n), jpeg);
+}
+
+bool Database::GetHash(const std::wstring& path, uint64_t size, int64_t mtime, uint64_t& hash) {
+    std::lock_guard<std::mutex> lock(thumbMutex_);
+    Stmt st(thumbs_, "SELECT phash FROM thumbs WHERE path=?1 AND size=?2 AND mtime=?3;");
+    if (!st) return false;
+    st.TextA(1, crypto_.PathKey(path));
+    st.Int(2, static_cast<int64_t>(size));
+    st.Int(3, mtime);
+    if (st.Step() != SQLITE_ROW) return false;
+    std::wstring text;
+    if (!crypto_.FromToken(st.ColTextA(0), text) || text.size() != 16) return false;
+    hash = wcstoull(text.c_str(), nullptr, 16);
+    return true;
+}
+
+void Database::PutHash(const std::wstring& path, uint64_t size, int64_t mtime, uint64_t hash) {
+    std::lock_guard<std::mutex> lock(thumbMutex_);
+    wchar_t b[24];
+    swprintf_s(b, L"%016llx", static_cast<unsigned long long>(hash));
+    Stmt st(thumbs_, "UPDATE thumbs SET phash=?4 WHERE path=?1 AND size=?2 AND mtime=?3;");
+    if (!st) return;
+    st.TextA(1, crypto_.PathKey(path));
+    st.Int(2, static_cast<int64_t>(size));
+    st.Int(3, mtime);
+    st.TextA(4, crypto_.Token(b));
+    st.Step();
 }
 
 bool Database::HasThumb(const std::wstring& path, uint64_t size, int64_t mtime) {

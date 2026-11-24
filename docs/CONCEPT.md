@@ -315,6 +315,14 @@ Short forms still valid: w: h: mp: size: date: taken: ext: type: cam: dur:
 
 **Targets:** ≤ 50 ms for search + filters across 1 million files, ≤ 10 ms for pure filter changes.
 
+**Duplicate search:** the last entry of the search field dropdown, "Find duplicates", searches the images the view currently shows (folder, with subfolders, collection, all collections, search result, with active filters). Only visually identical images count: smaller, re-saved or converted copies and copies with other metadata, names or locations. Series shots, edited, cropped, mirrored or rotated versions do not.
+
+1. Candidates: a 64-bit difference hash (dHash, 9×8 luminance) of the thumbnail, stored encrypted in the thumbnail index; pairs with at most 8 differing bits are found by splitting the hash into 9 bit blocks (pigeonhole), so 100,000 images need no all-pairs comparison. Near-uniform images are ignored.
+2. Verification: same aspect ratio (±3 %) and a 16×16 colour downsample that matches almost exactly (mean difference ≤ 4/255, no cell more than 28/255 off).
+3. Groups via union-find. Cloud files that are not on the device are skipped; missing hashes are computed in a background thread from the stored thumbnail (otherwise via the sandboxed decoder).
+
+The result is its own view: one list with checkbox, thumbnail, name, size, modified, resolution, type and full location. Per group the best image (highest resolution, then larger file, then older file, then a name without a copy suffix) is first and unchecked, all others are pre-checked; the better values of a group are shown in bold. "Delete x duplicates" moves the checked files to the Recycle Bin and refuses to remove every image of a group. A double-click on a thumbnail opens the compare view with the best image on the left; ←/→ step through the rest of the group on the right.
+
 **Saved views:** combinations of folder, search and filters can be stored as a "view" in the sidebar (e.g. "videos > 1 GB").
 
 ## UI concept

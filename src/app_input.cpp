@@ -235,6 +235,7 @@ void App::OnMouseMove(float x, float y, WPARAM keys) {
     if (sheet_.open) { SheetMouseMove(x, y); return; }
     if (atlas_.open) { AtlasMouseMove(x, y); return; }
     if (compare_.open) { CompareMouseMove(x, y); return; }
+    if (dup_.open) { DupMouseMove(x, y); return; }
     if ((tl_.scrub || tl_.pan) && TimelineMouseMove(x, y)) return;
     if (autoScroll_) {
         autoMouseY_ = y;
@@ -394,6 +395,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
     if (sheet_.open) { SheetMouseDown(x, y); return; }
     if (atlas_.open) { AtlasMouseDown(x, y); return; }
     if (compare_.open) { CompareMouseDown(x, y); return; }
+    if (dup_.open) { DupMouseDown(x, y, false); return; }
     if (viewer_.open) {
         if (const Hit* h = HitAt(x, y)) {
             switch (h->type) {
@@ -572,6 +574,9 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
             searchFocus_ = true;
             break;
         }
+        case HitType::DupSearch:
+            OpenDuplicates();
+            return;
         case HitType::SearchHistClear:
             settings_.searchHistory.clear();
             settings_.Save();
@@ -761,6 +766,7 @@ void App::OnLButtonUp(float x, float y) {
     if (sheet_.open) { SheetMouseUp(); return; }
     if (atlas_.open) return;
     if (compare_.open) { CompareMouseUp(); return; }
+    if (dup_.open) return;
     if (TimelineMouseUp()) return;
     if (cloud_.down && !viewer_.open) {
         CloudMouseUp(x, y);
@@ -911,6 +917,7 @@ void App::OnDoubleClick(float x, float y) {
 void App::OnRButtonUp(float x, float y) {
     if (sheet_.open || atlas_.open) return;
     if (settingsOpen_) return;
+    if (dup_.open && !compare_.open) return;
     POINT screen;
     GetCursorPos(&screen);
     if (compare_.open) {
@@ -979,6 +986,7 @@ void App::OnWheel(float x, float y, int delta, WPARAM keys) {
     if (renameHost_) FinishRename(true);   // beim Blaettern wuerde das Eingabefeld nicht mehr ueber dem Namen stehen
     if (sheet_.open) { SheetWheel(x, y, delta); return; }
     if (atlas_.open) return;
+    if (!compare_.open && dup_.open) { DupWheel(delta); return; }
     if (compare_.open) {   // synchron zoomen, Punkt unter dem Mauszeiger bleibt stehen
         CompareZoom(x, y, std::pow(1.15f, delta / 120.0f));
         return;
@@ -1053,6 +1061,7 @@ bool App::OnKeyDown(WPARAM vk) {
     if (sheet_.open) return SheetKey(vk);
     if (atlas_.open) return AtlasKey(vk);
     if (compare_.open) return CompareKey(vk);
+    if (dup_.open) return DupKey(vk);
 
     if (settingsOpen_) {
         if (vk == VK_ESCAPE || vk == VK_BACK || (alt && vk == VK_LEFT)) CloseSettings();
@@ -1314,7 +1323,7 @@ bool App::OnKeyDown(WPARAM vk) {
 
 void App::OnChar(wchar_t c) {
     if (sheet_.open) { SheetChar(c); return; }
-    if (atlas_.open || compare_.open) return;
+    if (atlas_.open || compare_.open || dup_.open) return;
     if (viewer_.open || settingsOpen_) return;
     if (c == 8) {
         if (searchFocus_ && searchSelAll_) { EditSearch(L"", 0); return; }

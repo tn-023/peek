@@ -3,6 +3,7 @@
 
 #include <cstdio>
 #include <cwchar>
+#include <cwctype>
 
 namespace peek {
 
@@ -143,6 +144,32 @@ std::wstring FormatDuration(uint32_t ms) {
     if (s >= 3600) std::swprintf(buf, 32, L"%u:%02u:%02u", s / 3600, (s / 60) % 60, s % 60);
     else std::swprintf(buf, 32, L"%u:%02u", s / 60, s % 60);
     return buf;
+}
+
+// Name mit Kopie-Zusatz ("Bild - Kopie.jpg", "Bild (2).jpg", "Copy of Bild.jpg" …)
+bool HasCopySuffix(const std::wstring& name) {
+    std::wstring s = name;
+    size_t dot = s.find_last_of(L'.');
+    if (dot != std::wstring::npos && dot > 0) s.resize(dot);
+    for (auto& ch : s) ch = static_cast<wchar_t>(std::towlower(ch));
+    auto ends = [&](const wchar_t* suf) {
+        size_t n = wcslen(suf);
+        return s.size() >= n && s.compare(s.size() - n, n, suf) == 0;
+    };
+    auto starts = [&](const wchar_t* pre) { return s.rfind(pre, 0) == 0; };
+    if (ends(L" - kopie") || ends(L" - copy") || ends(L"_kopie") || ends(L"_copy") || ends(L" kopie") || ends(L" copy") ||
+        starts(L"kopie von ") || starts(L"copy of "))
+        return true;
+    // " (2)" oder " - Kopie (2)"
+    if (!s.empty() && s.back() == L')') {
+        size_t open = s.find_last_of(L'(');
+        if (open != std::wstring::npos && open > 0 && open + 2 < s.size() && s[open - 1] == L' ') {
+            bool digits = true;
+            for (size_t i = open + 1; i + 1 < s.size(); ++i) digits = digits && std::iswdigit(s[i]);
+            if (digits) return true;
+        }
+    }
+    return false;
 }
 
 } // namespace peek

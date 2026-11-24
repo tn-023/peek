@@ -17,13 +17,21 @@ constexpr float kBarH = 52;
 
 void App::OpenCompare(const std::vector<std::wstring>& paths) {
     if (paths.size() != 2) return;
+    auto a = byPath_.find(paths[0]), b = byPath_.find(paths[1]);
+    if (a == byPath_.end() || b == byPath_.end()) return;
+    const FileEntry ea = entries_[a->second], eb = entries_[b->second];
+    OpenCompareEntries(ea, eb);
+}
+
+void App::OpenCompareEntries(const FileEntry& ea, const FileEntry& eb) {
     auto& c = compare_;
+    c.group.clear();
+    c.groupPos = -1;
     for (int i = 0; i < 2; ++i) {
-        c.path[i] = paths[i];
-        auto it = byPath_.find(paths[i]);
-        if (it == byPath_.end()) return;
-        const FileEntry& e = entries_[it->second];
+        const FileEntry& e = i == 0 ? ea : eb;
+        c.path[i] = e.path;
         c.name[i] = e.name;
+        c.info[i].clear();
         EnsureThumb(e, 0, frame_);
         if (!fullBmps_.count(e.path)) {   // volle Aufloesung laden
             fullBmps_[e.path].requested = true;
@@ -61,6 +69,8 @@ void App::CloseCompare() {
     auto& c = compare_;
     if (!c.open) return;
     c.open = false;
+    c.group.clear();
+    c.groupPos = -1;
     if (!viewer_.open)
         for (auto& p : c.path) fullBmps_.erase(p);
     if (c.ownFullscreen && fullscreen_) ToggleFullscreen();
@@ -258,6 +268,10 @@ bool App::CompareKey(WPARAM vk) {
         ShowCompareMenu(W_ / 4, H_ / 2, pt);
         return true;
     }
+    case VK_LEFT:
+    case VK_RIGHT:   // aus der Duplikatsuche: rechts durch die Gruppe blaettern
+        if (!c.group.empty()) CompareStepGroup(vk == VK_LEFT ? -1 : 1);
+        return true;
     case VK_TAB:
     case 'M':
         c.mode = 1 - c.mode;
@@ -326,6 +340,7 @@ void App::ShowCompareMenu(float x, float y, POINT screen) {
     case 6:   // Bild loeschen: Vergleich endet
         if (RecycleFiles(hwnd_, {e.path})) {
             CloseCompare();
+            DupForget({e.path});   // aus der Duplikatsuche geoeffnet: dort ebenfalls entfernen
             QuietReload();
         }
         break;

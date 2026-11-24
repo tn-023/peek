@@ -34,6 +34,8 @@ void CivilFromDays(int64_t z, int& y, unsigned& m, unsigned& d);
 
 // Formatierung
 std::wstring FormatSize(uint64_t bytes);
+// Dateiname mit Kopie-Zusatz ("Bild - Kopie.jpg", "Bild (2).jpg", "Copy of Bild.jpg" …)
+bool HasCopySuffix(const std::wstring& name);
 std::wstring FormatDuration(uint32_t ms);
 
 } // namespace peek

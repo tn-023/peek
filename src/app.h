@@ -13,6 +13,9 @@
 #include "thumbs.h"
 #include "pdfsheet.h"
 #include "atlaswriter.h"
+#include <atomic>
+#include <mutex>
+#include <thread>
 #include <deque>
 #include <map>
 #include <tuple>
@@ -40,6 +43,7 @@ enum class HitType {
     SheetCancel, SheetCreate, SheetOrient, SheetColsMinus, SheetColsPlus, SheetRowsMinus, SheetRowsPlus, SheetNames,
     SheetExts, SheetQuality, SheetPrev, SheetNext, SheetHeadline, SheetCheck, SheetCell, SheetStripCheck, SheetStrip,
     BookmarkSheet,
+    DupSearch, DupCancel, DupDelete, DupCheck, DupThumb,
     AtlasCancel, AtlasCreate, AtlasColsMinus, AtlasColsPlus, AtlasRowsMinus, AtlasRowsPlus, AtlasTile,
     CompareMode, CompareClose
 };
@@ -318,6 +322,40 @@ private:
         std::wstring error, savedPath;
     } atlas_;
     std::thread atlasThread_;
+    // Duplikatsuche (dup.cpp): eigene Ansicht mit einer Liste visuell identischer Bilder
+    struct DupState {
+        bool open = false, busy = false;
+        std::wstring title;                       // "Duplikate in „Reise“ mit Unterordnern"
+        struct Item { FileEntry e; bool checked = false; };
+        std::vector<std::vector<Item>> groups;    // je Gruppe das beste Bild zuerst
+        float scroll = 0;
+        std::wstring toast;
+        DWORD toastUntil = 0;
+        wchar_t toastGlyph = 0xE74D;
+    } dup_;
+    struct DupInput { std::wstring path; uint64_t size; int64_t mtime; };
+    std::thread dupThread_;
+    std::atomic<uint64_t> dupGen_{0};
+    std::atomic<int> dupDone_{0}, dupTotal_{0};
+    std::mutex dupMutex_;
+    std::vector<std::vector<uint32_t>> dupRes_;   // Ergebnis des Threads (Indizes in dupIn_)
+    uint64_t dupResGen_ = 0;
+    std::vector<FileEntry> dupIn_;                // durchsuchte Bilder (Kopien, im UI-Thread)
+    void OpenDuplicates();
+    void CloseDuplicates();
+    void StopDupScan();
+    void DupWorker(std::vector<DupInput> items, uint64_t gen, HWND hwnd);
+    void OnDupMessage(WPARAM wp);
+    void PaintDup(ID2D1DeviceContext* dc);
+    float DupContentH() const;
+    void DupMouseDown(float x, float y, bool dbl);
+    void DupMouseMove(float x, float y);
+    void DupWheel(int delta);
+    bool DupKey(WPARAM vk);
+    void DupDelete();
+    void DupForget(const std::vector<std::wstring>& paths);
+    void DupCompare(int g, int i);
+    void CompareStepGroup(int dir);
     void OpenAtlas(const std::wstring& folder);
     void CloseAtlas();
     void PaintAtlas(ID2D1DeviceContext* dc);
@@ -555,8 +593,11 @@ private:
         D2D1_POINT_2F last{};
         double tick = 0;
         bool ownFullscreen = false;
+        std::vector<FileEntry> group;       // aus der Duplikatsuche: rechts durch die Gruppe blaettern (links das beste)
+        int groupPos = -1;
     } compare_;
     void OpenCompare(const std::vector<std::wstring>& paths);
+    void OpenCompareEntries(const FileEntry& a, const FileEntry& b);
     void CloseCompare();
     D2D1_RECT_F ComparePane(int i) const;
     void PaintCompare(ID2D1DeviceContext* dc);
@@ -941,5 +982,6 @@ constexpr UINT WM_APP_FILEOP = WM_APP + 20;
 constexpr UINT WM_APP_SHEET = WM_APP + 21;   // Fortschritt/Ende der PDF-Erstellung (Kontaktabzug)
 constexpr UINT WM_APP_ATLAS = WM_APP + 22;   // Fortschritt/Ende der Kacheltextur
 constexpr UINT WM_APP_RENAME = WM_APP + 23;  // Umbenennen beendet (wParam 1 = uebernehmen)
+constexpr UINT WM_APP_DUP = WM_APP + 24;     // Duplikatsuche: Fortschritt (0) bzw. Ergebnis (1)
 
 } // namespace peek

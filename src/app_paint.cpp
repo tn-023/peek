@@ -738,6 +738,8 @@ void App::Paint() {
 
     if (compare_.open) {
         PaintCompare(dc);
+    } else if (dup_.open) {
+        PaintDup(dc);
     } else if (viewer_.open) {
         PaintViewer(dc);
     } else if (viewerStart_) {
@@ -1199,7 +1201,7 @@ void App::PaintSearchHistory(ID2D1DeviceContext* dc) {
         px += w + 6;
     }
     float pillsBottom = py + ph + 10;
-    float listH = h.empty() ? 0 : 8 + rowH * (h.size() + 1) + 9;
+    float listH = (h.empty() ? 0 : 8 + rowH * (h.size() + 1) + 9) + 4 + rowH + 6;   // ganz unten: Duplikate suchen
     D2D1_RECT_F rc = D2D1::RectF(left, searchRc_.bottom + 4, left + width, pillsBottom + listH);
     histRc_ = rc;
     // Hereinschieben: von oben unter dem Suchfeld hervor (begrenzt auf den Bereich darunter)
@@ -1230,6 +1232,18 @@ void App::PaintSearchHistory(ID2D1DeviceContext* dc) {
         FillRound(dc, pills[i], ph / 2, bg);
         DrawText(dc, params[i].label, pills[i], r_.Text(12.5f, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER),
                  D2D1::ColorF(1, 1, 1, 1));
+    }
+    // ganz unten: Duplikate suchen (in dem, was die Ansicht gerade zeigt)
+    {
+        D2D1_RECT_F dr = D2D1::RectF(rc.left + 4, rc.bottom - 6 - rowH, rc.right - 4, rc.bottom - 6);
+        dc->DrawLine(D2D1::Point2F(rc.left + 10, dr.top - 3), D2D1::Point2F(rc.right - 10, dr.top - 3),
+                     r_.Brush(D2D1::ColorF(1, 1, 1, 0.08f)), 1.0f);
+        int dIdx = static_cast<int>(hits_.size());
+        hits_.push_back({dr, HitType::DupSearch, 0});
+        if (hoverHit_ == dIdx) dc->FillRoundedRectangle(D2D1::RoundedRect(dr, 4, 4), r_.Brush(D2D1::ColorF(1, 1, 1, 0.08f)));
+        wchar_t gc[2] = {0xE8C8, 0};
+        DrawText(dc, gc, D2D1::RectF(dr.left + 6, dr.top, dr.left + 28, dr.bottom), r_.Icon(12), dim);
+        DrawText(dc, T(L"Duplikate suchen"), D2D1::RectF(dr.left + 34, dr.top, dr.right, dr.bottom), f, white);
     }
     if (h.empty()) return;
     dc->DrawLine(D2D1::Point2F(rc.left + 10, pillsBottom - 2), D2D1::Point2F(rc.right - 10, pillsBottom - 2),
@@ -3527,6 +3541,200 @@ void App::PaintAtlas(ID2D1DeviceContext* dc) {
                              Thousands(static_cast<uint64_t>(a.hover / cols) * a.info.h);
         DrawText(dc, label, D2D1::RectF(16, H_ - 40, W_ - 16, H_ - 8),
                  r_.Text(12.5f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER), t.text2);
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// Duplikatsuche: Liste der Gruppen (Logik in dup.cpp)
+// ---------------------------------------------------------------------------
+
+namespace {
+constexpr float kDupToolH = 60, kDupHeadH = 30, kDupGroupH = 38, kDupRowH = 56;
+}
+
+float App::DupContentH() const {
+    float h = 8;
+    for (auto& g : dup_.groups) h += kDupGroupH + kDupRowH * g.size();
+    return h + 16;
+}
+
+void App::PaintDup(ID2D1DeviceContext* dc) {
+    Theme t = MakeTheme(dark_, backdrop_);
+    auto& d = dup_;
+    dc->FillRectangle(D2D1::RectF(0, 0, W_, H_), r_.Brush(WithAlpha(t.layer, backdrop_ ? 0.55f : 1.0f)));
+    const float listTop = kDupToolH + kDupHeadH;
+
+    // --- Kopfzeile: Ort, Auswahl und Groesse, Buttons
+    size_t nSel = 0;
+    uint64_t bytes = 0;
+    for (auto& g : d.groups)
+        for (auto& it : g)
+            if (it.checked) { ++nSel; bytes += it.e.size; }
+    dc->FillRectangle(D2D1::RectF(0, 0, W_, kDupToolH), r_.Brush(t.status));
+    IDWriteTextFormat* bf = r_.Text(13.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+    auto button = [&](HitType type, const std::wstring& label, wchar_t glyph, float right, bool danger, bool enabled) {
+        float w = r_.MeasureText(label, bf) + (glyph ? 54 : 36);
+        D2D1_RECT_F rc = D2D1::RectF(right - w, 12, right, kDupToolH - 12);
+        int idx = static_cast<int>(hits_.size());
+        if (enabled) hits_.push_back({rc, type, 0});
+        D2D1_COLOR_F bg = danger && enabled ? t.danger : (hoverHit_ == idx ? t.chipHover : t.chip);
+        if (danger && enabled && hoverHit_ == idx)
+            bg = D2D1::ColorF(std::min(1.0f, bg.r * 1.12f + 0.04f), std::min(1.0f, bg.g * 1.12f + 0.04f),
+                              std::min(1.0f, bg.b * 1.12f + 0.04f), 1);
+        FillRound(dc, rc, 5, bg);
+        D2D1_COLOR_F fg = !enabled ? t.text3 : (danger ? D2D1::ColorF(1, 1, 1, 1) : t.text);
+        D2D1_RECT_F lr = rc;
+        if (glyph) {
+            wchar_t gl[2] = {glyph, 0};
+            DrawText(dc, gl, D2D1::RectF(rc.left + 14, rc.top, rc.left + 32, rc.bottom), r_.Icon(13), fg);
+            lr.left += 22;
+        }
+        DrawText(dc, label, lr, bf, fg);
+        return rc.left;
+    };
+    float rx = W_ - 16;
+    if (!d.busy && !d.groups.empty()) {
+        std::wstring dl = nSel == 1 ? T(L"1 Duplikat löschen") : TF(L"{0} Duplikate löschen", {Thousands(nSel)});
+        rx = button(HitType::DupDelete, dl, 0xE74D, rx, true, nSel > 0) - 8;
+    }
+    rx = button(HitType::DupCancel, T(L"Abbrechen"), 0, rx, false, true) - 16;
+    std::wstring head = d.title;
+    if (!d.busy && !d.groups.empty())
+        head += L"  ·  " + TF(L"{0} ausgewählt, {1}", {Thousands(nSel), FormatSize(bytes)});
+    IDWriteTextFormat* hf = r_.Text(18, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    DrawText(dc, MiddleEllipsis(head, std::max(10.0f, rx - 20), [&](const std::wstring& s2) { return r_.MeasureText(s2, hf); }),
+             D2D1::RectF(20, 0, std::max(20.0f, rx), kDupToolH), hf, t.text);
+
+    // --- Spalten: Kaestchen, Vorschaubild, Name, Groesse, Geaendert, Aufloesung, Typ, Speicherort
+    const float xCheck = 20, xThumb = 52, xName = 124;
+    const float wSize = 96, wDate = 146, wRes = 116, wType = 76;
+    float rest = std::max(200.0f, W_ - 16 - xName - (wSize + wDate + wRes + wType));
+    float wName = std::max(140.0f, rest * 0.36f), wPath = std::max(60.0f, rest - wName);
+    const float xSize = xName + wName, xDate = xSize + wSize, xRes = xDate + wDate, xType = xRes + wRes, xPath = xType + wType;
+    (void)wPath;
+    IDWriteTextFormat* fh = r_.Text(12, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    D2D1_RECT_F hr = D2D1::RectF(0, kDupToolH, W_, listTop);
+    dc->DrawLine(D2D1::Point2F(0, hr.bottom - 0.5f), D2D1::Point2F(W_, hr.bottom - 0.5f), r_.Brush(t.stroke), 1.0f);
+    auto head2 = [&](const wchar_t* s2, float x0, float x1) { DrawText(dc, T(s2), D2D1::RectF(x0 + 8, hr.top, x1 - 8, hr.bottom), fh, t.text2); };
+    head2(N_(L"Name"), xName, xSize);
+    head2(N_(L"Größe"), xSize, xDate);
+    head2(N_(L"Geändert"), xDate, xRes);
+    head2(N_(L"Auflösung"), xRes, xType);
+    head2(N_(L"Typ"), xType, xPath);
+    head2(N_(L"Speicherort"), xPath, W_ - 16);
+
+    D2D1_RECT_F area = D2D1::RectF(0, listTop, W_, H_);
+    dc->PushAxisAlignedClip(area, D2D1_ANTIALIAS_MODE_ALIASED);
+    hits_.push_back({area, HitType::None, 0});
+    if (d.busy) {
+        int done = dupDone_.load(), total = std::max(1, dupTotal_.load());
+        float cx = W_ / 2, cy = listTop + std::max(80.0f, (H_ - listTop) / 2 - 30);
+        DrawText(dc, T(L"Bilder werden verglichen …"), D2D1::RectF(cx - 300, cy - 40, cx + 300, cy - 8),
+                 r_.Text(15, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER), t.text);
+        D2D1_RECT_F bar = D2D1::RectF(cx - 160, cy, cx + 160, cy + 6);
+        FillRound(dc, bar, 3, t.chip);
+        FillRound(dc, D2D1::RectF(bar.left, bar.top, bar.left + 320.0f * std::min(done, total) / total, bar.bottom), 3, accent_);
+        DrawText(dc, TF(L"{0} von {1}", {Thousands(std::min(done, total)), Thousands(total)}), D2D1::RectF(cx - 300, cy + 12, cx + 300, cy + 36),
+                 r_.Text(12.5f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER), t.text2);
+    } else if (d.groups.empty()) {
+        DrawText(dc, T(L"Keine Duplikate gefunden"), D2D1::RectF(20, listTop + 60, W_ - 20, listTop + 100),
+                 r_.Text(15, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER), t.text2);
+    } else {
+        const float maxS = std::max(0.0f, DupContentH() - (H_ - listTop));
+        d.scroll = std::clamp(d.scroll, 0.0f, maxS);
+        IDWriteTextFormat* fn = r_.Text(13);
+        IDWriteTextFormat* fv = r_.Text(12.5f);
+        IDWriteTextFormat* fb = r_.Text(12.5f, DWRITE_FONT_WEIGHT_BOLD);
+        IDWriteTextFormat* fg = r_.Text(13, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        float y = listTop + 8 - d.scroll;
+        for (size_t gi = 0; gi < d.groups.size(); ++gi) {
+            auto& g = d.groups[gi];
+            const float gh = kDupGroupH + kDupRowH * g.size();
+            if (y + gh < listTop) { y += gh; continue; }
+            if (y > H_) break;
+            // Gruppenkopf: nur die Anzahl der Bilder
+            if (gi > 0) dc->DrawLine(D2D1::Point2F(16, y + 0.5f), D2D1::Point2F(W_ - 16, y + 0.5f), r_.Brush(t.stroke), 1.0f);
+            DrawText(dc, TF(L"{0} Bilder", {Thousands(g.size())}), D2D1::RectF(xCheck, y + 8, W_ - 16, y + kDupGroupH), fg, t.text2);
+            y += kDupGroupH;
+            // bessere Werte der Gruppe (fett, wenn sich die Bilder darin unterscheiden)
+            uint64_t maxSize = 0, minSize = UINT64_MAX, maxPx = 0, minPx = UINT64_MAX;
+            int64_t minTime = INT64_MAX, maxTime = INT64_MIN;
+            for (auto& it : g) {
+                uint64_t px = uint64_t(it.e.width) * it.e.height;
+                maxSize = std::max(maxSize, it.e.size);
+                minSize = std::min(minSize, it.e.size);
+                maxPx = std::max(maxPx, px);
+                minPx = std::min(minPx, px);
+                minTime = std::min(minTime, it.e.mtime);
+                maxTime = std::max(maxTime, it.e.mtime);
+            }
+            for (size_t ii = 0; ii < g.size(); ++ii) {
+                auto& it = g[ii];
+                const FileEntry& e = it.e;
+                D2D1_RECT_F row = D2D1::RectF(8, y, W_ - 8, y + kDupRowH);
+                if (row.bottom >= listTop && row.top <= H_) {
+                    const int code = static_cast<int>(gi << 16 | ii);
+                    int rIdx = static_cast<int>(hits_.size());
+                    hits_.push_back({row, HitType::DupCheck, code});
+                    D2D1_RECT_F tb = D2D1::RectF(xThumb, y + 6, xThumb + 60, y + 50);
+                    int tIdx = static_cast<int>(hits_.size());
+                    hits_.push_back({tb, HitType::DupThumb, code});
+                    if (hoverHit_ == rIdx || hoverHit_ == tIdx) FillRound(dc, row, 4, t.hover);
+                    D2D1_RECT_F cb = D2D1::RectF(xCheck, std::round(y + kDupRowH / 2 - 8), xCheck + 16, std::round(y + kDupRowH / 2 + 8));
+                    PaintCheck(dc, cb, it.checked ? 1 : 0, hoverHit_ == rIdx);
+                    // Vorschaubild
+                    FillRound(dc, tb, 3, t.chip);
+                    Bmp* b = nullptr;
+                    EnsureThumb(e, 0, frame_);
+                    auto bi = bmps_.find(e.path);
+                    if (bi != bmps_.end() && bi->second.bmp) b = &bi->second;
+                    if (!b) {
+                        EnsureIcon(e, 0);
+                        b = &bmps_[IconKey(e)];
+                    }
+                    DrawBitmapFit(dc, b, tb, 2.0f);
+                    const float ty0 = y, ty1 = y + kDupRowH;
+                    auto cell = [&](const std::wstring& v, float x0, float x1, bool bold, bool main) {
+                        if (v.empty() || x1 - x0 < 20) return;
+                        IDWriteTextFormat* f = main ? fn : (bold ? fb : fv);
+                        std::wstring s2 = MiddleEllipsis(v, x1 - x0 - 16, [&](const std::wstring& q) { return r_.MeasureText(q, f); });
+                        DrawText(dc, s2, D2D1::RectF(x0 + 8, ty0, x1 - 8, ty1), f, main || bold ? t.text : t.text2);
+                    };
+                    const uint64_t px = uint64_t(e.width) * e.height;
+                    cell(e.name, xName, xSize, false, true);
+                    cell(FormatSize(e.size), xSize, xDate, maxSize != minSize && e.size == maxSize, false);
+                    cell(FormatDate(e.mtime), xDate, xRes, minTime != maxTime && e.mtime == minTime, false);
+                    cell(px ? std::to_wstring(e.width) + L" × " + std::to_wstring(e.height) : std::wstring(), xRes, xType,
+                         maxPx != minPx && px == maxPx, false);
+                    cell(TypeName(e), xType, xPath, false, false);
+                    size_t sl = e.path.find_last_of(L"\\/");
+                    cell(sl == std::wstring::npos ? e.path : e.path.substr(0, sl), xPath, W_ - 16, false, false);
+                }
+                y += kDupRowH;
+            }
+        }
+        // Bildlaufleiste
+        const float viewH = H_ - listTop, contentH = DupContentH();
+        if (contentH > viewH) {
+            float trackH = viewH - 8;
+            float thumbH = std::max(32.0f, trackH * viewH / contentH);
+            float ty = listTop + 4 + (trackH - thumbH) * (maxS > 0 ? d.scroll / maxS : 0);
+            FillRound(dc, D2D1::RectF(W_ - 9, ty, W_ - 6, ty + thumbH), 1.5f, WithAlpha(t.text, 0.3f));
+        }
+    }
+    dc->PopAxisAlignedClip();
+
+    // --- kurzer Hinweis (z. B. nach dem Loeschen)
+    if (!d.toast.empty() && GetTickCount() < d.toastUntil) {
+        IDWriteTextFormat* ft = r_.Text(13.5f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+        float tw = std::min(W_ - 40, r_.MeasureText(d.toast, ft) + 70);
+        D2D1_RECT_F tr = D2D1::RectF(W_ / 2 - tw / 2, H_ - 70, W_ / 2 + tw / 2, H_ - 30);
+        dc->FillRoundedRectangle(D2D1::RoundedRect(tr, 8, 8), r_.Brush(D2D1::ColorF(0.12f, 0.12f, 0.12f, 0.94f)));
+        wchar_t gd[2] = {d.toastGlyph, 0};
+        D2D1_COLOR_F white = D2D1::ColorF(1, 1, 1, 0.95f);
+        DrawText(dc, gd, D2D1::RectF(tr.left + 16, tr.top, tr.left + 36, tr.bottom), r_.Icon(13), white);
+        DrawText(dc, d.toast, D2D1::RectF(tr.left + 38, tr.top, tr.right - 14, tr.bottom), ft, white);
     }
 }
 

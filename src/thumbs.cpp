@@ -1,4 +1,5 @@
 #include "activity.h"
+#include "core/phash.h"
 #include "thumbs.h"
 #include "svgimaging.h"
 #include "docimaging.h"
@@ -121,7 +122,10 @@ bool ThumbService::Process(const ThumbRequest& r, ThumbResult& res) {
         }
         if (ok && db_) {
             std::vector<uint8_t> enc;
-            if (EncodeThumb(res.px, enc)) db_->PutThumb(r.path, r.size, r.mtime, enc);
+            if (EncodeThumb(res.px, enc)) {
+                db_->PutThumb(r.path, r.size, r.mtime, enc);
+                if (r.kind == Kind::Image) db_->PutHash(r.path, r.size, r.mtime, DHash(res.px.data.data(), res.px.w, res.px.h, size_t(res.px.w) * 4));
+            }
         }
         return ok;
     }

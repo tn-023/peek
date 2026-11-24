@@ -2588,6 +2588,11 @@ bool App::AnimateStep(float dt) {
             more = true;
         }
     }
+    if (dup_.open && !autoScroll_ && dup_.scroll != dup_.target) {   // Duplikatsuche: weich zum Ziel
+        float d = dup_.target - dup_.scroll;
+        if (std::fabs(d) < 0.25f) dup_.scroll = dup_.target;
+        else { dup_.scroll += d * kScroll; more = true; }
+    }
     if (autoScroll_ && dup_.open) {   // Duplikatsuche: eigene Liste
         float dy = autoMouseY_ - autoAnchor_.y;
         const float dead = 12;

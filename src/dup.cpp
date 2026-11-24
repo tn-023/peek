@@ -74,7 +74,7 @@ void App::OpenDuplicates() {
     if (!collectionsView_ && !bookmarksView_ && settings_.recursive) d.title += T(L" mit Unterordnern");
     if (!search_.empty() || filters_.Any()) d.title += T(L" (gefiltert)");
     d.groups.clear();
-    d.scroll = 0;
+    d.scroll = d.target = 0;
     d.toast.clear();
     d.open = true;
     d.busy = dupIn_.size() >= 2;
@@ -236,9 +236,12 @@ void App::OnDupMessage(WPARAM wp) {
 // Eingaben
 // ---------------------------------------------------------------------------
 
-void App::DupScrollTo(float v) {
+// smooth: weich dorthin (Mausrad, Tasten), sonst sofort (Ziehen, mittlere Maustaste, Zoom)
+void App::DupScrollTo(float v, bool smooth) {
     const float maxS = std::max(0.0f, DupContentH() - (DupListBottom() - DupListTop()));
-    dup_.scroll = std::clamp(v, 0.0f, maxS);
+    dup_.target = std::clamp(v, 0.0f, maxS);
+    if (smooth) StartAnimation();
+    else dup_.scroll = dup_.target;
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
@@ -331,7 +334,7 @@ void App::DupWheel(int delta) {
         settings_.Save();
         return;
     }
-    DupScrollTo(dup_.scroll - delta / 120.0f * 72.0f);
+    DupScrollTo(dup_.target - delta / 120.0f * 96.0f, true);
 }
 
 bool App::DupKey(WPARAM vk) {
@@ -341,12 +344,12 @@ bool App::DupKey(WPARAM vk) {
     case VK_ESCAPE:
     case VK_BACK: CloseDuplicates(); return true;
     case VK_DELETE: DupDelete(); return true;
-    case VK_UP: DupScrollTo(dup_.scroll - 40); return true;
-    case VK_DOWN: DupScrollTo(dup_.scroll + 40); return true;
-    case VK_PRIOR: DupScrollTo(dup_.scroll - page); return true;
-    case VK_NEXT: DupScrollTo(dup_.scroll + page); return true;
-    case VK_HOME: DupScrollTo(0); return true;
-    case VK_END: DupScrollTo(1e9f); return true;
+    case VK_UP: DupScrollTo(dup_.target - 40, true); return true;
+    case VK_DOWN: DupScrollTo(dup_.target + 40, true); return true;
+    case VK_PRIOR: DupScrollTo(dup_.target - page, true); return true;
+    case VK_NEXT: DupScrollTo(dup_.target + page, true); return true;
+    case VK_HOME: DupScrollTo(0, true); return true;
+    case VK_END: DupScrollTo(1e9f, true); return true;
     case VK_ADD:
     case VK_OEM_PLUS:
     case VK_SUBTRACT:
@@ -381,7 +384,7 @@ void App::DupDelete() {
             // zur Gruppe blaettern
             float y = 0;
             for (size_t k = 0; k < gi; ++k) y += 38 + DupRowH() * d.groups[k].size();
-            DupScrollTo(y);
+            DupScrollTo(y, true);
             return;
         }
         for (auto& it : g)

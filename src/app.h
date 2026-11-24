@@ -328,7 +328,7 @@ private:
         std::wstring title;                       // "Duplikate in „Reise“ mit Unterordnern"
         struct Item { FileEntry e; bool checked = false; };
         std::vector<std::vector<Item>> groups;    // je Gruppe das beste Bild zuerst
-        float scroll = 0;
+        float scroll = 0, target = 0;   // Bildlauf: angezeigt und Ziel (weich nachgefuehrt)
         std::wstring toast;
         DWORD toastUntil = 0;
         wchar_t toastGlyph = 0xE74D;
@@ -355,7 +355,7 @@ private:
     float DupRowH() const;
     float DupListTop() const { return 90; }
     float DupListBottom() const { return H_ - 30; }
-    void DupScrollTo(float s);
+    void DupScrollTo(float s, bool smooth = false);
     void DupSetThumb(int edge);
     void DupMouseUp();
     void DupMouseDown(float x, float y, bool dbl);

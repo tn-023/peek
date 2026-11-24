@@ -3660,6 +3660,7 @@ void App::PaintDup(ID2D1DeviceContext* dc) {
         const float viewH = listBottom - listTop, contentH = DupContentH();
         const float maxS = std::max(0.0f, contentH - viewH);
         d.scroll = std::clamp(d.scroll, 0.0f, maxS);
+        d.target = std::clamp(d.target, 0.0f, maxS);
         IDWriteTextFormat* fn = r_.Text(13);
         IDWriteTextFormat* fv = r_.Text(12.5f);
         IDWriteTextFormat* fb = r_.Text(12.5f, DWRITE_FONT_WEIGHT_BOLD);
@@ -3692,12 +3693,18 @@ void App::PaintDup(ID2D1DeviceContext* dc) {
                 D2D1_RECT_F row = D2D1::RectF(8, y, W_ - 16, y + rowH);
                 if (row.bottom >= listTop && row.top <= listBottom) {
                     const int code = static_cast<int>(gi << 16 | ii);
+                    // Trefferflaechen nur im sichtbaren Teil der Liste (nicht unter Kopf- oder Statusleiste)
+                    auto clip = [&](D2D1_RECT_F r) {
+                        r.top = std::max(r.top, listTop);
+                        r.bottom = std::min(r.bottom, listBottom);
+                        return r;
+                    };
                     int rIdx = static_cast<int>(hits_.size());
-                    hits_.push_back({row, HitType::DupCheck, code});
+                    hits_.push_back({clip(row), HitType::DupCheck, code});
                     const float bw = std::max(60.0f, S), bh = S;
                     D2D1_RECT_F tb = D2D1::RectF(xThumb, y + (rowH - bh) / 2, xThumb + bw, y + (rowH + bh) / 2);
                     int tIdx = static_cast<int>(hits_.size());
-                    hits_.push_back({tb, HitType::DupThumb, code});
+                    hits_.push_back({clip(tb), HitType::DupThumb, code});
                     if (hoverHit_ == rIdx || hoverHit_ == tIdx) FillRound(dc, row, 4, t.hover);
                     D2D1_RECT_F cb = D2D1::RectF(xCheck, std::round(y + rowH / 2 - 8), xCheck + 16, std::round(y + rowH / 2 + 8));
                     PaintCheck(dc, cb, it.checked ? 1 : 0, hoverHit_ == rIdx);

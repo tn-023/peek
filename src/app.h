@@ -1011,7 +1011,8 @@ private:
     HitType capPress_ = HitType::None;  // gedrueckter Fensterknopf (wirkt beim Loslassen)
     // Titelleiste wie die von Windows, aber von peek gezeichnet (Inhalt beginnt darunter); im Bildbetrachter und im
     // Vergleich reicht der Inhalt bis oben (die Fensterhoehe aendert sich dabei nicht)
-    float titlePx_ = 0;                 // Hoehe der Titelleiste von Windows (Pixel), aus WM_NCCALCSIZE
+    float titlePx_ = 0;
+    int ncPress_ = 0;                   // gedrueckter Fensterknopf der Titelleiste (HTMINBUTTON …)                 // Hoehe der Titelleiste von Windows (Pixel), aus WM_NCCALCSIZE
     ComPtr<ID2D1Bitmap1> titleIcon_;
     float ContentY() const;             // DIP: Beginn des Inhalts (0 = bis oben)
     D2D1::Matrix3x2F Base() const { return D2D1::Matrix3x2F::Translation(0, ContentY()); }

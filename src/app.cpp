@@ -275,7 +275,36 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
     // Fensterknoepfe der Titelleiste zeichnet Windows (Mica: Rahmen ueber die ganze Flaeche); Darueberfahren,
     // Druecken und Andock-Layouts uebernimmt DWM
     if (backdrop_ && ContentY() > 0) {
-        LRESULT dr = 0;
+        // Treffer der drei Knoepfe selbst bestimmen: DWM kennt ihre Lage (auch maximiert, wo seine eigene
+        // Trefferpruefung um den Fensterrand daneben liegt)
+        if (msg == WM_NCHITTEST) {
+            RECT b{}, wr{};
+            if (SUCCEEDED(DwmGetWindowAttribute(hwnd_, DWMWA_CAPTION_BUTTON_BOUNDS, &b, sizeof(b))) && GetWindowRect(hwnd_, &wr) &&
+                b.right > b.left) {
+                POINT p = {GET_X_LPARAM(lp) - wr.left, GET_Y_LPARAM(lp) - wr.top};
+                if (PtInRect(&b, p)) {
+                    const int w = std::max<LONG>(1, (b.right - b.left) / 3);
+                    const int i = std::clamp(static_cast<int>((p.x - b.left) / w), 0, 2);
+                    return i == 0 ? HTMINBUTTON : i == 1 ? HTMAXBUTTON : HTCLOSE;
+                }
+            }
+        }
+        // Druecken und Loslassen auf den Knoepfen: selbst ausfuehren
+        if ((msg == WM_NCLBUTTONDOWN || msg == WM_NCLBUTTONDBLCLK) && (wp == HTMINBUTTON || wp == HTMAXBUTTON || wp == HTCLOSE)) {
+            ncPress_ = static_cast<int>(wp);
+            return 0;
+        }
+        if (msg == WM_NCLBUTTONUP && (wp == HTMINBUTTON || wp == HTMAXBUTTON || wp == HTCLOSE)) {
+            const bool same = ncPress_ == static_cast<int>(wp);
+            ncPress_ = 0;
+            if (same) {
+                if (wp == HTMINBUTTON) ShowWindow(hwnd_, SW_MINIMIZE);
+                else if (wp == HTMAXBUTTON) ShowWindow(hwnd_, IsZoomed(hwnd_) ? SW_RESTORE : SW_MAXIMIZE);
+                else PostMessageW(hwnd_, WM_SYSCOMMAND, SC_CLOSE, 0);
+            }
+            return 0;
+        }
+        LRESULT dr = 0;   // Darueberfahren und Andock-Layouts: DWM
         if (DwmDefWindowProc(hwnd_, msg, wp, lp, &dr)) return dr;
     }
 

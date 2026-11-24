@@ -132,6 +132,19 @@ void App::BeginRename(int pos) {
     nr.left = std::max(nr.left, gridRc_.left + 2);
     nr.right = std::min(nr.right, gridRc_.right - 2);
 
+    // wie im Explorer: nur der Name ohne Endung ist markiert
+    size_t selEnd = e.name.size();
+    if (e.kind != Kind::Folder) {
+        size_t dot = e.name.find_last_of(L'.');
+        if (dot != std::wstring::npos && dot > 0) selEnd = dot;
+    }
+    renameSearch_ = -1;
+    renamePath_ = e.path;
+    OpenRenameField(nr, fieldH, e.name, selEnd);
+}
+
+// Eingabefeld als eigenes kleines Fenster ueber der Stelle nr (DIP, Fensterkoordinaten)
+void App::OpenRenameField(D2D1_RECT_F nr, float fieldH, const std::wstring& text, size_t selEnd) {
     // Fenster anlegen
     static bool registered = false;
     if (!registered) {
@@ -162,21 +175,14 @@ void App::BeginRename(int pos) {
                               CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
     int padX = static_cast<int>(8 * s);
     int editH = static_cast<int>(fontPx * 1.45f);
-    renameEdit_ = CreateWindowExW(0, L"EDIT", e.name.c_str(), WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, padX, (h - editH) / 2,
+    renameEdit_ = CreateWindowExW(0, L"EDIT", text.c_str(), WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, padX, (h - editH) / 2,
                                   w - 2 * padX, editH, renameHost_, nullptr, GetModuleHandleW(nullptr), nullptr);
     SendMessageW(renameEdit_, WM_SETFONT, reinterpret_cast<WPARAM>(renameFont_), TRUE);
     SendMessageW(renameEdit_, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, 0);
     g_app = hwnd_;
     g_done = false;
     g_editProc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(renameEdit_, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(RenameEditProc)));
-    // wie im Explorer: nur der Name ohne Endung ist markiert
-    size_t selEnd = e.name.size();
-    if (e.kind != Kind::Folder) {
-        size_t dot = e.name.find_last_of(L'.');
-        if (dot != std::wstring::npos && dot > 0) selEnd = dot;
-    }
     SendMessageW(renameEdit_, EM_SETSEL, 0, static_cast<LPARAM>(selEnd));
-    renamePath_ = e.path;
     ShowWindow(renameHost_, SW_SHOW);
     SetFocus(renameEdit_);
     InvalidateRect(hwnd_, nullptr, FALSE);
@@ -199,7 +205,22 @@ void App::FinishRename(bool commit) {
     SetFocus(hwnd_);
     std::wstring oldPath = renamePath_;
     renamePath_.clear();
+    const int search = renameSearch_;
+    renameSearch_ = -1;
     if (!commit) return;
+
+    if (search >= 0) {   // gespeicherte Suche in der Seitenleiste: nur der Name aendert sich
+        while (!text.empty() && text.front() == L' ') text.erase(0, 1);
+        while (!text.empty() && text.back() == L' ') text.pop_back();
+        if (text.empty() || search >= static_cast<int>(settings_.searches.size())) return;
+        auto& ss = settings_.searches[static_cast<size_t>(search)];
+        if (text == ss.name) return;
+        ss.name = text;
+        settings_.Save();
+        BuildSidebar();
+        InvalidateRect(hwnd_, nullptr, FALSE);
+        return;
+    }
 
     // Leerzeichen am Anfang sowie Leerzeichen und Punkte am Ende entfernt Windows ohnehin
     while (!text.empty() && text.front() == L' ') text.erase(0, 1);

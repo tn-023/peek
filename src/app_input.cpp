@@ -577,6 +577,12 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         case HitType::DupSearch:
             OpenDuplicates();
             return;
+        case HitType::SaveSearch:
+            SaveCurrentSearch();
+            break;
+        case HitType::DeleteSearch:
+            DeleteSavedSearch(MatchingSavedSearch());
+            break;
         case HitType::SearchHistClear:
             settings_.searchHistory.clear();
             settings_.Save();
@@ -640,6 +646,8 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
                 ShowAllCollections();
             } else if (it.kind == SidebarItem::Bookmarks) {
                 ShowBookmarks();
+            } else if (it.kind == SidebarItem::SavedSearch) {
+                OpenSavedSearch(it.idx);
             } else if (!it.path.empty()) {
                 Navigate(it.path);
             }
@@ -1999,6 +2007,10 @@ void App::ShowSidebarMenu(int index, POINT screen) {
         items.push_back(item(3, T(L"Sammlung entfernen")));
     } else if (it.kind == SidebarItem::AllCollections) {
         items.push_back(item(2, T(L"Alle neu indexieren")));
+    } else if (it.kind == SidebarItem::SavedSearch) {
+        items.push_back(item(6, T(L"Umbenennen")));
+        items.push_back(MenuItem::Sep());
+        items.push_back(item(7, T(L"Suche l\u00f6schen")));
     } else if (!it.path.empty()) {
         items.push_back(item(4, T(L"Als Sammlung hinzufügen")));
         items.push_back(item(5, T(L"Im Explorer zeigen")));
@@ -2007,12 +2019,16 @@ void App::ShowSidebarMenu(int index, POINT screen) {
     switch (cmd) {
     case 1:
         if (it.kind == SidebarItem::AllCollections) ShowAllCollections();
+        else if (it.kind == SidebarItem::SavedSearch) OpenSavedSearch(it.idx);
+        else if (it.kind == SidebarItem::Bookmarks) ShowBookmarks();
         else Navigate(it.path);
         break;
     case 2: indexer_.Rescan(); SetStatus(T(L"Indexierung gestartet.")); break;
     case 3: RemoveCollection(it.path); break;
     case 4: AddCollection(it.path); break;
     case 5: ShowInExplorer(it.path); break;
+    case 6: BeginRenameSearch(index); break;
+    case 7: DeleteSavedSearch(it.idx); break;
     default: break;
     }
 }

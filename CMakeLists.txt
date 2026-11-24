@@ -70,6 +70,7 @@ add_executable(peek WIN32
   src/cloud.cpp
   src/timeline.cpp
   src/dup.cpp
+  src/savedsearch.cpp
   src/rendercheck.cpp
   src/renderer.cpp
   src/fs.cpp

@@ -323,7 +323,7 @@ Short forms still valid: w: h: mp: size: date: taken: ext: type: cam: dur:
 
 The result is its own view: one list with checkbox, thumbnail, name, size, modified, resolution, type and full location. Per group the best image (highest resolution, then larger file, then older file, then a name without a copy suffix) is first and unchecked, all others are pre-checked; the better values of a group are shown in bold. "Delete x duplicates" moves the checked files to the Recycle Bin and refuses to remove every image of a group. At most 100 duplicates are listed at a time; further groups appear after deleting. Thumbnails use the stored 320 px previews and can be zoomed with the slider at the bottom right, Ctrl+mouse wheel or Ctrl +/−. A click on a thumbnail opens the compare view with the best image on the left; ←/→ step through the rest of the group on the right.
 
-**Saved views:** combinations of folder, search and filters can be stored as a "view" in the sidebar (e.g. "videos > 1 GB").
+**Saved searches:** while a search result is shown (search text or filters), "Save search" next to the sort button stores the place (folder with or without subfolders, all collections, bookmarks), the search text, the filter chips and the sort order. The search appears with an automatic name ("dog · Travel") and a search icon below the collections in the sidebar; right-click offers rename (inline, like files) and delete. While a saved search is shown, the button reads "Delete search"; changing it offers saving it as a new one. Patterns and terms are stored as words, so they survive restarts.
 
 ## UI concept
 

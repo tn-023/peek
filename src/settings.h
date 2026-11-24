@@ -42,6 +42,16 @@ struct Settings {
     int FolderSort(const std::wstring& key) const;          // -1 = nicht gespeichert
     void SetFolderSort(const std::wstring& key, int value); // 0 (Standard) entfernt den Eintrag
     std::vector<std::wstring> searchHistory;   // bis zu 10 Sucheingaben
+    // Gespeicherte Suchen (Seitenleiste unter den Sammlungen): Ort, Suchtext, Filter und Sortierung
+    struct SavedSearch {
+        std::wstring name;
+        std::wstring place;          // Ordnerpfad, leer = alle Sammlungen, "::merkliste" = Merkliste
+        bool recursive = false;      // Ordner mit Unterordnern
+        std::wstring query;          // Suchtext
+        std::wstring filters;        // Filterpillen als Text (App::FiltersText)
+        int sort = 0;                // Sortierschluessel | 16 absteigend | 32 gruppiert
+    };
+    std::vector<SavedSearch> searches;
     std::wstring lastFolder;
     std::wstring lastVersion;    // zuletzt gestartete Version (Symbol-Cache von Windows auffrischen)
     RECT window{};

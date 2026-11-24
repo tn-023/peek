@@ -806,7 +806,8 @@ void App::Navigate(const std::wstring& raw, bool history, const std::wstring& se
         back_.push_back(CurrentLocation());
         fwd_.clear();
     }
-    if (_wcsicmp(p.c_str(), path_.c_str()) != 0) settings_.recursive = false;   // neuer Ordner: ohne Unterordner
+    if (forceRecursive_ >= 0) settings_.recursive = forceRecursive_ == 1;   // gespeicherte Suche
+    else if (_wcsicmp(p.c_str(), path_.c_str()) != 0) settings_.recursive = false;   // neuer Ordner: ohne Unterordner
     path_ = p;
     collectionsView_ = false;
     bookmarksView_ = false;
@@ -1131,6 +1132,7 @@ void App::OnLoadResults() {
     loading_ = false;
     if (metaHold_ && metaPending_ <= 0) { metaHold_ = false; KillTimer(hwnd_, kTimerMetaHold); }
     Refilter();
+    ApplySavedPending();   // gespeicherte Suche: Filter mit Mustern und Begriffen
 
     // Zustand wiederherstellen (Neuladen) bzw. Auswahl setzen
     for (auto& p : keepSelection_) {
@@ -2191,6 +2193,8 @@ void App::BuildSidebar() {
         std::wstring n = FileNameOf(c);
         sidebar_.push_back({SidebarItem::Collection, n.empty() ? c : n, c, 0xE8B7});
     }
+    for (size_t i = 0; i < settings_.searches.size(); ++i)   // gespeicherte Suchen: unter den Sammlungen
+        sidebar_.push_back({SidebarItem::SavedSearch, settings_.searches[i].name, L"", 0xE721, static_cast<int>(i)});
     sidebar_.push_back({SidebarItem::Header, T(L"Laufwerke"), L"", 0});
     for (auto& d : LocalDrives()) {
         UINT type = GetDriveTypeW(d.c_str());

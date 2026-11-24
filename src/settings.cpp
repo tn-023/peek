@@ -196,6 +196,19 @@ void Settings::Load() {
         int v = ReadInt(L"FolderSort", (L"V" + std::to_wstring(i)).c_str(), 0);
         if (!p.empty() && v > 0 && v < 64 && (v & 15) <= 5) folderSort.push_back({p, v});
     }
+    searches.clear();
+    int ns = ReadInt(L"Searches", L"Count", 0);
+    for (int i = 0; i < ns && i < 500; ++i) {
+        const std::wstring n = std::to_wstring(i);
+        SavedSearch ss;
+        ss.name = ReadStr(L"Searches", (L"N" + n).c_str());
+        ss.place = ReadStr(L"Searches", (L"P" + n).c_str());
+        ss.recursive = ReadInt(L"Searches", (L"R" + n).c_str(), 0) != 0;
+        ss.query = ReadStr(L"Searches", (L"Q" + n).c_str());
+        ss.filters = ReadStr(L"Searches", (L"F" + n).c_str());
+        ss.sort = ReadInt(L"Searches", (L"S" + n).c_str(), 0) & 63;
+        if (!ss.name.empty()) searches.push_back(std::move(ss));
+    }
     searchHistory.clear();
     for (int i = 0; i < 10; ++i) {
         std::wstring key = L"H" + std::to_wstring(i);
@@ -270,6 +283,17 @@ void Settings::Save() const {
     for (size_t i = 0; i < searchHistory.size() && i < 10; ++i) {
         std::wstring key = L"H" + std::to_wstring(i);
         WriteStr(L"Search", key.c_str(), searchHistory[i]);
+    }
+    WriteInt(L"Searches", L"Count", static_cast<int>(searches.size()));
+    for (size_t i = 0; i < searches.size(); ++i) {
+        const std::wstring n = std::to_wstring(i);
+        const SavedSearch& ss = searches[i];
+        WriteStr(L"Searches", (L"N" + n).c_str(), ss.name);
+        WriteStr(L"Searches", (L"P" + n).c_str(), ss.place);
+        WriteInt(L"Searches", (L"R" + n).c_str(), ss.recursive ? 1 : 0);
+        WriteStr(L"Searches", (L"Q" + n).c_str(), ss.query);
+        WriteStr(L"Searches", (L"F" + n).c_str(), ss.filters);
+        WriteInt(L"Searches", (L"S" + n).c_str(), ss.sort);
     }
     WriteInt(L"FolderSort", L"Count", static_cast<int>(folderSort.size()));
     for (size_t i = 0; i < folderSort.size(); ++i) {

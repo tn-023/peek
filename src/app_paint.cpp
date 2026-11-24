@@ -1054,6 +1054,24 @@ void App::PaintChips(ID2D1DeviceContext* dc) {
         right = rc.left - 8;
     }
 
+    // links daneben: Suche speichern bzw. (angezeigte gespeicherte Suche) Suche loeschen
+    if (SearchActive()) {
+        const bool saved = MatchingSavedSearch() >= 0;
+        std::wstring label = saved ? T(L"Suche l\u00f6schen") : T(L"Suche speichern");
+        float lw = r_.MeasureText(label, f);
+        float w = 12 + 18 + 6 + lw + 12;
+        D2D1_RECT_F rc = D2D1::RectF(right - w, y, right, y + h);
+        int idx = static_cast<int>(hits_.size());
+        hits_.push_back({rc, saved ? HitType::DeleteSearch : HitType::SaveSearch, 0});
+        if (hoverHit_ == idx) FillRound(dc, rc, 5, t.hover);
+        float tx = rc.left + 12;
+        wchar_t gs[2] = {static_cast<wchar_t>(saved ? 0xE74D : 0xE74E), 0};
+        DrawText(dc, gs, D2D1::RectF(tx, rc.top, tx + 18, rc.bottom), r_.Icon(13), t.text2);
+        tx += 24;
+        DrawText(dc, label, D2D1::RectF(tx, rc.top, tx + lw + 2, rc.bottom), f, t.text);
+        right = rc.left - 8;
+    }
+
     // Filterknoepfe (in dieser Reihenfolge); passen nicht alle in die Leiste, kommen die hinteren in "..."
     IDWriteTextFormat* ff = r_.Text(14, DWRITE_FONT_WEIGHT_NORMAL);
     struct ChipDef { ChipId id; bool active, dropdown; wchar_t glyph; };
@@ -1313,6 +1331,7 @@ void App::PaintSidebar(ID2D1DeviceContext* dc) {
         y += ih + 2;
     };
 
+    const int savedMatch = MatchingSavedSearch();   // angezeigte gespeicherte Suche hervorheben (statt des Ordners)
     for (size_t i = 0; i < sidebar_.size() && y + 34 < itemsBottom; ++i) {
         const SidebarItem& it = sidebar_[i];
         if (it.kind == SidebarItem::Header) {
@@ -1326,9 +1345,10 @@ void App::PaintSidebar(ID2D1DeviceContext* dc) {
         D2D1_RECT_F rc = D2D1::RectF(ox + 8, y, ox + sidebarW_ - 8, y + ih);
         int idx = static_cast<int>(hits_.size());
         hits_.push_back({rc, HitType::SidebarItem, static_cast<int>(i)});
-        bool active = (it.kind == SidebarItem::AllCollections && collectionsView_) ||
-                      (it.kind == SidebarItem::Bookmarks && bookmarksView_) ||
-                      (!collectionsView_ && !bookmarksView_ && !it.path.empty() && _wcsicmp(it.path.c_str(), path_.c_str()) == 0);
+        bool active = (it.kind == SidebarItem::SavedSearch && it.idx == savedMatch) ||
+                      (it.kind == SidebarItem::AllCollections && collectionsView_ && savedMatch < 0) ||
+                      (it.kind == SidebarItem::Bookmarks && bookmarksView_ && savedMatch < 0) ||
+                      (savedMatch < 0 && !collectionsView_ && !bookmarksView_ && !it.path.empty() && _wcsicmp(it.path.c_str(), path_.c_str()) == 0);
         bool dragging = sideDragActive_ && static_cast<int>(i) == sideDragItem_;
         if (static_cast<int>(i) == dropSideItem_) {
             FillRound(dc, rc, 5, WithAlpha(accent_, 0.25f));
@@ -1345,7 +1365,8 @@ void App::PaintSidebar(ID2D1DeviceContext* dc) {
         r_.DrawWrapped(it.label, textX, rc.top + (ih - th) / 2, textW, fw, t.text);
         y += ih + 2;
         bool lastCollection = (it.kind == SidebarItem::Collection || it.kind == SidebarItem::AllCollections) &&
-                              (i + 1 >= sidebar_.size() || sidebar_[i + 1].kind == SidebarItem::Header);
+                              (i + 1 >= sidebar_.size() || sidebar_[i + 1].kind == SidebarItem::Header ||
+                               sidebar_[i + 1].kind == SidebarItem::SavedSearch);
         if (lastCollection) addButton();
     }
 

@@ -43,6 +43,7 @@ enum class HitType {
     SheetCancel, SheetCreate, SheetOrient, SheetColsMinus, SheetColsPlus, SheetRowsMinus, SheetRowsPlus, SheetNames,
     SheetExts, SheetQuality, SheetPrev, SheetNext, SheetHeadline, SheetCheck, SheetCell, SheetStripCheck, SheetStrip,
     BookmarkSheet,
+    SaveSearch, DeleteSearch,
     DupSearch, DupCancel, DupDelete, DupCheck, DupThumb, DupScrollbar, DupSlider, DupZoomIn, DupZoomOut,
     AtlasCancel, AtlasCreate, AtlasColsMinus, AtlasColsPlus, AtlasRowsMinus, AtlasRowsPlus, AtlasTile,
     CompareMode, CompareClose
@@ -58,10 +59,11 @@ struct Hit {
 };
 
 struct SidebarItem {
-    enum Kind { Header, Folder, Drive, Collection, AllCollections, Bookmarks } kind = Folder;
+    enum Kind { Header, Folder, Drive, Collection, AllCollections, Bookmarks, SavedSearch } kind = Folder;
     std::wstring label;
     std::wstring path;
     wchar_t glyph = 0;
+    int idx = -1;   // gespeicherte Suche: Index in Settings::searches
 };
 
 struct Bmp {
@@ -344,6 +346,23 @@ private:
     std::vector<std::vector<uint32_t>> dupRes_;   // Ergebnis des Threads (Indizes in dupIn_)
     uint64_t dupResGen_ = 0;
     std::vector<FileEntry> dupIn_;                // durchsuchte Bilder (Kopien, im UI-Thread)
+    // Gespeicherte Suchen (savedsearch.cpp)
+    int forceRecursive_ = -1;             // Navigate: Unterordner wie gespeichert (-1 = wie sonst)
+    int pendingSaved_ = -1;               // nach dem Einlesen: Filter dieser Suche anwenden
+    uint32_t pendingSavedGen_ = 0;
+    int renameSearch_ = -1;               // Umbenennen in der Seitenleiste: Index der Suche
+    bool SearchActive() const;            // Suchergebnis (Suchtext oder Filter) an einem speicherbaren Ort
+    std::wstring FiltersText() const;
+    Filters ParseFiltersText(const std::wstring& text);
+    Settings::SavedSearch CurrentSearch() const;
+    int MatchingSavedSearch() const;      // angezeigte Suche ist gespeichert: Index, sonst -1
+    std::wstring SavedSearchName(const Settings::SavedSearch& s) const;
+    void SaveCurrentSearch();
+    void DeleteSavedSearch(int i);
+    void OpenSavedSearch(int i);
+    void ApplySavedPending();
+    void BeginRenameSearch(int sidebarIndex);
+    void OpenRenameField(D2D1_RECT_F nr, float fieldH, const std::wstring& text, size_t selEnd);
     void OpenDuplicates();
     void CloseDuplicates();
     void StopDupScan();

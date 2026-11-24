@@ -159,9 +159,9 @@ void App::DupWorker(std::vector<DupInput> items, uint64_t gen, HWND hwnd) {
         float aspect = 0;
         uint8_t rgb[kSmallRgbSize];
     };
-    std::vector<Small> small(n);
+    std::vector<Small> smalls(n);
     auto get = [&](uint32_t i) -> const Small& {
-        Small& s = small[i];
+        Small& s = smalls[i];
         if (!s.tried) {
             s.tried = true;
             Pixels px;

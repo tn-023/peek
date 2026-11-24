@@ -278,10 +278,8 @@ void App::PaintZoomOpen(ID2D1DeviceContext* dc) {
     const float cx = ViewerAreaW() / 2, cy = H_ / 2 - lift;
     H_ = savedH;
     D2D1_RECT_F to = D2D1::RectF(cx - iw * sc / 2, cy - ih * sc / 2, cx + iw * sc / 2, cy + ih * sc / 2);
-    if (zoom_.deferCaption && !zoom_.captionPosted && k >= 0.8f) {   // fast schwarz: Titelleiste weg
-        zoom_.captionPosted = true;
-        PostMessageW(hwnd_, WM_APP_ZOOMOPEN, 0, 1);
-    }
+    // die Titelleiste verschwindet erst nach dem Ende der Animation (AnimFadesStep), wenn alles schwarz ist
+
     D2D1_RECT_F from = ScreenToDip(zoom_.fromScr);
     ID2D1Bitmap* b = nullptr;
     auto fb = fullBmps_.find(e.path);

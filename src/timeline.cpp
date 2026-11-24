@@ -721,7 +721,7 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
         const FileEntry& e = entries_[visible_[it.pos]];
         drawThumb(e, rc, rad, 0);
         {   // fuer das Oeffnen/Schliessen des Betrachters: Lage im Fenster (mit Zoom der Zeitleiste)
-            D2D1_MATRIX_3X2_F m;
+            D2D1::Matrix3x2F m;
             dc->GetTransform(&m);
             D2D1_POINT_2F a = m.TransformPoint(D2D1::Point2F(rc.left, rc.top)), b = m.TransformPoint(D2D1::Point2F(rc.right, rc.bottom));
             drawnThumbs_[it.pos] = D2D1::RectF(a.x, a.y, b.x, b.y);

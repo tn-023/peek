@@ -375,7 +375,11 @@ private:
         D2D1_RECT_F fromScr{};              // Bildschirm-Pixel: Vorschaubild (oeffnen) bzw. Bild im Betrachter (schliessen)
         ComPtr<ID2D1Bitmap1> snap;          // festgehaltene Ordneransicht (oeffnen)
         ComPtr<ID2D1Bitmap> bmp;            // fliegendes Bild (schliessen)
+        bool deferCaption = false;          // Titelleiste verschwindet erst, wenn die Ansicht fast schwarz ist
+        bool captionPosted = false;
+        float capDip = 0;                   // Hoehe, um die die Client-Flaeche dann oben waechst
     } zoom_;
+    bool deferCaptionOnce_ = false;         // OpenViewer: Titelleiste noch nicht ausblenden (ZoomOpenNow)
     std::unordered_map<int, D2D1_RECT_F> drawnThumbs_;   // Position -> gezeichnetes Vorschaubild (dieses Bild)
     int viewerOpenReq_ = -1;
     bool frameSwitch_ = false;             // Titelleiste wird gerade ein-/ausgeblendet: sofort neu zeichnen               // Betrachter nach dem naechsten Bild oeffnen (Ansicht festhalten)

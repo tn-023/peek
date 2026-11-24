@@ -625,7 +625,12 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         OnDupMessage(wp);
         return 0;
     case WM_APP_ZOOMOPEN:
-        ZoomOpenNow(static_cast<int>(wp));
+        if (lp == 1) {   // Animation fast fertig, Ansicht fast schwarz: jetzt die Titelleiste ausblenden
+            zoom_.deferCaption = false;
+            if (viewer_.open && !settings_.viewerFullscreen) SetCaptionless(true);
+        } else {
+            ZoomOpenNow(static_cast<int>(wp));
+        }
         return 0;
     case WM_APP_ATLAS:
         if (wp == 1) AtlasDone();
@@ -1797,9 +1802,10 @@ void App::OpenViewer(int pos) {
             ToggleFullscreen();
             viewer_.ownFullscreen = fullscreen_;
         }
-    } else {
+    } else if (!deferCaptionOnce_) {
         SetCaptionless(true);
     }
+    deferCaptionOnce_ = false;
     viewer_.controlsUntil = GetTickCount() + 2000;
     SetTimer(hwnd_, kTimerViewerUi, 2100, nullptr);
     indexer_.Pause(true);

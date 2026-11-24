@@ -747,7 +747,9 @@ void App::Paint() {
     }
     Layout();
     dc->SetTransform(D2D1::Matrix3x2F::Identity());
-    dc->Clear(t.bg);
+    // waehrend der Betrachter-Animation deckend: Windows zeichnet den durchscheinenden Hintergrund (Mica) beim
+    // Ein-/Ausblenden der Titelleiste kurz hell
+    dc->Clear(zoom_.active ? MakeTheme(dark_, false).bg : t.bg);
 
     if (zoom_.active && !zoom_.closing && viewer_.open) {
         PaintZoomOpen(dc);   // Bild waechst vom Vorschaubild ins Vollbild

@@ -72,6 +72,7 @@ void App::TimelineSync() {
     if (key != t.folder) {
         t.folder = key;
         t.scroll = t.target = 0;
+        t.centerStart = true;
         t.expanded.clear();
         t.version = ~0ull;
     }
@@ -260,10 +261,33 @@ void App::TimelineSync() {
             }
     }
     float minScroll = TimelineScrollMin(), maxScroll = TimelineScrollMax();
+    if (t.centerStart && !t.cols.empty()) {   // erstes Oeffnen: die neueste (bzw. erste) Spalte steht in der Mitte
+        t.centerStart = false;
+        t.scroll = t.target = minScroll;
+    }
     t.scroll = std::clamp(t.scroll, minScroll, maxScroll);
     t.target = std::clamp(t.target, minScroll, maxScroll);
     t.colX.clear();
     TimelineMapColumns();
+}
+
+// Lage auf dem angezeigten Zeitstrahl (nach dem Verkleinern und Aneinanderreihen) -> Lage auf dem Zeitstrahl in
+// voller Groesse (wie in der Uebersicht)
+float App::TimelineToContent(float dx) const {
+    const auto& t = tl_;
+    const size_t n = t.cols.size();
+    if (n == 0 || t.colX.size() != n || t.colK.size() != n) return dx;
+    if (dx <= t.colX[0]) return t.cols[0].x - (t.colX[0] - dx);
+    size_t lo = 0, hi = n;   // letzte Spalte, die links von dx beginnt
+    while (lo < hi) {
+        size_t mid = (lo + hi) / 2;
+        if (t.colX[mid] <= dx) lo = mid + 1;
+        else hi = mid;
+    }
+    const size_t c = lo - 1;
+    const float w = t.cols[c].s * t.colK[c];
+    if (dx <= t.colX[c] + w) return t.cols[c].x + (dx - t.colX[c]) / std::max(0.01f, t.colK[c]);
+    return t.cols[c].x + t.cols[c].s + (dx - t.colX[c] - w);   // in der Luecke danach (Abstaende bleiben gleich)
 }
 
 // Bildlauf: am Anfang und Ende so weit, dass die erste bzw. letzte Spalte in der Mitte steht (dort ist sie am groessten)
@@ -782,7 +806,10 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
     const float kx = cw / std::max(1.0f, t.contentW);
     int maxCount = 1;
     for (const auto& g : t.groups) maxCount = std::max(maxCount, g.count);
-    const float vx0 = cl + std::max(0.0f, t.scroll) * kx, vx1 = cl + std::clamp(t.scroll + vw, 0.0f, t.contentW) * kx;
+    // sichtbarer Ausschnitt in der Uebersicht: genau die Spalten, die oben zu sehen sind (verkleinerte Spalten am
+    // Rand zeigen mehr vom Zeitstrahl, als die Fensterbreite allein ergaebe)
+    const float vx0 = cl + std::clamp(TimelineToContent(t.scroll), 0.0f, t.contentW) * kx;
+    const float vx1 = cl + std::clamp(TimelineToContent(t.scroll + viewW), 0.0f, t.contentW) * kx;
     const D2D1_COLOR_F barC = dark_ ? D2D1::ColorF(1, 1, 1, 0.26f) : D2D1::ColorF(0, 0, 0, 0.2f);
     dc->FillRectangle(D2D1::RectF(cl, barBottom, cr, barBottom + 1), r_.Brush(barC));
     IDWriteTextFormat* fy = r_.Text(11, DWRITE_FONT_WEIGHT_NORMAL);
@@ -802,7 +829,7 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
         }
         lastYear = year;
     }
-    if (t.contentW > vw) {
+    if (vx1 - vx0 < cw - 0.5f) {   // nicht alles zu sehen: Ausschnitt markieren
         D2D1_RECT_F vr = D2D1::RectF(vx0, barTop - 4, std::max(vx0 + 6, vx1), barBottom + 2);
         FillRound(dc, vr, 3, WithAlpha(accent_, 0.16f));
         dc->DrawRoundedRectangle(D2D1::RoundedRect(vr, 3, 3), r_.Brush(WithAlpha(accent_, 0.9f)), 1.2f);

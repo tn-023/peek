@@ -566,6 +566,7 @@ private:
     };
     struct TimelineState {
         std::wstring folder;
+        bool centerStart = true;             // beim ersten Oeffnen: erste Spalte in der Mitte
         uint64_t version = ~0ull;
         float viewH = 0;
         bool langEn = false, dirty = false;
@@ -597,6 +598,7 @@ private:
     bool TimelineMouseDown(float x, float y, WPARAM keys);
     float TimelineShrink(float x, float s, float& fog) const;
     float TimelineScrollMin() const;
+    float TimelineToContent(float dx) const;
     float TimelineScrollMax() const;
     void TimelineMapColumns();
     D2D1_RECT_F TimelineItemRect(const TimelineItem& it) const;

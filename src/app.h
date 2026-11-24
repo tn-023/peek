@@ -1009,8 +1009,22 @@ private:
     void PaintTip(ID2D1DeviceContext* dc);
     bool captionless_ = false;          // ohne Titelleiste von Windows (seit 1.7 immer; peek zeichnet sie selbst)
     HitType capPress_ = HitType::None;  // gedrueckter Fensterknopf (wirkt beim Loslassen)
-    float CapW() const { return captionless_ && !fullscreen_ ? 3 * 46.0f : 0.0f; }   // Breite der Fensterknoepfe
-    void PaintCaptionButtons(ID2D1DeviceContext* dc, float height);
+    // Titelleiste wie die von Windows, aber von peek gezeichnet (Inhalt beginnt darunter); im Bildbetrachter und im
+    // Vergleich reicht der Inhalt bis oben (die Fensterhoehe aendert sich dabei nicht)
+    float titlePx_ = 0;                 // Hoehe der Titelleiste von Windows (Pixel), aus WM_NCCALCSIZE
+    ComPtr<ID2D1Bitmap1> titleIcon_;
+    float ContentY() const;             // DIP: Beginn des Inhalts (0 = bis oben)
+    D2D1::Matrix3x2F Base() const { return D2D1::Matrix3x2F::Translation(0, ContentY()); }
+    void ScreenToContent(POINT& pt) const {
+        ScreenToClient(hwnd_, &pt);
+        pt.y -= static_cast<LONG>(std::lround(ContentY() * r_.scale()));
+    }
+    void ContentToScreen(POINT& pt) const {
+        pt.y += static_cast<LONG>(std::lround(ContentY() * r_.scale()));
+        ClientToScreen(hwnd_, &pt);
+    }
+    void PaintTitleBar(ID2D1DeviceContext* dc, float height);
+    void PaintCaptionButtons(ID2D1DeviceContext* dc, float top, float height);
     D2D1_RECT_F viewerBarRc_{};         // obere Leiste des Betrachters (zum Ziehen des Fensters), leer wenn verborgen
     WINDOWPLACEMENT prevPlacement_{sizeof(WINDOWPLACEMENT)};
     RECT prevRect_{};   // tatsaechliche Fensterlage (auch bei angedocktem Fenster)

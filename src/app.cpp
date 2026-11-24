@@ -270,7 +270,14 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         MarkUiActivity();
     const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
     auto X = [&](LPARAM l) { return static_cast<float>(GET_X_LPARAM(l)) / s; };
-    auto Y = [&](LPARAM l) { return static_cast<float>(GET_Y_LPARAM(l)) / s; };
+    auto Y = [&](LPARAM l) { return static_cast<float>(GET_Y_LPARAM(l)) / s - ContentY(); };   // unter der Titelleiste
+
+    // Fensterknoepfe der Titelleiste zeichnet Windows (Mica: Rahmen ueber die ganze Flaeche); Darueberfahren,
+    // Druecken und Andock-Layouts uebernimmt DWM
+    if (backdrop_ && ContentY() > 0) {
+        LRESULT dr = 0;
+        if (DwmDefWindowProc(hwnd_, msg, wp, lp, &dr)) return dr;
+    }
 
     switch (msg) {
     case WM_MOVE:
@@ -310,11 +317,13 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             auto p = reinterpret_cast<NCCALCSIZE_PARAMS*>(lp);
             LONG top = p->rgrc[0].top;
             LRESULT r = DefWindowProcW(hwnd_, msg, wp, lp);
+            const LONG defTop = p->rgrc[0].top;   // dort begaenne der Inhalt mit der Titelleiste von Windows
             p->rgrc[0].top = top;
             if (IsZoomed(hwnd_) && !fullscreen_) {   // maximiert ragt das Fenster um den Rahmen ueber den Bildschirm
                 UINT dpi = GetDpiForWindow(hwnd_);
                 p->rgrc[0].top += GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
             }
+            titlePx_ = static_cast<float>(std::max<LONG>(0, defTop - p->rgrc[0].top));
             return r;
         }
         break;
@@ -395,8 +404,7 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_NCMOUSEMOVE:
         if (wp == HTMAXBUTTON) {
             POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
-            ScreenToClient(hwnd_, &pt);
-            const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
+            ScreenToContent(pt);
             int hh = -1;
             for (int i = static_cast<int>(hits_.size()) - 1; i >= 0; --i)
                 if ((hits_[i].type == HitType::CapMax || hits_[i].type == HitType::ViewerMax) && pt.x / s >= hits_[i].rc.left &&
@@ -504,7 +512,7 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         return TRUE;
     case WM_MOUSEWHEEL: {
         POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
-        ScreenToClient(hwnd_, &pt);
+        ScreenToContent(pt);
         OnWheel(pt.x / s, pt.y / s, GET_WHEEL_DELTA_WPARAM(wp), GET_KEYSTATE_WPARAM(wp));
         return 0;
     }
@@ -520,7 +528,7 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         if (LOWORD(lp) == HTCLIENT) {
             POINT pt;
             GetCursorPos(&pt);
-            ScreenToClient(hwnd_, &pt);
+            ScreenToContent(pt);
             if (autoScroll_) {
                 SetCursor(LoadCursorW(nullptr, settings_.viewMode == 3 && !dup_.open ? IDC_SIZEWE : IDC_SIZENS));   // Zeitleiste: waagerecht
                 return TRUE;
@@ -2362,7 +2370,7 @@ void App::SetCaptionless(bool on) {
 LRESULT App::CaptionHitTest(LPARAM lp, LRESULT def) {
     if (def != HTCLIENT || fullscreen_) return def;
     POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
-    ScreenToClient(hwnd_, &pt);
+    ScreenToClient(hwnd_, &pt);   // Fensterkoordinaten (Rand oben)
     UINT dpi = GetDpiForWindow(hwnd_);
     int frame = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
     RECT cr;
@@ -2373,13 +2381,17 @@ LRESULT App::CaptionHitTest(LPARAM lp, LRESULT def) {
         return HTTOP;
     }
     const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
-    float x = pt.x / s, y = pt.y / s;
+    const float cy = ContentY();
+    float x = pt.x / s, y = pt.y / s - cy;   // Inhaltskoordinaten
     // Maximieren-Knopf: als solcher melden (Windows 11 zeigt dann beim Darueberfahren die Andock-Layouts)
     if (const Hit* h = HitAt(x, y); h && (h->type == HitType::CapMax || h->type == HitType::ViewerMax)) return HTMAXBUTTON;
+    if (cy > 0) {   // eigene Titelleiste: verschiebt das Fenster (ausser auf selbst gezeichneten Knoepfen)
+        if (y < 0 && !HitAt(x, y)) return HTCAPTION;
+        return def;
+    }
     D2D1_RECT_F bar{};
     if (compare_.open) bar = D2D1::RectF(0, 0, W_, 48);
-    else if (viewer_.open) bar = viewer_.crop ? D2D1_RECT_F{} : viewerBarRc_;
-    else bar = D2D1::RectF(0, 0, W_, dup_.open ? 60.0f : topH_);   // obere Leiste der Ansicht bzw. der Seite
+    else if (viewer_.open && !viewer_.crop) bar = viewerBarRc_;
     if (x >= bar.left && x < bar.right && y >= bar.top && y < bar.bottom && !HitAt(x, y)) return HTCAPTION;
     return def;
 }
@@ -2449,7 +2461,7 @@ DWORD App::OnDragOver(const std::vector<std::wstring>& paths, POINT screen, DWOR
     }
     if (viewer_.open || settingsOpen_ || sheet_.open || atlas_.open || compare_.open || dup_.open || paths.empty()) return DROPEFFECT_NONE;
     POINT pt = screen;
-    ScreenToClient(hwnd_, &pt);
+    ScreenToContent(pt);
     float x = pt.x / r_.scale(), y = pt.y / r_.scale();
     int crumb = -1;
     bool side = false;
@@ -2505,7 +2517,7 @@ DWORD App::OnDragOver(const std::vector<std::wstring>& paths, POINT screen, DWOR
 
 DWORD App::OnDrop(const std::vector<std::wstring>& paths, POINT screen, DWORD keys, DWORD allowed) {
     POINT pt = screen;
-    ScreenToClient(hwnd_, &pt);
+    ScreenToContent(pt);
     float x = pt.x / r_.scale(), y = pt.y / r_.scale();
     const Hit* h = HitAt(x, y);
     dropPos_ = dropSideItem_ = dropCrumb_ = -1;

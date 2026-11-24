@@ -1259,7 +1259,7 @@ bool App::OnKeyDown(WPARAM vk) {
             InvalidateRect(hwnd_, nullptr, FALSE);
         } else if (focus_ >= 0) {
             const FileEntry& e = entries_[visible_[focus_]];
-            if (e.kind == Kind::Image) OpenViewer(focus_);
+            if (e.kind == Kind::Image && !TryZoomOpen(focus_)) OpenViewer(focus_);
         }
         return true;
     case VK_DELETE: DeleteSelection(); return true;

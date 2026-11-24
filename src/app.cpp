@@ -619,6 +619,9 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_APP_DUP:
         OnDupMessage(wp);
         return 0;
+    case WM_APP_ZOOMOPEN:
+        ZoomOpenNow(static_cast<int>(wp));
+        return 0;
     case WM_APP_ATLAS:
         if (wp == 1) AtlasDone();
         else InvalidateRect(hwnd_, nullptr, FALSE);
@@ -736,6 +739,7 @@ void App::UpdateTitle() {
 
 void App::StartView() {
     ++gen_;
+    viewerOpenReq_ = -1;
     posFades_.clear();
     lastHoverPos_ = -1;
     enterActive_ = false;
@@ -1765,7 +1769,7 @@ void App::OpenPos(int pos) {
     if (e.kind == Kind::Folder) {
         Navigate(e.path);
     } else if (e.kind == Kind::Image) {
-        OpenViewer(pos);
+        if (!TryZoomOpen(pos)) OpenViewer(pos);   // mit Animationen: Bild waechst aus dem Vorschaubild
     } else {
         // Videos und alle anderen Dateien: Standard-App (z. B. Standard-Mediaplayer)
         if (!OpenWithDefaultApp(hwnd_, e.path)) SetStatus(T(L"Datei konnte nicht geöffnet werden."));
@@ -1817,6 +1821,7 @@ void App::EndViewerStart() {
 
 void App::CloseViewer() {
     if (!viewer_.open) return;
+    ZoomCloseBegin();   // mit Animationen: Bild schrumpft zurueck auf sein Vorschaubild
     if (reloadAfterViewer_) {
         reloadAfterViewer_ = false;
         PostMessageW(hwnd_, WM_TIMER, kTimerReload, 0);

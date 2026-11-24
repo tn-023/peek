@@ -732,6 +732,7 @@ void App::Paint() {
     ++frame_;
     TrackHoverFades();   // vor dem Leeren: hits_ ist noch das vorige Bild
     hits_.clear();
+    drawnThumbs_.clear();
     double paintStart = NowMs();
     // fertige Vorschaubilder hochladen: waehrend einer Animation nur wenige Millisekunden je Bild
     if (!thumbBacklog_.empty()) DrainThumbs(animating_ ? 4.0 : 12.0);
@@ -748,7 +749,9 @@ void App::Paint() {
     dc->SetTransform(D2D1::Matrix3x2F::Identity());
     dc->Clear(t.bg);
 
-    if (compare_.open) {
+    if (zoom_.active && !zoom_.closing && viewer_.open) {
+        PaintZoomOpen(dc);   // Bild waechst vom Vorschaubild ins Vollbild
+    } else if (compare_.open) {
         PaintCompare(dc);
     } else if (dup_.open) {
         PaintDup(dc);
@@ -813,6 +816,8 @@ void App::Paint() {
                 DrawText(dc, dn, D2D1::RectF(a.x - 10, a.y + 2, a.x + 10, a.y + 14), r_.Icon(8), t.text);
             }
         }
+        PaintZoomOverlay(dc);   // Betrachter geschlossen: Bild schrumpft auf sein Vorschaubild
+        SnapForZoom(dc);        // Betrachter wird geoeffnet: Ansicht festhalten
         if (slidePending_ >= 0) {   // Diashow aus der Ordneransicht gestartet: die Ansicht blendet langsam nach Schwarz ab
             float k = static_cast<float>(1.0 - std::clamp((slidePendingEnd_ - NowMs()) / 800.0, 0.0, 1.0));
             dc->FillRectangle(D2D1::RectF(0, 0, W_, H_), r_.Brush(D2D1::ColorF(0, 0, 0, k * k * (3 - 2 * k))));
@@ -1661,6 +1666,7 @@ void App::PaintTile(ID2D1DeviceContext* dc, int pos, const D2D1_RECT_F& cell) {
             }
         }
         shown = drawn;
+        if (ok) drawnThumbs_[pos] = drawn;
         if (ok && e.Doc()) {
             // Dokument: Symbol der Standard-App unten rechts
             if (ID2D1Bitmap1* ai = AppIconFor(e.ext)) {
@@ -1917,11 +1923,13 @@ void App::PaintListRow(ID2D1DeviceContext* dc, int pos, const D2D1_RECT_F& row) 
         auto it = bmps_.find(e.path);
         if (it != bmps_.end() && it->second.bmp) b = &it->second;
     }
+    const bool isThumb = b != nullptr;
     if (!b) {
         EnsureIcon(e, 0);
         b = &bmps_[IconKey(e)];
     }
-    DrawBitmapFit(dc, b, ib, 2.0f);
+    D2D1_RECT_F drawnIb{};
+    if (DrawBitmapFit(dc, b, ib, 2.0f, 1.0f, &drawnIb) && isThumb) drawnThumbs_[pos] = drawnIb;
 
     // Name umbrochen
     const float colName = ListNameW();

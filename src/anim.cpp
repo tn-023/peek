@@ -10,7 +10,8 @@
 namespace peek {
 
 namespace {
-constexpr DWORD kHoverFadeMs = 110;
+constexpr DWORD kHoverFadeMs = 140;
+constexpr double kZoomOpenMs = 200, kZoomCloseMs = 180;
 constexpr float kEnterMs = 220, kEnterSpreadMs = 130;   // Dauer je Element, groesster Versatz
 constexpr float kEnterStaggerMs = 12;
 
@@ -18,7 +19,18 @@ float FadeAlpha(DWORD t0, DWORD now) {
     float t = static_cast<float>(now - t0) / kHoverFadeMs;
     if (t >= 1) return 0;
     float u = 1 - t;
-    return u * u;   // schnell weg, sanft am Ende
+    return u * u * u;   // steil abfallend: auf langen Listen nur eine kurze Spur, die sanft verklingt
+}
+
+float EaseOut(float t) {
+    t = std::clamp(t, 0.0f, 1.0f);
+    float u = 1 - t;
+    return 1 - u * u * u;
+}
+
+D2D1_RECT_F LerpRect(const D2D1_RECT_F& a, const D2D1_RECT_F& b, float k) {
+    return D2D1::RectF(a.left + (b.left - a.left) * k, a.top + (b.top - a.top) * k, a.right + (b.right - a.right) * k,
+                       a.bottom + (b.bottom - a.bottom) * k);
 }
 
 bool SameRect(const D2D1_RECT_F& a, const D2D1_RECT_F& b) {
@@ -97,6 +109,14 @@ bool App::AnimFadesStep() {
     posFades_.erase(std::remove_if(posFades_.begin(), posFades_.end(), [&](const auto& f) { return now - f.second >= kHoverFadeMs; }),
                     posFades_.end());
     bool more = !hoverFades_.empty() || !posFades_.empty();
+    if (zoom_.active) {
+        if (NowMs() - zoom_.t0 >= (zoom_.closing ? kZoomCloseMs : kZoomOpenMs)) {
+            zoom_ = ZoomAnim{};
+            InvalidateRect(hwnd_, nullptr, FALSE);
+        } else {
+            more = true;
+        }
+    }
     if (enterActive_) {
         if (now - enterT0_ > static_cast<DWORD>(kEnterMs + kEnterSpreadMs + 40)) enterActive_ = false;
         else more = true;
@@ -121,6 +141,141 @@ float App::EnterProgress(int pos) const {
     if (t >= 1) return 1;
     const float u = 1 - t;
     return 1 - u * u * u;   // ease-out
+}
+
+
+// ---------------------------------------------------------------------------
+// Bildbetrachter: Vorschaubild <-> Vollbild
+
+D2D1_RECT_F App::DipToScreen(const D2D1_RECT_F& r) const {
+    POINT o{0, 0};
+    ClientToScreen(hwnd_, &o);
+    const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
+    return D2D1::RectF(o.x + r.left * s, o.y + r.top * s, o.x + r.right * s, o.y + r.bottom * s);
+}
+
+D2D1_RECT_F App::ScreenToDip(const D2D1_RECT_F& r) const {
+    POINT o{0, 0};
+    ClientToScreen(hwnd_, &o);
+    const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
+    return D2D1::RectF((r.left - o.x) / s, (r.top - o.y) / s, (r.right - o.x) / s, (r.bottom - o.y) / s);
+}
+
+// Oeffnen aus Kacheln oder Liste: erst die Ansicht im naechsten Bild festhalten, dann oeffnen (WM_APP_ZOOMOPEN)
+bool App::TryZoomOpen(int pos) {
+    if (!settings_.animations || viewer_.open || settingsOpen_ || (settings_.viewMode != 0 && settings_.viewMode != 1)) return false;
+    if (pos < 0 || pos >= static_cast<int>(visible_.size())) return false;
+    auto it = drawnThumbs_.find(pos);
+    if (it == drawnThumbs_.end()) return false;
+    const FileEntry& e = entries_[visible_[pos]];
+    auto b = bmps_.find(e.path);
+    if (b == bmps_.end() || !b->second.bmp) return false;   // ohne Vorschaubild: sofort oeffnen
+    zoom_ = ZoomAnim{};
+    zoom_.pos = pos;
+    zoom_.fromScr = DipToScreen(it->second);
+    viewerOpenReq_ = pos;
+    InvalidateRect(hwnd_, nullptr, FALSE);
+    return true;
+}
+
+// am Ende eines Bildes der Ordneransicht: Inhalt kopieren
+void App::SnapForZoom(ID2D1DeviceContext* dc) {
+    if (viewerOpenReq_ < 0) return;
+    const int pos = viewerOpenReq_;
+    viewerOpenReq_ = -1;
+    ComPtr<ID2D1Image> target;
+    dc->GetTarget(&target);
+    ComPtr<ID2D1Bitmap1> tb;
+    if (target) target.As(&tb);
+    if (tb) {
+        D2D1_SIZE_U px = tb->GetPixelSize();
+        D2D1_BITMAP_PROPERTIES1 bp = D2D1::BitmapProperties1(
+            D2D1_BITMAP_OPTIONS_NONE, D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), r_.dpi(), r_.dpi());
+        if (SUCCEEDED(dc->CreateBitmap(px, nullptr, 0, bp, &zoom_.snap)) && zoom_.snap) {
+            dc->Flush();
+            if (FAILED(zoom_.snap->CopyFromBitmap(nullptr, tb.Get(), nullptr))) zoom_.snap.Reset();
+        }
+    }
+    zoom_.snapOrigin = POINT{0, 0};
+    ClientToScreen(hwnd_, &zoom_.snapOrigin);
+    PostMessageW(hwnd_, WM_APP_ZOOMOPEN, static_cast<WPARAM>(pos), 0);
+}
+
+void App::ZoomOpenNow(int pos) {
+    if (pos < 0 || pos >= static_cast<int>(visible_.size()) || viewer_.open) {
+        zoom_ = ZoomAnim{};
+        return;
+    }
+    ZoomAnim keep = zoom_;
+    OpenViewer(pos);
+    zoom_ = keep;
+    zoom_.active = true;
+    zoom_.closing = false;
+    zoom_.t0 = NowMs();
+    StartAnimation();
+}
+
+// Oeffnen: festgehaltene Ansicht, darueber Schwarz (blendet ein), das Bild waechst vom Vorschaubild auf seine Groesse
+void App::PaintZoomOpen(ID2D1DeviceContext* dc) {
+    const float k = EaseOut(static_cast<float>((NowMs() - zoom_.t0) / kZoomOpenMs));
+    const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
+    if (zoom_.snap) {
+        POINT o{0, 0};
+        ClientToScreen(hwnd_, &o);
+        D2D1_SIZE_U px = zoom_.snap->GetPixelSize();
+        float x = (zoom_.snapOrigin.x - o.x) / s, y = (zoom_.snapOrigin.y - o.y) / s;
+        dc->DrawBitmap(zoom_.snap.Get(), D2D1::RectF(x, y, x + px.width / s, y + px.height / s), 1.0f,
+                       D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
+    }
+    dc->FillRectangle(D2D1::RectF(0, 0, W_, H_), r_.Brush(D2D1::ColorF(0, 0, 0, k)));
+    if (viewer_.pos < 0 || viewer_.pos >= static_cast<int>(visible_.size())) return;
+    const FileEntry& e = entries_[visible_[viewer_.pos]];
+    float iw, ih;
+    const float sc = ViewerScale(e, iw, ih);
+    const float cx = ViewerAreaW() / 2, cy = H_ / 2;
+    D2D1_RECT_F to = D2D1::RectF(cx - iw * sc / 2, cy - ih * sc / 2, cx + iw * sc / 2, cy + ih * sc / 2);
+    D2D1_RECT_F from = ScreenToDip(zoom_.fromScr);
+    ID2D1Bitmap* b = nullptr;
+    auto fb = fullBmps_.find(e.path);
+    if (fb != fullBmps_.end() && fb->second.bmp) b = fb->second.bmp.Get();
+    else if (auto tb = bmps_.find(e.path); tb != bmps_.end() && tb->second.bmp) b = tb->second.bmp.Get();
+    if (b) dc->DrawBitmap(b, LerpRect(from, to, k), 1.0f, D2D1_INTERPOLATION_MODE_LINEAR);
+}
+
+// Schliessen (vor dem eigentlichen Schliessen): wo das Bild steht und welches Bild es ist
+void App::ZoomCloseBegin() {
+    zoom_ = ZoomAnim{};
+    if (!settings_.animations || viewer_.slide || viewer_.shell || viewer_.crop || (settings_.viewMode != 0 && settings_.viewMode != 1)) return;
+    if (viewer_.pos < 0 || viewer_.pos >= static_cast<int>(visible_.size())) return;
+    if (viewer_.rotation != 0) return;
+    const FileEntry& e = entries_[visible_[viewer_.pos]];
+    auto fb = fullBmps_.find(e.path);
+    if (fb != fullBmps_.end() && fb->second.bmp) zoom_.bmp = fb->second.bmp;
+    else if (auto tb = bmps_.find(e.path); tb != bmps_.end() && tb->second.bmp) zoom_.bmp = tb->second.bmp;
+    if (!zoom_.bmp) return;
+    D2D1_RECT_F box = viewer_.imgBox;
+    if (box.right - box.left < 2) return;
+    zoom_.fromScr = DipToScreen(box);
+    zoom_.pos = viewer_.pos;
+    zoom_.closing = true;
+    zoom_.active = true;
+    zoom_.t0 = NowMs();
+    StartAnimation();
+}
+
+// Schliessen: ueber der Ordneransicht blendet Schwarz aus, das Bild schrumpft auf sein Vorschaubild
+void App::PaintZoomOverlay(ID2D1DeviceContext* dc) {
+    if (!zoom_.active || !zoom_.closing) return;
+    const float k = EaseOut(static_cast<float>((NowMs() - zoom_.t0) / kZoomCloseMs));
+    dc->FillRectangle(D2D1::RectF(0, 0, W_, H_), r_.Brush(D2D1::ColorF(0, 0, 0, 1 - k)));
+    if (!zoom_.bmp) return;
+    D2D1_RECT_F from = ScreenToDip(zoom_.fromScr);
+    auto it = drawnThumbs_.find(zoom_.pos);
+    if (it == drawnThumbs_.end()) {   // Vorschaubild nicht sichtbar: nur ausblenden
+        dc->DrawBitmap(zoom_.bmp.Get(), from, 1 - k, D2D1_INTERPOLATION_MODE_LINEAR);
+        return;
+    }
+    dc->DrawBitmap(zoom_.bmp.Get(), LerpRect(from, it->second, k), 1.0f, D2D1_INTERPOLATION_MODE_LINEAR);
 }
 
 }  // namespace peek

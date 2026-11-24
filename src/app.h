@@ -364,6 +364,26 @@ private:
     void TrackHoverFades();
     bool AnimFadesStep();
     void RequestEnter();
+    // Bildbetrachter oeffnen/schliessen: das Bild fliegt zwischen Vorschaubild und Vollbild (mit Animationen)
+    struct ZoomAnim {
+        bool active = false, closing = false;
+        int pos = -1;
+        double t0 = 0;
+        POINT snapOrigin{};                 // Bildschirm-Pixel der Fensterecke beim Festhalten der Ansicht
+        D2D1_RECT_F fromScr{};              // Bildschirm-Pixel: Vorschaubild (oeffnen) bzw. Bild im Betrachter (schliessen)
+        ComPtr<ID2D1Bitmap1> snap;          // festgehaltene Ordneransicht (oeffnen)
+        ComPtr<ID2D1Bitmap> bmp;            // fliegendes Bild (schliessen)
+    } zoom_;
+    std::unordered_map<int, D2D1_RECT_F> drawnThumbs_;   // Position -> gezeichnetes Vorschaubild (dieses Bild)
+    int viewerOpenReq_ = -1;               // Betrachter nach dem naechsten Bild oeffnen (Ansicht festhalten)
+    bool TryZoomOpen(int pos);
+    void SnapForZoom(ID2D1DeviceContext* dc);
+    void ZoomOpenNow(int pos);
+    void ZoomCloseBegin();                 // in CloseViewer, vor dem Schliessen
+    void PaintZoomOpen(ID2D1DeviceContext* dc);
+    void PaintZoomOverlay(ID2D1DeviceContext* dc);   // schliessen: ueber der Ordneransicht
+    D2D1_RECT_F ScreenToDip(const D2D1_RECT_F& r) const;
+    D2D1_RECT_F DipToScreen(const D2D1_RECT_F& r) const;
     float EnterProgress(int pos) const;              // 0 .. 1 (geglaettet), 1 = an seinem Platz
     // Metadaten entfernen (stripmeta.cpp)
     bool CanStripMetadata(const FileEntry& e) const;
@@ -1035,5 +1055,6 @@ constexpr UINT WM_APP_SHEET = WM_APP + 21;   // Fortschritt/Ende der PDF-Erstell
 constexpr UINT WM_APP_ATLAS = WM_APP + 22;   // Fortschritt/Ende der Kacheltextur
 constexpr UINT WM_APP_RENAME = WM_APP + 23;  // Umbenennen beendet (wParam 1 = uebernehmen)
 constexpr UINT WM_APP_DUP = WM_APP + 24;     // Duplikatsuche: Fortschritt (0) bzw. Ergebnis (1)
+constexpr UINT WM_APP_ZOOMOPEN = WM_APP + 25; // Betrachter oeffnen, nachdem die Ansicht festgehalten wurde (wParam = Position)
 
 } // namespace peek

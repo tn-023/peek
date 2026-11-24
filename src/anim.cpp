@@ -122,7 +122,7 @@ bool App::AnimFadesStep() {
     bool more = !hoverFades_.empty() || !posFades_.empty() || !cloudFades_.empty();
     if (zoom_.active) {
         if (NowMs() - zoom_.t0 >= (zoom_.closing ? kZoomCloseMs : kZoomOpenMs)) {
-            if (zoom_.deferCaption && !zoom_.captionPosted) PostMessageW(hwnd_, WM_APP_ZOOMOPEN, 0, 1);
+            if (zoom_.defer && !zoom_.deferPosted) PostMessageW(hwnd_, WM_APP_ZOOMOPEN, 0, 1);
             zoom_ = ZoomAnim{};
             InvalidateRect(hwnd_, nullptr, FALSE);
         } else {
@@ -223,21 +223,30 @@ void App::ZoomOpenNow(int pos) {
     zoom_.active = true;
     zoom_.closing = false;
     zoom_.t0 = NowMs();
-    // im Fenster (ohne Vollbild): die Titelleiste bleibt zunaechst stehen und verschwindet erst, wenn die Ansicht
-    // dahinter fast schwarz ist; so faellt das kurze Verrutschen beim Wegfall der Titelleiste nicht auf
-    if (!settings_.viewerFullscreen && !captionless_) {
+    // Die Titelleiste verschwindet (im Fenster) bzw. das Fenster waechst auf Vollbild (Einstellung) erst bei 70 % der
+    // Animation, wenn die Ansicht dahinter schon weitgehend schwarz ist; so faellt das kurze Verrutschen nicht auf.
+    // Das Bild steuert von Anfang an seinen Platz danach an.
+    RECT cr{};
+    GetClientRect(hwnd_, &cr);
+    POINT o{0, 0};
+    ClientToScreen(hwnd_, &o);
+    if (settings_.viewerFullscreen && !fullscreen_) {
+        MONITORINFO mi = {sizeof(mi)};
+        if (GetMonitorInfoW(MonitorFromWindow(hwnd_, MONITOR_DEFAULTTOPRIMARY), &mi)) {
+            zoom_.futureScr = mi.rcMonitor;
+            zoom_.defer = 2;
+            deferCaptionOnce_ = true;
+        }
+    } else if (!settings_.viewerFullscreen && !captionless_) {
         RECT wr;
         GetWindowRect(hwnd_, &wr);
-        POINT o{0, 0};
-        ClientToScreen(hwnd_, &o);
         LONG top = wr.top;
         if (IsZoomed(hwnd_)) {
             UINT dpi = GetDpiForWindow(hwnd_);
             top += GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
         }
-        const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
-        zoom_.capDip = std::max(0.0f, (o.y - top) / s);
-        zoom_.deferCaption = true;
+        zoom_.futureScr = RECT{o.x, top, o.x + cr.right, o.y + cr.bottom};
+        zoom_.defer = 1;
         deferCaptionOnce_ = true;
     }
     OpenViewer(pos);
@@ -271,16 +280,27 @@ void App::PaintZoomOpen(ID2D1DeviceContext* dc) {
     dc->FillRectangle(D2D1::RectF(0, 0, W_, H_), r_.Brush(D2D1::ColorF(0, 0, 0, k)));
     if (viewer_.pos < 0 || viewer_.pos >= static_cast<int>(visible_.size())) return;
     const FileEntry& e = entries_[visible_[viewer_.pos]];
-    // Ziel: Lage im Betrachter ohne Titelleiste (solange sie noch steht: um ihre Hoehe nach oben versetzt)
-    const float lift = zoom_.deferCaption ? zoom_.capDip : 0.0f;
-    const float savedH = H_;
-    H_ += lift;
+    // Ziel: Lage im Betrachter, wie er nach dem Ausblenden der Titelleiste bzw. im Vollbild aussieht
+    float offX = 0, offY = 0;
+    const float savedW = W_, savedH = H_;
+    if (zoom_.defer) {
+        POINT o{0, 0};
+        ClientToScreen(hwnd_, &o);
+        W_ = (zoom_.futureScr.right - zoom_.futureScr.left) / s;
+        H_ = (zoom_.futureScr.bottom - zoom_.futureScr.top) / s;
+        offX = (zoom_.futureScr.left - o.x) / s;
+        offY = (zoom_.futureScr.top - o.y) / s;
+    }
     float iw, ih;
     const float sc = ViewerScale(e, iw, ih);
-    const float cx = ViewerAreaW() / 2, cy = H_ / 2 - lift;
+    const float cx = ViewerAreaW() / 2 + offX, cy = H_ / 2 + offY;
+    W_ = savedW;
     H_ = savedH;
     D2D1_RECT_F to = D2D1::RectF(cx - iw * sc / 2, cy - ih * sc / 2, cx + iw * sc / 2, cy + ih * sc / 2);
-    // die Titelleiste verschwindet erst nach dem Ende der Animation (AnimFadesStep), wenn alles schwarz ist
+    if (zoom_.defer && !zoom_.deferPosted && k >= 0.7f) {   // 70 %: Titelleiste weg bzw. Vollbild
+        zoom_.deferPosted = true;
+        PostMessageW(hwnd_, WM_APP_ZOOMOPEN, 0, 1);
+    }
 
     D2D1_RECT_F from = ScreenToDip(zoom_.fromScr);
     ID2D1Bitmap* b = nullptr;

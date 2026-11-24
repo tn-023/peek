@@ -625,9 +625,14 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         OnDupMessage(wp);
         return 0;
     case WM_APP_ZOOMOPEN:
-        if (lp == 1) {   // Animation fast fertig, Ansicht fast schwarz: jetzt die Titelleiste ausblenden
-            zoom_.deferCaption = false;
-            if (viewer_.open && !settings_.viewerFullscreen) SetCaptionless(true);
+        if (lp == 1) {   // 70 % der Animation: jetzt die Titelleiste ausblenden bzw. auf Vollbild vergroessern
+            const int d = zoom_.defer;
+            zoom_.defer = 0;
+            if (viewer_.open && d == 1) SetCaptionless(true);
+            if (viewer_.open && d == 2 && !fullscreen_) {
+                ToggleFullscreen();
+                viewer_.ownFullscreen = fullscreen_;
+            }
         } else {
             ZoomOpenNow(static_cast<int>(wp));
         }
@@ -1798,7 +1803,7 @@ void App::OpenViewer(int pos) {
     // Betrachter ohne Titelleiste: randloses Vollbild auf dem aktuellen Bildschirm, oder (Einstellung) im
     // peek-Fenster, dessen obere Leiste dann wie eine Titelleiste zieht
     if (settings_.viewerFullscreen) {
-        if (!fullscreen_) {
+        if (!fullscreen_ && !deferCaptionOnce_) {
             ToggleFullscreen();
             viewer_.ownFullscreen = fullscreen_;
         }

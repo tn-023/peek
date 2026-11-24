@@ -101,6 +101,10 @@ bool App::Init(HINSTANCE inst, int show) {
     hwnd_ = CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP, wc.lpszClassName, L"peek", WS_OVERLAPPEDWINDOW, x, y, w, h,
                             nullptr, nullptr, inst, this);
     if (!hwnd_) return false;
+    // peek zeichnet die Titelleiste selbst (obere Leiste mit den Fensterknoepfen): die Fensterhoehe aendert sich
+    // nie mehr, auch nicht beim Oeffnen des Bildbetrachters (kein Verrutschen, kein Flackern)
+    captionless_ = true;
+    SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
 
     ApplyTheme();
     if (!r_.Init(hwnd_)) {
@@ -384,6 +388,51 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         OnMouseMove(X(lp), Y(lp), wp);
         return 0;
     }
+    case WM_ACTIVATE:   // Fensterknoepfe: aktives bzw. inaktives Fenster
+        InvalidateRect(hwnd_, nullptr, FALSE);
+        break;
+    // Maximieren-Knopf (HTMAXBUTTON): Windows schickt hier Nicht-Client-Nachrichten
+    case WM_NCMOUSEMOVE:
+        if (wp == HTMAXBUTTON) {
+            POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+            ScreenToClient(hwnd_, &pt);
+            const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
+            int hh = -1;
+            for (int i = static_cast<int>(hits_.size()) - 1; i >= 0; --i)
+                if ((hits_[i].type == HitType::CapMax || hits_[i].type == HitType::ViewerMax) && pt.x / s >= hits_[i].rc.left &&
+                    pt.x / s < hits_[i].rc.right && pt.y / s >= hits_[i].rc.top && pt.y / s < hits_[i].rc.bottom) {
+                    hh = i;
+                    break;
+                }
+            if (hh != hoverHit_) {
+                hoverHit_ = hh;
+                hoverPos_ = -1;
+                InvalidateRect(hwnd_, nullptr, FALSE);
+            }
+            TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE | TME_NONCLIENT, hwnd_, 0};
+            TrackMouseEvent(&tme);
+            return 0;
+        }
+        break;
+    case WM_NCMOUSELEAVE:
+        if (hoverHit_ >= 0 && hoverHit_ < static_cast<int>(hits_.size()) &&
+            (hits_[hoverHit_].type == HitType::CapMax || hits_[hoverHit_].type == HitType::ViewerMax)) {
+            hoverHit_ = -1;
+            InvalidateRect(hwnd_, nullptr, FALSE);
+        }
+        break;
+    case WM_NCLBUTTONDOWN:
+        if (wp == HTMAXBUTTON) return 0;   // nicht von Windows zeichnen lassen
+        break;
+    case WM_NCLBUTTONDBLCLK:
+        if (wp == HTMAXBUTTON) return 0;
+        break;
+    case WM_NCLBUTTONUP:
+        if (wp == HTMAXBUTTON) {
+            ShowWindow(hwnd_, IsZoomed(hwnd_) ? SW_RESTORE : SW_MAXIMIZE);
+            return 0;
+        }
+        break;
     case WM_MOUSELEAVE:
         tipShown_ = false;
         KillTimer(hwnd_, kTimerTip);
@@ -2297,6 +2346,7 @@ void App::GeoClick(uint32_t idx) {
 }
 
 void App::SetCaptionless(bool on) {
+    if (!on) return;   // die Titelleiste von Windows kommt nicht zurueck (peek zeichnet sie selbst)
     if (captionless_ == on) return;
     captionless_ = on;
     viewerBarRc_ = {};
@@ -2324,9 +2374,12 @@ LRESULT App::CaptionHitTest(LPARAM lp, LRESULT def) {
     }
     const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
     float x = pt.x / s, y = pt.y / s;
+    // Maximieren-Knopf: als solcher melden (Windows 11 zeigt dann beim Darueberfahren die Andock-Layouts)
+    if (const Hit* h = HitAt(x, y); h && (h->type == HitType::CapMax || h->type == HitType::ViewerMax)) return HTMAXBUTTON;
     D2D1_RECT_F bar{};
     if (compare_.open) bar = D2D1::RectF(0, 0, W_, 48);
-    else if (viewer_.open && !viewer_.crop) bar = viewerBarRc_;
+    else if (viewer_.open) bar = viewer_.crop ? D2D1_RECT_F{} : viewerBarRc_;
+    else bar = D2D1::RectF(0, 0, W_, dup_.open ? 60.0f : topH_);   // obere Leiste der Ansicht bzw. der Seite
     if (x >= bar.left && x < bar.right && y >= bar.top && y < bar.bottom && !HitAt(x, y)) return HTCAPTION;
     return def;
 }

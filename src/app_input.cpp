@@ -392,6 +392,16 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
     SetFocus(hwnd_);
     tipShown_ = false;
     KillTimer(hwnd_, kTimerTip);
+    // Fensterknoepfe (selbst gezeichnete Titelleiste)
+    if (const Hit* ch = HitAt(x, y); ch && (ch->type == HitType::CapMin || ch->type == HitType::CapMax || ch->type == HitType::CapClose)) {
+        if (ch->type == HitType::CapMin) ShowWindow(hwnd_, SW_MINIMIZE);
+        else if (ch->type == HitType::CapMax) ShowWindow(hwnd_, IsZoomed(hwnd_) ? SW_RESTORE : SW_MAXIMIZE);
+        else {   // Schliessen erst beim Loslassen (sonst landet das Loslassen im Fenster dahinter)
+            capPress_ = HitType::CapClose;
+            SetCapture(hwnd_);
+        }
+        return;
+    }
     if (sheet_.open) { SheetMouseDown(x, y); return; }
     if (atlas_.open) { AtlasMouseDown(x, y); return; }
     if (compare_.open) { CompareMouseDown(x, y); return; }
@@ -762,6 +772,13 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
 
 void App::OnLButtonUp(float x, float y) {
     settingsScrollDrag_ = false;
+    if (capPress_ != HitType::None) {
+        HitType p = capPress_;
+        capPress_ = HitType::None;
+        if (GetCapture() == hwnd_) ReleaseCapture();
+        if (const Hit* h = HitAt(x, y); h && h->type == p) PostMessageW(hwnd_, WM_CLOSE, 0, 0);
+        return;
+    }
     if (viewerPress_ != HitType::None) {
         HitType p = viewerPress_;
         viewerPress_ = HitType::None;

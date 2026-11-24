@@ -290,6 +290,15 @@ float App::TimelineToContent(float dx) const {
     return t.cols[c].x + t.cols[c].s + (dx - t.colX[c] - w);   // in der Luecke danach (Abstaende bleiben gleich)
 }
 
+// Bereich der Uebersicht unten (Lage auf dem Zeitstrahl in voller Groesse): vom linken Rand bei ganz nach links
+// gescrollt bis zum rechten Rand bei ganz nach rechts gescrollt
+float App::TimelineChartFrom() const { return std::min(0.0f, TimelineScrollMin()); }
+
+float App::TimelineChartTo() const {
+    const float vw = gridRc_.right - gridRc_.left;
+    return std::max(tl_.contentW, TimelineScrollMax() + vw);
+}
+
 // Bildlauf: am Anfang und Ende so weit, dass die erste bzw. letzte Spalte in der Mitte steht (dort ist sie am groessten)
 float App::TimelineScrollMin() const {
     const auto& t = tl_;
@@ -461,7 +470,8 @@ void App::TimelineScrubAt(float x, bool immediate) {
     float w = std::max(1.0f, t.chartW);   // Breite der Uebersicht
     float vw = gridRc_.right - gridRc_.left;
     float minScroll = TimelineScrollMin(), maxScroll = TimelineScrollMax();
-    float wx = std::clamp((x - t.chartL) / w, 0.0f, 1.0f) * t.contentW;
+    const float d0 = TimelineChartFrom(), d1 = TimelineChartTo();
+    float wx = d0 + std::clamp((x - t.chartL) / w, 0.0f, 1.0f) * (d1 - d0);
     t.target = std::clamp(wx - vw / 2, minScroll, maxScroll);
     if (immediate) t.scroll = t.target;
     StartAnimation();
@@ -803,20 +813,23 @@ void App::PaintTimeline(ID2D1DeviceContext* dc) {
     t.chartL = cl;   // linker Rand und Breite der Uebersicht (fuer TimelineScrubAt)
     t.chartW = cw;
     hits_.push_back({D2D1::RectF(cl - 6, barTop - 6, cr + 6, area.bottom), HitType::TimelineScrub, 0});
-    const float kx = cw / std::max(1.0f, t.contentW);
+    // Bereich der Uebersicht: alles, wohin man scrollen kann, mit den leeren Stellen am Anfang und Ende (wenn die
+    // erste bzw. letzte Spalte in der Mitte steht); so entspricht der Ausschnitt genau der Ansicht oben
+    const float d0 = TimelineChartFrom(), d1 = TimelineChartTo();
+    const float kx = cw / std::max(1.0f, d1 - d0);
     int maxCount = 1;
     for (const auto& g : t.groups) maxCount = std::max(maxCount, g.count);
     // sichtbarer Ausschnitt in der Uebersicht: genau die Spalten, die oben zu sehen sind (verkleinerte Spalten am
     // Rand zeigen mehr vom Zeitstrahl, als die Fensterbreite allein ergaebe)
-    const float vx0 = cl + std::clamp(TimelineToContent(t.scroll), 0.0f, t.contentW) * kx;
-    const float vx1 = cl + std::clamp(TimelineToContent(t.scroll + viewW), 0.0f, t.contentW) * kx;
+    const float vx0 = cl + (std::clamp(TimelineToContent(t.scroll), d0, d1) - d0) * kx;
+    const float vx1 = cl + (std::clamp(TimelineToContent(t.scroll + viewW), d0, d1) - d0) * kx;
     const D2D1_COLOR_F barC = dark_ ? D2D1::ColorF(1, 1, 1, 0.26f) : D2D1::ColorF(0, 0, 0, 0.2f);
     dc->FillRectangle(D2D1::RectF(cl, barBottom, cr, barBottom + 1), r_.Brush(barC));
     IDWriteTextFormat* fy = r_.Text(11, DWRITE_FONT_WEIGHT_NORMAL);
     int lastYear = -1;
     float lastLabel = -1e9f;
     for (const auto& g : t.groups) {
-        float x0 = cl + g.x0 * kx, x1 = cl + g.x1 * kx;
+        float x0 = cl + (g.x0 - d0) * kx, x1 = cl + (g.x1 - d0) * kx;
         if (x1 - x0 < 1) x1 = x0 + 1;
         float h = std::max(2.0f, (barBottom - barTop) * std::sqrt(static_cast<float>(g.count) / maxCount));
         bool in = x1 >= vx0 && x0 <= vx1;

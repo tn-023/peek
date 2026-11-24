@@ -836,6 +836,8 @@ void App::Paint() {
             }
         }
     }
+    // Fensterknoepfe oben rechts (selbst gezeichnete Titelleiste); Betrachter und Vergleich haben eigene
+    if (!viewer_.open && !compare_.open && !viewerStart_ && CapW() > 0) PaintCaptionButtons(dc, dup_.open ? 60.0f : topH_);
     PaintTip(dc);
     if (perfHud_) PaintPerfHud(dc, paintStart);
     const double endStart = perfHud_ ? NowMs() : 0;
@@ -864,6 +866,32 @@ void App::Paint() {
 // Kopfzeile mit Navigation, Pfadleiste und Suche
 // ---------------------------------------------------------------------------
 
+// Minimieren, Maximieren/Wiederherstellen, Schliessen wie bei Windows 11 (Schliessen beim Darueberfahren rot)
+void App::PaintCaptionButtons(ID2D1DeviceContext* dc, float height) {
+    Theme t = MakeTheme(dark_, backdrop_);
+    const float w = 46;
+    float x = W_ - 3 * w;
+    auto btn = [&](HitType type, wchar_t glyph) {
+        D2D1_RECT_F rc = D2D1::RectF(x, 0, x + w, height);
+        int idx = static_cast<int>(hits_.size());
+        hits_.push_back({rc, type, 0});
+        const float ha = Hov(idx);
+        const bool close = type == HitType::CapClose;
+        if (ha > 0) {
+            if (close) dc->FillRectangle(rc, r_.Brush(D2D1::ColorF(0.77f, 0.17f, 0.11f, ha)));
+            else dc->FillRectangle(rc, r_.Brush(WithAlpha(t.hover, t.hover.a * ha)));
+        }
+        wchar_t g[2] = {glyph, 0};
+        D2D1_COLOR_F fg = close && ha > 0 ? MixColor(t.text, D2D1::ColorF(1, 1, 1, 1), ha) : t.text;
+        if (GetForegroundWindow() != hwnd_ && ha <= 0) fg = t.text3;   // inaktives Fenster: blasser
+        DrawText(dc, g, rc, r_.Icon(10), fg);
+        x += w;
+    };
+    btn(HitType::CapMin, 0xE921);
+    btn(HitType::CapMax, IsZoomed(hwnd_) ? 0xE923 : 0xE922);
+    btn(HitType::CapClose, 0xE8BB);
+}
+
 void App::PaintTopBar(ID2D1DeviceContext* dc) {
     Theme t = MakeTheme(dark_, backdrop_);
     float y = 8, h = 36;
@@ -886,7 +914,7 @@ void App::PaintTopBar(ID2D1DeviceContext* dc) {
     x += 4;
 
     float searchW = std::clamp(W_ * 0.28f, 220.0f, 380.0f);
-    D2D1_RECT_F sb = D2D1::RectF(W_ - 12 - searchW, y, W_ - 12, y + h);
+    D2D1_RECT_F sb = D2D1::RectF(W_ - 12 - CapW() - searchW, y, W_ - 12 - CapW(), y + h);
 
     // Pfadleiste (kein Eingabefeld)
     D2D1_RECT_F pb = D2D1::RectF(x, y, sb.left - 10, y + h);
@@ -3209,7 +3237,7 @@ void App::PaintSheet(ID2D1DeviceContext* dc) {
         DrawText(dc, label, rc, bf, primary ? D2D1::ColorF(1, 1, 1, 1) : t.text);
         return rc.left;
     };
-    float rx = W_ - 16;
+    float rx = W_ - 16 - CapW();   // rechts davon die Fensterknoepfe
     if (s.busy) {
         rx = toolButton(HitType::SheetCancel, T(L"Abbrechen"), rx, false) - 16;
         float pw = 200;
@@ -3504,7 +3532,7 @@ void App::PaintAtlas(ID2D1DeviceContext* dc) {
         DrawText(dc, label, rc, bf, !enabled ? t.text3 : (primary ? D2D1::ColorF(1, 1, 1, 1) : t.text));
         return rc.left;
     };
-    float rx = W_ - 16;
+    float rx = W_ - 16 - CapW();   // rechts davon die Fensterknoepfe
     if (a.busy) {
         rx = toolButton(HitType::AtlasCancel, T(L"Abbrechen"), rx, false, true) - 16;
         float pw = 200;
@@ -3695,7 +3723,7 @@ void App::PaintDup(ID2D1DeviceContext* dc) {
         DrawText(dc, label, lr, bf, fg);
         return rc.left;
     };
-    float rx = W_ - 16;
+    float rx = W_ - 16 - CapW();   // rechts davon die Fensterknoepfe
     if (!d.busy && !d.groups.empty()) {
         std::wstring dl = nSel == 1 ? T(L"1 Duplikat löschen") : TF(L"{0} Duplikate löschen", {Thousands(nSel)});
         rx = button(HitType::DupDelete, dl, 0xE74D, rx, true, nSel > 0) - 8;

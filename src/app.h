@@ -43,7 +43,7 @@ enum class HitType {
     SheetCancel, SheetCreate, SheetOrient, SheetColsMinus, SheetColsPlus, SheetRowsMinus, SheetRowsPlus, SheetNames,
     SheetExts, SheetQuality, SheetPrev, SheetNext, SheetHeadline, SheetCheck, SheetCell, SheetStripCheck, SheetStrip,
     BookmarkSheet,
-    SaveSearch, DeleteSearch, InfoStripMeta,
+    SaveSearch, DeleteSearch, InfoStripMeta, CapMin, CapMax, CapClose,
     DupSearch, DupCancel, DupDelete, DupCheck, DupThumb, DupScrollbar, DupSlider, DupZoomIn, DupZoomOut,
     AtlasCancel, AtlasCreate, AtlasColsMinus, AtlasColsPlus, AtlasRowsMinus, AtlasRowsPlus, AtlasTile,
     CompareMode, CompareClose
@@ -603,6 +603,8 @@ private:
     float TimelineShrink(float x, float s, float& fog) const;
     float TimelineScrollMin() const;
     float TimelineToContent(float dx) const;
+    float TimelineChartFrom() const;
+    float TimelineChartTo() const;
     float TimelineScrollMax() const;
     void TimelineMapColumns();
     D2D1_RECT_F TimelineItemRect(const TimelineItem& it) const;
@@ -1005,7 +1007,10 @@ private:
     bool inSizeMove_ = false;           // Fenster wird gerade mit der Maus in der Groesse geaendert
     bool tipShown_ = false;             // Hinweis (Tooltip) zum Treffer unter der Maus sichtbar
     void PaintTip(ID2D1DeviceContext* dc);
-    bool captionless_ = false;          // Titelleiste ausgeblendet (Betrachter im Fenster)
+    bool captionless_ = false;          // ohne Titelleiste von Windows (seit 1.7 immer; peek zeichnet sie selbst)
+    HitType capPress_ = HitType::None;  // gedrueckter Fensterknopf (wirkt beim Loslassen)
+    float CapW() const { return captionless_ && !fullscreen_ ? 3 * 46.0f : 0.0f; }   // Breite der Fensterknoepfe
+    void PaintCaptionButtons(ID2D1DeviceContext* dc, float height);
     D2D1_RECT_F viewerBarRc_{};         // obere Leiste des Betrachters (zum Ziehen des Fensters), leer wenn verborgen
     WINDOWPLACEMENT prevPlacement_{sizeof(WINDOWPLACEMENT)};
     RECT prevRect_{};   // tatsaechliche Fensterlage (auch bei angedocktem Fenster)

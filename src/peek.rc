@@ -24,11 +24,11 @@ BEGIN
         BLOCK "040704b0"
         BEGIN
             VALUE "FileDescription", "peek"
-            VALUE "FileVersion", "1.6.9"
+            VALUE "FileVersion", "1.7.0"
             VALUE "InternalName", "peek"
             VALUE "OriginalFilename", "peek.exe"
             VALUE "ProductName", "peek"
-            VALUE "ProductVersion", "1.6.9"
+            VALUE "ProductVersion", "1.7.0"
         END
     END
     BLOCK "VarFileInfo"

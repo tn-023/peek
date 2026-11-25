@@ -166,6 +166,7 @@ Data is stored in `%LOCALAPPDATA%\peek`. With an empty file `peek.portable` next
 - **Filters and search:** terms, source, pattern, calendar, search parameters, search history. Save a search with its place, filters and sort order; it appears in the sidebar.
 - **Duplicates:** finds visually identical images in the current view, also smaller, re-saved or converted copies. A list with the best copy kept; the others go to the recycle bin in one step. A click on a thumbnail compares it with the best copy.
 - **Location:** GPS coordinates from the photos in the info panel; a click copies them or opens OpenStreetMap in the browser.
+- **Animations (optional):** tiles and list rows slide in, hover effects fade out, and an opened image grows from its thumbnail into the viewer and back.
 - **Remove metadata:** from the info panel, for JPEG, PNG and WebP. Lossless: the image data stays unchanged.
 - **Bookmarks and collections:** mark with a star, index folders while peek is running.
 - **Compare:** two images side by side with synchronized zoom, or overlaid with a divider at the mouse pointer.

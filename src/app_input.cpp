@@ -89,8 +89,7 @@ void App::ScrollToPos(int pos) {
         for (auto& it : tl_.items)
             if (it.pos == pos && !it.stack) {
                 if (it.x < tl_.target || it.x + it.s > tl_.target + vw) {
-                    float maxScroll = std::max(0.0f, tl_.contentW - vw);
-                    tl_.target = std::clamp(it.x - vw / 3, 0.0f, maxScroll);
+                    tl_.target = std::clamp(it.x - vw / 3, TimelineScrollMin(), TimelineScrollMax());
                     StartAnimation();
                 }
                 break;

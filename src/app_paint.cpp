@@ -751,7 +751,9 @@ void App::Paint() {
     // Ein-/Ausblenden der Titelleiste kurz hell
     dc->Clear(zoom_.active ? MakeTheme(dark_, false).bg : t.bg);
 
-    if (zoom_.active && !zoom_.closing && viewer_.open) {
+    if (slideOpening_) {
+        dc->Clear(D2D1::ColorF(0, 0, 0, 1));   // Diashow startet gleich im Schwarz
+    } else if (zoom_.active && !zoom_.closing && viewer_.open) {
         PaintZoomOpen(dc);   // Bild waechst vom Vorschaubild ins Vollbild
     } else if (compare_.open) {
         PaintCompare(dc);

@@ -385,6 +385,7 @@ private:
     bool deferCaptionOnce_ = false;         // OpenViewer: Titelleiste noch nicht ausblenden (ZoomOpenNow)
     std::unordered_map<int, D2D1_RECT_F> drawnThumbs_;   // Position -> gezeichnetes Vorschaubild (dieses Bild)
     int viewerOpenReq_ = -1;
+    bool slideOpening_ = false;            // Diashow aus der Ordneransicht: Betrachter wird gerade geoeffnet (schwarz)
     bool frameSwitch_ = false;             // Titelleiste wird gerade ein-/ausgeblendet: sofort neu zeichnen               // Betrachter nach dem naechsten Bild oeffnen (Ansicht festhalten)
     bool TryZoomOpen(int pos);
     bool ThumbRectFor(int pos, D2D1_RECT_F& rc) const;   // Vorschaubild im letzten Bild (alle vier Ansichten)

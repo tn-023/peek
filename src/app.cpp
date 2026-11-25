@@ -1960,8 +1960,12 @@ void App::SlideshowFromGrid() {
     int start = slidePending_;
     slidePending_ = -1;
     if (start < 0 || start >= static_cast<int>(visible_.size())) { InvalidateRect(hwnd_, nullptr, FALSE); return; }
+    // beim Oeffnen aendert sich das Fenster (Titelleiste bzw. Vollbild) und es wird sofort neu gezeichnet: bis die
+    // Diashow laeuft, nur Schwarz (sonst blitzt das erste Bild auf, bevor es einblendet)
+    slideOpening_ = true;
     OpenViewer(start);
     BeginSlideshow(true, false);
+    slideOpening_ = false;
 }
 
 void App::BeginSlideshow(bool fromGrid, bool intro) {
@@ -2660,11 +2664,12 @@ bool App::AnimateStep(float dt) {
         // Zeitleiste: mit der mittleren Maustaste waagerecht scrollen (wie senkrecht in Liste und Kacheln)
         float dx = autoMouseX_ - autoAnchor_.x;
         const float dead = 12;
-        float maxX = std::max(0.0f, tl_.contentW - (gridRc_.right - gridRc_.left));
+        // bis zur ersten bzw. letzten Spalte in der Mitte (wie Mausrad und Tasten)
+        const float minX = TimelineScrollMin(), maxX = TimelineScrollMax();
         if (std::fabs(dx) > dead) {
             float v = std::fabs(dx) - dead;
             float speed = v * 0.06f + v * v * 0.0008f;
-            tl_.scroll = std::clamp(tl_.scroll + (dx > 0 ? speed : -speed) * step, 0.0f, maxX);
+            tl_.scroll = std::clamp(tl_.scroll + (dx > 0 ? speed : -speed) * step, minX, maxX);
         }
         tl_.target = tl_.scroll;
         tl_.vel = 0;

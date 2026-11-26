@@ -299,9 +299,17 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 }
             }
             LRESULT dr = 0;
-            if (DwmDefWindowProc(hwnd_, msg, wp, lp, &dr)) return dr;
+            LPARAM lpD = lp;
+            if (frameTest_ >= 3 && IsZoomed(hwnd_) && (msg == WM_NCHITTEST || (msg >= WM_NCMOUSEMOVE && msg <= WM_NCMBUTTONDBLCLK))) {
+                static const int sh[8][2] = {{0, -1}, {0, 1}, {1, 0}, {-1, 0}, {1, 1}, {-1, -1}, {1, -1}, {-1, 1}};
+                UINT dpi = GetDpiForWindow(hwnd_);
+                const int f = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+                const int i = std::clamp(frameTest_ - 3, 0, 7);
+                lpD = MAKELPARAM(GET_X_LPARAM(lp) + sh[i][0] * f, GET_Y_LPARAM(lp) + sh[i][1] * f);
+            }
+            if (DwmDefWindowProc(hwnd_, msg, wp, lpD, &dr)) return dr;
             // maximiert erkennt DWM seine Knoepfe nicht selbst: ueber ihre Lage (laut DWM) bestimmen
-            if (msg == WM_NCHITTEST)
+            if (msg == WM_NCHITTEST && frameTest_ < 3)
                 if (int c = CaptionButtonAt(lp)) return c;
         }
     }

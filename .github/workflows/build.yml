@@ -202,17 +202,12 @@ jobs:
         shell: powershell
         run: ./tools/uitest-titlebar.ps1 -Exe "$pwd\build\peek.exe" -Root "$env:USERPROFILE\Pictures\peek-Sandbox" -Out "$pwd\uitest"
 
-      - name: Titelleiste pruefen (Variante 1)
+      - name: Titelleiste pruefen (Versuche)
         if: github.ref == 'refs/heads/new-features'
         continue-on-error: true
         shell: powershell
-        run: ./tools/uitest-titlebar.ps1 -Exe "$pwd\build\peek.exe" -Root "$env:USERPROFILE\Pictures\peek-Sandbox" -Out "$pwd\uitest" -Variant 1
-
-      - name: Titelleiste pruefen (Variante 2)
-        if: github.ref == 'refs/heads/new-features'
-        continue-on-error: true
-        shell: powershell
-        run: ./tools/uitest-titlebar.ps1 -Exe "$pwd\build\peek.exe" -Root "$env:USERPROFILE\Pictures\peek-Sandbox" -Out "$pwd\uitest" -Variant 2
+        run: |
+          foreach ($v in 3..10) { ./tools/uitest-titlebar.ps1 -Exe "$pwd\build\peek.exe" -Root "$env:USERPROFILE\Pictures\peek-Sandbox" -Out "$pwd\uitest" -Variant $v -ProbeOnly }
 
       - name: Ergebnis der Titelleisten-Pruefung hochladen
         if: always() && github.ref == 'refs/heads/new-features'

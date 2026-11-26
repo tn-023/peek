@@ -6,7 +6,8 @@ param(
     [Parameter(Mandatory = $true)][string]$Root,
     [Parameter(Mandatory = $true)][string]$Out,
     [switch]$Native,
-    [int]$Variant = 0
+    [int]$Variant = 0,
+    [switch]$ProbeOnly
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -110,6 +111,40 @@ function Btn($h, [int]$i) { $r = Frame $h; return @(($r.Right - 23 - 46 * (2 - $
 try { Set-DisplayResolution -Width 1920 -Height 1080 -Force -ErrorAction Stop } catch { Write-Host "Aufloesung nicht aenderbar: $_" }
 $screen = [System.Windows.Forms.Screen]::PrimaryScreen
 Log "== $tag == Bildschirm $($screen.Bounds.Width)x$($screen.Bounds.Height), Arbeitsbereich $($screen.WorkingArea.Width)x$($screen.WorkingArea.Height)"
+
+function ShotTop($h, [string]$name) {   # nur die oberen 60 Pixel rechts (600 breit)
+    $r = Frame $h
+    $bmp = New-Object System.Drawing.Bitmap(600, 60)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.CopyFromScreen($r.Right - 600, [Math]::Max($r.Top, 0), 0, 0, (New-Object System.Drawing.Size(600, 60)))
+    $g.Dispose()
+    $bmp.Save((Join-Path $Out "$tag-$name.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+    $bmp.Dispose()
+}
+if ($ProbeOnly) {   # nur maximiert: Treffer und Darueberfahren
+    $p = Start-Peek @("`"$Root`"", '--view=grid', '--size=1000x680')
+    $h = $p.MainWindowHandle
+    [W]::ShowWindow($h, 3) | Out-Null; Start-Sleep -Seconds 2
+    Probe $h 'maximiert'
+    $c = Btn $h 1; MouseTo $c[0] $c[1]; Start-Sleep -Milliseconds 900; ShotTop $h 'max'
+    $c = Btn $h 2; MouseTo $c[0] $c[1]; Start-Sleep -Milliseconds 900; ShotTop $h 'schliessen'
+    Stop-Process $p -Force
+    exit 0
+}
+# Fenster im Hintergrund (inaktiv): Titel blasser
+$p = Start-Peek @("`"$Root`"", '--view=grid', '--size=1000x680')
+$h = $p.MainWindowHandle
+$np = Start-Process -FilePath notepad.exe -PassThru
+Start-Sleep -Seconds 3
+$r = Frame $h
+$bmp = New-Object System.Drawing.Bitmap(400, 40); $g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.CopyFromScreen($r.Left, $r.Top, 0, 0, (New-Object System.Drawing.Size(400, 40))); $g.Dispose()
+$bmp.Save((Join-Path $Out "$tag-inaktiv-links.png"), [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+ShotTop $h 'inaktiv-rechts'
+Stop-Process $np -Force -ErrorAction SilentlyContinue
+Get-Process notepad -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Stop-Process $p -Force
+Start-Sleep -Seconds 1
 
 # ---- 1. Ordneransicht, nicht maximiert
 $p = Start-Peek @("`"$Root`"", '--view=grid', '--size=1000x680')

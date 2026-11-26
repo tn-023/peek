@@ -538,8 +538,8 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
             if (collectionsView_) indexer_.Rescan();
             Reload(true);
             break;
-        case HitType::Crumb:
-            if (a >= 0 && a < static_cast<int>(crumbPaths_.size())) Navigate(crumbPaths_[a]);
+        case HitType::Crumb:   // uebergeordneter Ordner: den Ordner auswaehlen, aus dem man kommt (wie "Nach oben")
+            if (a >= 0 && a < static_cast<int>(crumbPaths_.size())) Navigate(crumbPaths_[a], true, ChildOnPath(crumbPaths_[a]));
             break;
         case HitType::CrumbChevron:
             if (!MenuJustClosed(1000 + a)) ShowCrumbMenu(a, rc);

@@ -1038,6 +1038,16 @@ void App::GoForward() {
     GoTo(target);
 }
 
+// Unterordner von ancestor auf dem Weg zum aktuellen Ordner (leer, wenn ancestor kein uebergeordneter Ordner ist)
+std::wstring App::ChildOnPath(const std::wstring& ancestor) const {
+    if (collectionsView_ || bookmarksView_ || path_.empty()) return {};
+    std::wstring a = ancestor;
+    if (!a.empty() && a.back() != L'\\') a += L'\\';
+    if (path_.size() <= a.size() || _wcsnicmp(path_.c_str(), a.c_str(), a.size()) != 0) return {};
+    size_t end = path_.find(L'\\', a.size());
+    return end == std::wstring::npos ? path_ : path_.substr(0, end);
+}
+
 void App::GoUp() {
     if (collectionsView_ || bookmarksView_ || path_.empty()) return;
     std::wstring parent = ParentPath(path_);
@@ -1435,6 +1445,10 @@ void App::FinishQuietReload() {
             float maxScroll = std::max(0.0f, contentH_ - gh);
             scroll_ = scrollTarget_ = std::clamp(rowTop_[row] + anchorOff, 0.0f, maxScroll);
         }
+    }
+    if (focusVisibleAfterReload_) {   // nach dem Loeschen: den ausgewaehlten Nachbarn ins Bild holen
+        focusVisibleAfterReload_ = false;
+        if (focus_ >= 0) ScrollToPos(focus_);
     }
     if (viewer_.open && !viewerSwitchTo_.empty()) {
         // nach dem Zuschneiden: das gespeicherte Bild zeigen (Original bzw. Kopie)
@@ -2272,7 +2286,35 @@ std::vector<std::wstring> App::SelectedPaths() const {
 void App::DeleteSelection() {
     auto paths = SelectedPaths();
     if (paths.empty()) return;
-    if (RecycleFiles(hwnd_, paths)) Reload(false);
+    // Nachbar merken: das erste nicht ausgewaehlte Element nach der Auswahl, sonst das letzte davor
+    std::wstring next;
+    {
+        const int n = static_cast<int>(visible_.size());
+        int first = n, last = -1;
+        for (int p = 0; p < n; ++p)
+            if (selected_.count(visible_[p])) {
+                first = std::min(first, p);
+                last = std::max(last, p);
+            }
+        for (int p = last + 1; p < n && next.empty(); ++p)
+            if (!selected_.count(visible_[p])) next = entries_[visible_[p]].path;
+        for (int p = std::min(first, n) - 1; p >= 0 && next.empty(); --p)
+            if (!selected_.count(visible_[p])) next = entries_[visible_[p]].path;
+    }
+    if (!RecycleFiles(hwnd_, paths)) return;
+    // Ansicht bleibt, wo sie ist: der Nachbar wird ausgewaehlt und bleibt sichtbar (neu eingelesen ohne Sprung)
+    selected_.clear();
+    focus_ = anchor_ = -1;
+    if (auto it = byPath_.find(next); !next.empty() && it != byPath_.end()) {
+        for (int p = 0; p < static_cast<int>(visible_.size()); ++p)
+            if (visible_[p] == it->second) {
+                focus_ = anchor_ = p;
+                selected_.insert(it->second);
+                break;
+            }
+    }
+    focusVisibleAfterReload_ = true;
+    QuietReload();
 }
 
 // Betrachter im Fenster: die Titelleiste von Windows verschwindet, der Inhalt reicht bis an den oberen Rand.

@@ -164,6 +164,7 @@ private:
     void GoBack();
     void GoForward();
     void GoUp();
+    std::wstring ChildOnPath(const std::wstring& ancestor) const;
     void OnLoadResults();
     void OnThumbResults();
     void DrainThumbs(double budgetMs);   // fertige Vorschaubilder hochladen, begrenzt je Bild
@@ -842,6 +843,7 @@ private:
     std::unordered_set<uint32_t> selected_;
     int focus_ = -1, anchor_ = -1;
     std::wstring pendingSelect_;
+    bool focusVisibleAfterReload_ = false;   // nach dem Loeschen: ausgewaehlten Nachbarn sichtbar halten
     std::wstring pendingViewer_;
     std::wstring shellLastFolder_;   // zuletzt geoeffneter Ordner vor dem Start aus dem Explorer (beim Beenden behalten)
     bool viewerStart_ = false;   // mit einer Bilddatei gestartet (z. B. "Oeffnen mit"): gleich im Betrachter, Esc fuehrt zum Ordner

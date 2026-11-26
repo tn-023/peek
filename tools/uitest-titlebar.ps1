@@ -5,7 +5,8 @@ param(
     [Parameter(Mandatory = $true)][string]$Exe,
     [Parameter(Mandatory = $true)][string]$Root,
     [Parameter(Mandatory = $true)][string]$Out,
-    [switch]$Native
+    [switch]$Native,
+    [int]$Variant = 0
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -37,7 +38,7 @@ public static class W {
 "@
 [W]::SetProcessDPIAware() | Out-Null
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
-$tag = if ($Native) { 'native' } else { 'eigen' }
+$tag = if ($Native) { 'native' } elseif ($Variant) { "eigen$Variant" } else { 'eigen' }
 $script:fail = 0
 function Log([string]$s) { Write-Host $s; Add-Content -Path (Join-Path $Out "$tag.log") -Value $s }
 function Check([string]$what, [bool]$ok) {
@@ -94,6 +95,7 @@ function Start-Peek([string[]]$arguments) {
     Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:LOCALAPPDATA 'peek\einstellungen.dat')
     $all = $arguments + '--lang=de' + '--theme=dark'
     if ($Native) { $all += '--native-frame' }
+    if ($Variant) { $all += "--frame-test=$Variant" }
     $p = Start-Process -FilePath $Exe -ArgumentList $all -PassThru
     $deadline = (Get-Date).AddSeconds(25)
     while ($p.MainWindowHandle -eq [IntPtr]::Zero -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300; $p.Refresh() }
@@ -105,17 +107,19 @@ function Start-Peek([string[]]$arguments) {
 # Mitte der drei Knoepfe (46 breit) ab der rechten sichtbaren Kante, 15 Pixel unter der sichtbaren Oberkante
 function Btn($h, [int]$i) { $r = Frame $h; return @(($r.Right - 23 - 46 * (2 - $i)), ([Math]::Max($r.Top, 0) + 15)) }
 
+try { Set-DisplayResolution -Width 1920 -Height 1080 -Force -ErrorAction Stop } catch { Write-Host "Aufloesung nicht aenderbar: $_" }
 $screen = [System.Windows.Forms.Screen]::PrimaryScreen
 Log "== $tag == Bildschirm $($screen.Bounds.Width)x$($screen.Bounds.Height), Arbeitsbereich $($screen.WorkingArea.Width)x$($screen.WorkingArea.Height)"
 
 # ---- 1. Ordneransicht, nicht maximiert
-$p = Start-Peek @("`"$Root`"", '--view=grid', '--size=1200x800')
+$p = Start-Peek @("`"$Root`"", '--view=grid', '--size=1000x680')
 $h = $p.MainWindowHandle
 Shot $h 'normal' 12
 Probe $h 'normal'
 $r = Frame $h
 $c = Btn $h 1; MouseTo $c[0] $c[1]; Start-Sleep -Milliseconds 1200; Shot $h 'normal-ueber-max' 12
 $c = Btn $h 2; MouseTo $c[0] $c[1]; Start-Sleep -Milliseconds 600; Shot $h 'normal-ueber-schliessen' 12
+$c = Btn $h 0; MouseTo $c[0] $c[1]; Start-Sleep -Milliseconds 600; Shot $h 'normal-ueber-min' 12
 MouseTo ($r.Left + 400) ($r.Top + 300)
 
 Log 'Titelleiste, nicht maximiert:'
@@ -124,14 +128,17 @@ Check 'Klick auf Maximieren maximiert' ([W]::IsZoomed($h))
 Shot $h 'maximiert'
 Probe $h 'maximiert'
 $c = Btn $h 1; MouseTo $c[0] $c[1]; Start-Sleep -Milliseconds 1200; Shot $h 'maximiert-ueber-max'
+$c = Btn $h 2; MouseTo $c[0] $c[1]; Start-Sleep -Milliseconds 600; Shot $h 'maximiert-ueber-schliessen'
 $c = Btn $h 1; Click $c[0] $c[1]
 Check 'Klick auf Wiederherstellen (maximiert) stellt wieder her' (-not [W]::IsZoomed($h))
+if ([W]::IsZoomed($h)) { [W]::ShowWindow($h, 9) | Out-Null; Start-Sleep -Seconds 1 }
 $r = Frame $h
 Click ($r.Left + 500) ($r.Top + 15) -Double
 Check 'Doppelklick auf die Titelleiste maximiert' ([W]::IsZoomed($h))
 $r = Frame $h
 Click ($r.Left + 500) ([Math]::Max($r.Top, 0) + 12) -Double
 Check 'Doppelklick auf die Titelleiste (maximiert) stellt wieder her' (-not [W]::IsZoomed($h))
+if ([W]::IsZoomed($h)) { [W]::ShowWindow($h, 9) | Out-Null; Start-Sleep -Seconds 1 }
 $c = Btn $h 0; Click $c[0] $c[1]
 Check 'Klick auf Minimieren minimiert' ([W]::IsIconic($h))
 [W]::ShowWindow($h, 9) | Out-Null; Start-Sleep -Seconds 1; [W]::SetForegroundWindow($h) | Out-Null; Start-Sleep -Seconds 1
@@ -168,7 +175,7 @@ if (-not $p.HasExited) { $c = Btn $h 2; Click $c[0] $c[1]; Start-Sleep -Seconds 
 if (-not $p.HasExited) { Stop-Process $p -Force }
 
 # ---- 2. Schliessen im nicht maximierten Fenster
-$p = Start-Peek @("`"$Root`"", '--view=list', '--size=1100x700')
+$p = Start-Peek @("`"$Root`"", '--view=list', '--size=1000x680')
 $h = $p.MainWindowHandle
 Shot $h 'liste' 12
 $c = Btn $h 2; Click $c[0] $c[1]; Start-Sleep -Seconds 2; $p.Refresh()
@@ -176,13 +183,13 @@ Check 'Klick auf Schliessen schliesst' ($p.HasExited)
 if (-not $p.HasExited) { Stop-Process $p -Force }
 
 # ---- 3. Einstellungen und Bildbetrachter: Titelleiste bzw. Bild bis oben, danach wieder Titelleiste
-$p = Start-Peek @("`"$Root`"", '--settings', '--size=1200x800')
+$p = Start-Peek @("`"$Root`"", '--settings', '--size=1000x680')
 Shot $p.MainWindowHandle 'einstellungen' 12
 Probe $p.MainWindowHandle 'einstellungen'
 Stop-Process $p -Force
 $img = Get-ChildItem -Path $Root -File | Where-Object { $_.Extension -in '.jpg', '.png' } | Select-Object -First 1
 if ($img) {
-    $p = Start-Peek @("`"--viewer=$($img.FullName)`"", '--size=1200x800')
+    $p = Start-Peek @("`"--viewer=$($img.FullName)`"", '--size=1000x680')
     $h = $p.MainWindowHandle
     $before = Frame $h
     Shot $h 'betrachter' 12

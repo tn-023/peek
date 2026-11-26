@@ -104,6 +104,7 @@ bool App::Init(HINSTANCE inst, int show) {
 
     ApplyTheme();
     // Eigener Rahmen (siehe app.h): nur mit durchscheinendem Hintergrund, dort zeichnet DWM die Fensterknoepfe
+    if (const wchar_t* ft = wcsstr(GetCommandLineW(), L"--frame-test=")) frameTest_ = _wtoi(ft + 13);
     if (backdrop_ && wcsstr(GetCommandLineW(), L"--native-frame") == nullptr) {
         customFrame_ = captionless_ = true;
         SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
@@ -277,8 +278,32 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
     // Darueberfahren, Druecken und die Andock-Layouts uebernimmt DwmDefWindowProc (wie von Microsoft fuer eigene
     // Rahmen beschrieben). Alles andere (Verschieben, Systemmenue, Rand) regelt CaptionHitTest.
     if (customFrame_ && ContentY() > 0) {
-        LRESULT dr = 0;
-        if (DwmDefWindowProc(hwnd_, msg, wp, lp, &dr)) return dr;
+        bool border = false;   // oberer Rand zum Aendern der Hoehe: hat Vorrang (wie bei Windows), auch ueber den Knoepfen
+        if (msg == WM_NCHITTEST && !IsZoomed(hwnd_)) {
+            POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+            ScreenToClient(hwnd_, &pt);
+            UINT dpi = GetDpiForWindow(hwnd_);
+            border = pt.y < GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+        }
+        if (!border) {
+            if (frameTest_ == 2) {
+                if ((msg == WM_NCLBUTTONDOWN || msg == WM_NCLBUTTONDBLCLK) && (wp == HTMINBUTTON || wp == HTMAXBUTTON || wp == HTCLOSE)) {
+                    ncPress_ = static_cast<int>(wp);
+                    return 0;
+                }
+                if (msg == WM_NCLBUTTONUP && (wp == HTMINBUTTON || wp == HTMAXBUTTON || wp == HTCLOSE)) {
+                    const bool same = ncPress_ == static_cast<int>(wp);
+                    ncPress_ = 0;
+                    if (same) PostMessageW(hwnd_, WM_SYSCOMMAND, wp == HTMINBUTTON ? SC_MINIMIZE : wp == HTCLOSE ? SC_CLOSE : IsZoomed(hwnd_) ? SC_RESTORE : SC_MAXIMIZE, 0);
+                    return 0;
+                }
+            }
+            LRESULT dr = 0;
+            if (DwmDefWindowProc(hwnd_, msg, wp, lp, &dr)) return dr;
+            // maximiert erkennt DWM seine Knoepfe nicht selbst: ueber ihre Lage (laut DWM) bestimmen
+            if (msg == WM_NCHITTEST)
+                if (int c = CaptionButtonAt(lp)) return c;
+        }
     }
 
     switch (msg) {
@@ -321,10 +346,12 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             LRESULT r = DefWindowProcW(hwnd_, msg, wp, lp);
             const LONG defTop = p->rgrc[0].top;   // dort begaenne der Inhalt mit der Titelleiste von Windows
             p->rgrc[0].top = top;
+            LONG inset = 0;
             if (IsZoomed(hwnd_) && !fullscreen_) {   // maximiert ragt das Fenster um den Rahmen ueber den Bildschirm
                 UINT dpi = GetDpiForWindow(hwnd_);
-                p->rgrc[0].top += GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+                inset = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
             }
+            if (frameTest_ != 1) p->rgrc[0].top += inset;
             titlePx_ = static_cast<float>(std::max<LONG>(0, defTop - p->rgrc[0].top));
             return r;
         }
@@ -2376,6 +2403,19 @@ void App::SetCaptionless(bool on) {
     SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
     frameSwitch_ = false;
     InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+// Fensterknopf unter dem Punkt (Bildschirmkoordinaten in lp): DWM nennt die Flaeche seiner drei Knoepfe
+int App::CaptionButtonAt(LPARAM lp) const {
+    RECT b{}, wr{};
+    if (FAILED(DwmGetWindowAttribute(hwnd_, DWMWA_CAPTION_BUTTON_BOUNDS, &b, sizeof(b))) || b.right <= b.left ||
+        !GetWindowRect(hwnd_, &wr))
+        return 0;
+    POINT p = {GET_X_LPARAM(lp) - wr.left, GET_Y_LPARAM(lp) - wr.top};
+    if (!PtInRect(&b, p)) return 0;
+    const LONG w = std::max<LONG>(1, (b.right - b.left) / 3);
+    const LONG i = std::clamp<LONG>((p.x - b.left) / w, 0, 2);
+    return i == 0 ? HTMINBUTTON : i == 1 ? HTMAXBUTTON : HTCLOSE;
 }
 
 // Ohne Titelleiste: oberer Rand zum Aendern der Hoehe, die Leiste oben (ohne ihre Knoepfe) zum Verschieben

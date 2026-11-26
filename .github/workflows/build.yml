@@ -202,6 +202,18 @@ jobs:
         shell: powershell
         run: ./tools/uitest-titlebar.ps1 -Exe "$pwd\build\peek.exe" -Root "$env:USERPROFILE\Pictures\peek-Sandbox" -Out "$pwd\uitest"
 
+      - name: Titelleiste pruefen (Variante 1)
+        if: github.ref == 'refs/heads/new-features'
+        continue-on-error: true
+        shell: powershell
+        run: ./tools/uitest-titlebar.ps1 -Exe "$pwd\build\peek.exe" -Root "$env:USERPROFILE\Pictures\peek-Sandbox" -Out "$pwd\uitest" -Variant 1
+
+      - name: Titelleiste pruefen (Variante 2)
+        if: github.ref == 'refs/heads/new-features'
+        continue-on-error: true
+        shell: powershell
+        run: ./tools/uitest-titlebar.ps1 -Exe "$pwd\build\peek.exe" -Root "$env:USERPROFILE\Pictures\peek-Sandbox" -Out "$pwd\uitest" -Variant 2
+
       - name: Ergebnis der Titelleisten-Pruefung hochladen
         if: always() && github.ref == 'refs/heads/new-features'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -216,3 +228,18 @@ jobs:
         with:
           files: build/peek.exe
           generate_release_notes: true
+
+      # Bilder der Titelleisten-Pruefung im Zweig "uitest" ablegen (letzter Schritt: raeumt das Arbeitsverzeichnis leer)
+      - name: Bilder der Titelleisten-Pruefung ablegen
+        if: always() && github.ref == 'refs/heads/new-features'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan uitest
+          git rm -rf --cached . | Out-Null
+          Get-ChildItem -Force | Where-Object { $_.Name -notin @('.git', 'uitest') } | Remove-Item -Recurse -Force
+          git add -A -f uitest
+          git commit -m "Titelleisten-Pruefung von $env:GITHUB_SHA"
+          git push -f origin uitest

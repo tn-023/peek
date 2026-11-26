@@ -1021,6 +1021,9 @@ private:
     // Vergleich und im Vollbild reicht er bis oben. Ohne durchscheinenden Hintergrund (Windows 10) bleibt die
     // Titelleiste von Windows.
     bool customFrame_ = false;
+    int frameTest_ = 0;                 // nur zum Pruefen (--frame-test=N)
+    int ncPress_ = 0;
+    int CaptionButtonAt(LPARAM lp) const;   // HTMINBUTTON, HTMAXBUTTON, HTCLOSE oder 0
     float titlePx_ = 0;                 // Hoehe der Titelleiste von Windows (Pixel), aus WM_NCCALCSIZE
     ComPtr<ID2D1Bitmap1> titleIcon_;
     float ContentY() const;             // DIP: Beginn des Inhalts (0 = bis oben)

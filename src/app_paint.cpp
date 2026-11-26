@@ -3000,25 +3000,8 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
         dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 60), D2D1::Point2F(x1 - 16, rc.top + 60), r_.Brush(t.stroke), 1.0f);
         dropRow(rc.top + 60, T(L"Farbmodus"), HitType::SettingsTheme, T(kThemeNames[std::clamp(settings_.theme, 0, 2)]));
         dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 116), D2D1::Point2F(x1 - 16, rc.top + 116), r_.Brush(t.stroke), 1.0f);
-        dropRow(rc.top + 116, T(L"Bildbetrachter im Vollbild"), HitType::SettingsViewerFullscreen,
-                T(kViewerFullscreenNames[settings_.viewerFullscreen ? 0 : 1]));
-        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 172), D2D1::Point2F(x1 - 16, rc.top + 172), r_.Brush(t.stroke), 1.0f);
-        dropRow(rc.top + 172, T(L"Kleine Bilder im Betrachter"), HitType::SettingsViewerSmall,
-                T(kViewerSmallNames[std::clamp(settings_.viewerSmall, 0, 1)]));
-        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 228), D2D1::Point2F(x1 - 16, rc.top + 228), r_.Brush(t.stroke), 1.0f);
-        dropRow(rc.top + 228, T(L"Ordner und Dateien öffnen"), HitType::SettingsSingleClick,
-                T(kSingleClickNames[settings_.singleClick ? 1 : 0]));
-        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 284), D2D1::Point2F(x1 - 16, rc.top + 284), r_.Brush(t.stroke), 1.0f);
-        dropRow(rc.top + 284, T(L"Auswahlkästchen"), HitType::SettingsCheckBoxes,
-                T(kCheckBoxNames[settings_.checkBoxes ? 1 : 0]));
-        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 340), D2D1::Point2F(x1 - 16, rc.top + 340), r_.Brush(t.stroke), 1.0f);
-        dropRow(rc.top + 340, T(L"Klick auf den Aufnahmeort"), HitType::SettingsGeoClick,
-                T(kGeoClickNames[std::clamp(settings_.geoClick, 0, 1)]));
-        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 396), D2D1::Point2F(x1 - 16, rc.top + 396), r_.Brush(t.stroke), 1.0f);
-        dropRow(rc.top + 396, T(L"Animationen"), HitType::SettingsAnimations, T(kCheckBoxNames[settings_.animations ? 1 : 0]));
-        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 452), D2D1::Point2F(x1 - 16, rc.top + 452), r_.Brush(t.stroke), 1.0f);
         {   // Akzentfarbe: Farbfeld und Name
-            const float ry = rc.top + 452;
+            const float ry = rc.top + 116;
             DrawText(dc, T(L"Akzentfarbe"), D2D1::RectF(x0 + 20, ry, x1 - 260, ry + 56), r_.Text(13), t.text);
             IDWriteTextFormat* bf = r_.Text(13);
             wchar_t hex[16];
@@ -3036,6 +3019,23 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
             wchar_t g[2] = {0xE70D, 0};
             DrawText(dc, g, D2D1::RectF(dd.right - 30, dd.top, dd.right - 8, dd.bottom), r_.Icon(11), t.text2);
         }
+        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 172), D2D1::Point2F(x1 - 16, rc.top + 172), r_.Brush(t.stroke), 1.0f);
+        dropRow(rc.top + 172, T(L"Bildbetrachter im Vollbild"), HitType::SettingsViewerFullscreen,
+                T(kViewerFullscreenNames[settings_.viewerFullscreen ? 0 : 1]));
+        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 228), D2D1::Point2F(x1 - 16, rc.top + 228), r_.Brush(t.stroke), 1.0f);
+        dropRow(rc.top + 228, T(L"Kleine Bilder im Betrachter"), HitType::SettingsViewerSmall,
+                T(kViewerSmallNames[std::clamp(settings_.viewerSmall, 0, 1)]));
+        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 284), D2D1::Point2F(x1 - 16, rc.top + 284), r_.Brush(t.stroke), 1.0f);
+        dropRow(rc.top + 284, T(L"Ordner und Dateien öffnen"), HitType::SettingsSingleClick,
+                T(kSingleClickNames[settings_.singleClick ? 1 : 0]));
+        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 340), D2D1::Point2F(x1 - 16, rc.top + 340), r_.Brush(t.stroke), 1.0f);
+        dropRow(rc.top + 340, T(L"Auswahlkästchen"), HitType::SettingsCheckBoxes,
+                T(kCheckBoxNames[settings_.checkBoxes ? 1 : 0]));
+        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 396), D2D1::Point2F(x1 - 16, rc.top + 396), r_.Brush(t.stroke), 1.0f);
+        dropRow(rc.top + 396, T(L"Klick auf den Aufnahmeort"), HitType::SettingsGeoClick,
+                T(kGeoClickNames[std::clamp(settings_.geoClick, 0, 1)]));
+        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 452), D2D1::Point2F(x1 - 16, rc.top + 452), r_.Brush(t.stroke), 1.0f);
+        dropRow(rc.top + 452, T(L"Animationen"), HitType::SettingsAnimations, T(kCheckBoxNames[settings_.animations ? 1 : 0]));
         y = rc.bottom + 28;
     }
 

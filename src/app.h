@@ -1013,7 +1013,28 @@ private:
     bool inSizeMove_ = false;           // Fenster wird gerade mit der Maus in der Groesse geaendert
     bool tipShown_ = false;             // Hinweis (Tooltip) zum Treffer unter der Maus sichtbar
     void PaintTip(ID2D1DeviceContext* dc);
-    bool captionless_ = false;          // Titelleiste ausgeblendet (Betrachter im Fenster)
+    bool captionless_ = false;          // Fensterrahmen ohne Titelleiste von Windows (WM_NCCALCSIZE)
+    // Eigener Rahmen (Windows 11 mit durchscheinendem Hintergrund): der Rahmen hat nie eine Titelleiste von Windows,
+    // die Client-Flaeche aendert sich beim Oeffnen des Bildbetrachters also nicht (kein Verrutschen). In den
+    // Ansichten zeichnet peek oben eine Titelleiste wie die von Windows (Symbol, Titel); die drei Fensterknoepfe
+    // zeichnet und bedient Windows selbst (DWM). Der Inhalt beginnt darunter (ContentY); im Bildbetrachter, im
+    // Vergleich und im Vollbild reicht er bis oben. Ohne durchscheinenden Hintergrund (Windows 10) bleibt die
+    // Titelleiste von Windows.
+    bool customFrame_ = false;
+    float titlePx_ = 0;                 // Hoehe der Titelleiste von Windows (Pixel), aus WM_NCCALCSIZE
+    ComPtr<ID2D1Bitmap1> titleIcon_;
+    float ContentY() const;             // DIP: Beginn des Inhalts (0 = bis oben)
+    D2D1::Matrix3x2F Base() const { return D2D1::Matrix3x2F::Translation(0, ContentY()); }
+    void ScreenToContent(POINT& pt) const {
+        ScreenToClient(hwnd_, &pt);
+        pt.y -= static_cast<LONG>(std::lround(ContentY() * r_.scale()));
+    }
+    void ContentToScreen(POINT& pt) const {
+        pt.y += static_cast<LONG>(std::lround(ContentY() * r_.scale()));
+        ClientToScreen(hwnd_, &pt);
+    }
+    void PaintTitleBar(ID2D1DeviceContext* dc, float height);
+    D2D1_RECT_F TitleIconRect(float height) const;   // Fensterkoordinaten (DIP)
     D2D1_RECT_F viewerBarRc_{};         // obere Leiste des Betrachters (zum Ziehen des Fensters), leer wenn verborgen
     WINDOWPLACEMENT prevPlacement_{sizeof(WINDOWPLACEMENT)};
     RECT prevRect_{};   // tatsaechliche Fensterlage (auch bei angedocktem Fenster)

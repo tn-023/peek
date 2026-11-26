@@ -103,6 +103,11 @@ bool App::Init(HINSTANCE inst, int show) {
     if (!hwnd_) return false;
 
     ApplyTheme();
+    // Eigener Rahmen (siehe app.h): nur mit durchscheinendem Hintergrund, dort zeichnet DWM die Fensterknoepfe
+    if (backdrop_ && wcsstr(GetCommandLineW(), L"--native-frame") == nullptr) {
+        customFrame_ = captionless_ = true;
+        SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+    }
     if (!r_.Init(hwnd_)) {
         MessageBoxW(hwnd_, T(L"Die Grafikausgabe (Direct3D 11 / Direct2D) konnte nicht initialisiert werden."), L"peek",
                     MB_ICONERROR);
@@ -266,7 +271,15 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         MarkUiActivity();
     const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
     auto X = [&](LPARAM l) { return static_cast<float>(GET_X_LPARAM(l)) / s; };
-    auto Y = [&](LPARAM l) { return static_cast<float>(GET_Y_LPARAM(l)) / s; };
+    auto Y = [&](LPARAM l) { return static_cast<float>(GET_Y_LPARAM(l)) / s - ContentY(); };   // unter der Titelleiste
+
+    // Eigene Titelleiste sichtbar: die drei Fensterknoepfe zeichnet DWM in den erweiterten Rahmen; Treffer,
+    // Darueberfahren, Druecken und die Andock-Layouts uebernimmt DwmDefWindowProc (wie von Microsoft fuer eigene
+    // Rahmen beschrieben). Alles andere (Verschieben, Systemmenue, Rand) regelt CaptionHitTest.
+    if (customFrame_ && ContentY() > 0) {
+        LRESULT dr = 0;
+        if (DwmDefWindowProc(hwnd_, msg, wp, lp, &dr)) return dr;
+    }
 
     switch (msg) {
     case WM_MOVE:
@@ -306,11 +319,13 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             auto p = reinterpret_cast<NCCALCSIZE_PARAMS*>(lp);
             LONG top = p->rgrc[0].top;
             LRESULT r = DefWindowProcW(hwnd_, msg, wp, lp);
+            const LONG defTop = p->rgrc[0].top;   // dort begaenne der Inhalt mit der Titelleiste von Windows
             p->rgrc[0].top = top;
             if (IsZoomed(hwnd_) && !fullscreen_) {   // maximiert ragt das Fenster um den Rahmen ueber den Bildschirm
                 UINT dpi = GetDpiForWindow(hwnd_);
                 p->rgrc[0].top += GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
             }
+            titlePx_ = static_cast<float>(std::max<LONG>(0, defTop - p->rgrc[0].top));
             return r;
         }
         break;
@@ -384,6 +399,9 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         OnMouseMove(X(lp), Y(lp), wp);
         return 0;
     }
+    case WM_ACTIVATE:   // Titelleiste: aktives bzw. inaktives Fenster (Titel blasser)
+        InvalidateRect(hwnd_, nullptr, FALSE);
+        break;
     case WM_MOUSELEAVE:
         tipShown_ = false;
         KillTimer(hwnd_, kTimerTip);
@@ -455,7 +473,7 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         return TRUE;
     case WM_MOUSEWHEEL: {
         POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
-        ScreenToClient(hwnd_, &pt);
+        ScreenToContent(pt);
         OnWheel(pt.x / s, pt.y / s, GET_WHEEL_DELTA_WPARAM(wp), GET_KEYSTATE_WPARAM(wp));
         return 0;
     }
@@ -471,7 +489,7 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         if (LOWORD(lp) == HTCLIENT) {
             POINT pt;
             GetCursorPos(&pt);
-            ScreenToClient(hwnd_, &pt);
+            ScreenToContent(pt);
             if (autoScroll_) {
                 SetCursor(LoadCursorW(nullptr, settings_.viewMode == 3 && !dup_.open ? IDC_SIZEWE : IDC_SIZENS));   // Zeitleiste: waagerecht
                 return TRUE;
@@ -2348,6 +2366,7 @@ void App::GeoClick(uint32_t idx) {
 }
 
 void App::SetCaptionless(bool on) {
+    if (customFrame_) return;   // eigener Rahmen: nie eine Titelleiste von Windows
     if (captionless_ == on) return;
     captionless_ = on;
     viewerBarRc_ = {};
@@ -2363,7 +2382,7 @@ void App::SetCaptionless(bool on) {
 LRESULT App::CaptionHitTest(LPARAM lp, LRESULT def) {
     if (def != HTCLIENT || fullscreen_) return def;
     POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
-    ScreenToClient(hwnd_, &pt);
+    ScreenToClient(hwnd_, &pt);   // Fensterkoordinaten (Rand oben)
     UINT dpi = GetDpiForWindow(hwnd_);
     int frame = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
     RECT cr;
@@ -2374,7 +2393,14 @@ LRESULT App::CaptionHitTest(LPARAM lp, LRESULT def) {
         return HTTOP;
     }
     const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
-    float x = pt.x / s, y = pt.y / s;
+    const float cy = ContentY();
+    float x = pt.x / s, y = pt.y / s - cy;   // Inhaltskoordinaten
+    if (cy > 0) {   // eigene Titelleiste: Symbol = Systemmenue, sonst verschieben (Doppelklick: maximieren)
+        if (y >= 0) return def;
+        const D2D1_RECT_F ir = TitleIconRect(cy);
+        if (x >= ir.left - 4 && x < ir.right + 4) return HTSYSMENU;
+        return HTCAPTION;
+    }
     D2D1_RECT_F bar{};
     if (compare_.open) bar = D2D1::RectF(0, 0, W_, 48);
     else if (viewer_.open && !viewer_.crop) bar = viewerBarRc_;
@@ -2455,7 +2481,7 @@ DWORD App::OnDragOver(const std::vector<std::wstring>& paths, POINT screen, DWOR
     }
     if (viewer_.open || settingsOpen_ || sheet_.open || atlas_.open || compare_.open || dup_.open || paths.empty()) return DROPEFFECT_NONE;
     POINT pt = screen;
-    ScreenToClient(hwnd_, &pt);
+    ScreenToContent(pt);
     float x = pt.x / r_.scale(), y = pt.y / r_.scale();
     int crumb = -1;
     bool side = false;
@@ -2511,7 +2537,7 @@ DWORD App::OnDragOver(const std::vector<std::wstring>& paths, POINT screen, DWOR
 
 DWORD App::OnDrop(const std::vector<std::wstring>& paths, POINT screen, DWORD keys, DWORD allowed) {
     POINT pt = screen;
-    ScreenToClient(hwnd_, &pt);
+    ScreenToContent(pt);
     float x = pt.x / r_.scale(), y = pt.y / r_.scale();
     const Hit* h = HitAt(x, y);
     dropPos_ = dropSideItem_ = dropCrumb_ = -1;

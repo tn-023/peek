@@ -132,7 +132,7 @@ bool App::DrawBitmapFit(ID2D1DeviceContext* dc, Bmp* b, const D2D1_RECT_F& box, 
 
 void App::Layout() {
     W_ = r_.widthDip();
-    H_ = r_.heightDip();
+    H_ = r_.heightDip() - ContentY();   // darueber die Titelleiste
     gridRc_ = D2D1::RectF(SidebarWidth(), topH_ + chipsH_, W_ - InfoWidth(), H_ - statusH_);
     bool list = settings_.viewMode == 1;
     if (bookmarksView_) {
@@ -705,7 +705,7 @@ void App::PaintPerfHud(ID2D1DeviceContext* dc, double paintStart) {
                   avg, mx, cpu, cmx, pa[3], pm[3], 1000.0 / RefreshPeriodMs());
     std::swprintf(buf2, 240, L"Wolke: %d Karten · nah %d Bild / %d Name / %d Ebene · %d Sprites · Atlas %.1f (max %.1f) · Rechnen %.1f (max %.1f) · Nah %.1f (max %.1f)",   // lang:ok
                   perfCount_[0], perfCount_[1], perfCount_[2], perfCount_[3], perfCount_[4], pa[0], pm[0], pa[1], pm[1], pa[2], pm[2]);
-    dc->SetTransform(D2D1::Matrix3x2F::Identity());
+    dc->SetTransform(Base());
     D2D1_RECT_F rc = D2D1::RectF(8, H_ - (cloud ? 56.0f : 34.0f), std::min(W_ - 8, 760.0f), H_ - 8);
     FillRound(dc, rc, 4, D2D1::ColorF(0, 0, 0, 0.8f));
     DrawText(dc, buf, D2D1::RectF(rc.left + 10, rc.top, rc.right - 6, rc.top + 26), r_.Text(12), D2D1::ColorF(1, 1, 1, 0.95f));
@@ -747,9 +747,11 @@ void App::Paint() {
     }
     Layout();
     dc->SetTransform(D2D1::Matrix3x2F::Identity());
-    // waehrend der Betrachter-Animation deckend: Windows zeichnet den durchscheinenden Hintergrund (Mica) beim
-    // Ein-/Ausblenden der Titelleiste kurz hell
-    dc->Clear(zoom_.active ? MakeTheme(dark_, false).bg : t.bg);
+    // ohne eigenen Rahmen waehrend der Betrachter-Animation deckend: Windows zeichnet den durchscheinenden
+    // Hintergrund (Mica) beim Ein-/Ausblenden der Titelleiste kurz hell
+    dc->Clear(zoom_.active && !customFrame_ ? MakeTheme(dark_, false).bg : t.bg);
+    if (ContentY() > 0) PaintTitleBar(dc, ContentY());
+    dc->SetTransform(Base());   // Inhalt unterhalb der Titelleiste
 
     if (slideOpening_) {
         dc->Clear(D2D1::ColorF(0, 0, 0, 1));   // Diashow startet gleich im Schwarz
@@ -774,9 +776,9 @@ void App::Paint() {
             Theme tt = MakeTheme(dark_, backdrop_);
             dc->FillRectangle(D2D1::RectF(0, 0, W_, H_), r_.Brush(WithAlpha(tt.layer, backdrop_ ? 0.45f : 1.0f)));
             size_t h0 = hits_.size();
-            dc->SetTransform(D2D1::Matrix3x2F::Translation(0, -settingsScroll_));
+            dc->SetTransform(D2D1::Matrix3x2F::Translation(0, -settingsScroll_) * Base());
             PaintSettings(dc);
-            dc->SetTransform(D2D1::Matrix3x2F::Identity());
+            dc->SetTransform(Base());
             for (size_t i = h0; i < hits_.size(); ++i) {
                 hits_[i].rc.top -= settingsScroll_;
                 hits_[i].rc.bottom -= settingsScroll_;
@@ -865,6 +867,62 @@ void App::Paint() {
 // ---------------------------------------------------------------------------
 // Kopfzeile mit Navigation, Pfadleiste und Suche
 // ---------------------------------------------------------------------------
+
+float App::ContentY() const {
+    if (!customFrame_ || fullscreen_ || viewer_.open || compare_.open || viewerStart_) return 0;
+    const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
+    return titlePx_ / s;
+}
+
+// Lage des Programmsymbols in der Titelleiste (Fensterkoordinaten, DIP), wie bei Windows 11: 16 DIP vom linken
+// Rand, mittig im sichtbaren Teil (nicht maximiert liegt oben der unsichtbare Rand zum Ziehen)
+D2D1_RECT_F App::TitleIconRect(float height) const {
+    const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
+    float top = 0;
+    if (!IsZoomed(hwnd_)) top = 1.0f / s;   // 1 Pixel Fensterrand
+    const float px = std::round((top + (height - top - 16) / 2) * s) / s;   // auf ganze Pixel
+    return D2D1::RectF(16, px, 32, px + 16);
+}
+
+// Titelleiste wie die von Windows 11: Programmsymbol und Fenstertitel links (bei inaktivem Fenster blasser),
+// Hintergrund durchscheinend; die Fensterknoepfe rechts zeichnet Windows selbst (DWM, im erweiterten Rahmen)
+void App::PaintTitleBar(ID2D1DeviceContext* dc, float height) {
+    Theme t = MakeTheme(dark_, backdrop_);
+    dc->SetTransform(D2D1::Matrix3x2F::Identity());
+    const bool active = GetForegroundWindow() == hwnd_;
+    if (!titleIcon_) {   // Programmsymbol (klein, passend zur Bildschirmaufloesung)
+        UINT dpi = GetDpiForWindow(hwnd_);
+        int sz = GetSystemMetricsForDpi(SM_CXSMICON, dpi);
+        HICON ic = static_cast<HICON>(LoadImageW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(101), IMAGE_ICON, sz, sz, LR_DEFAULTCOLOR));
+        if (ic) {
+            ComPtr<IWICBitmap> wb;
+            ComPtr<IWICFormatConverter> conv;
+            if (SUCCEEDED(Wic()->CreateBitmapFromHICON(ic, &wb)) && SUCCEEDED(Wic()->CreateFormatConverter(&conv)) &&
+                SUCCEEDED(conv->Initialize(wb.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0,
+                                           WICBitmapPaletteTypeCustom))) {
+                Pixels px;
+                UINT w = 0, h = 0;
+                conv->GetSize(&w, &h);
+                px.w = px.srcW = w;
+                px.h = px.srcH = h;
+                px.data.resize(size_t(w) * h * 4);
+                if (SUCCEEDED(conv->CopyPixels(nullptr, w * 4, static_cast<UINT>(px.data.size()), px.data.data())))
+                    titleIcon_ = r_.CreateBitmap(px);
+            }
+            DestroyIcon(ic);
+        }
+    }
+    const D2D1_RECT_F ir = TitleIconRect(height);
+    float x = ir.left;
+    if (titleIcon_) {
+        dc->DrawBitmap(titleIcon_.Get(), ir, 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+        x = ir.right + 8;
+    }
+    wchar_t title[260] = {};
+    GetWindowTextW(hwnd_, title, 260);
+    const float mid = (ir.top + ir.bottom) / 2;
+    DrawText(dc, title, D2D1::RectF(x, mid - 12, r_.widthDip() - 3 * 46 - 16, mid + 12), r_.Text(12), active ? t.text : t.text3);
+}
 
 void App::PaintTopBar(ID2D1DeviceContext* dc) {
     Theme t = MakeTheme(dark_, backdrop_);
@@ -2602,9 +2660,9 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
                         dc->GetTarget(&oldTarget);
                         dc->SetTarget(vc.bmp.Get());
                         dc->Clear(D2D1::ColorF(0, 0, 0, 0));
-                        dc->SetTransform(D2D1::Matrix3x2F::Rotation(viewer_.rotation * 90.0f, c));
+                        dc->SetTransform(D2D1::Matrix3x2F::Rotation(viewer_.rotation * 90.0f, c) * Base());
                         dc->DrawBitmap(b->bmp.Get(), dst, 1.0f, im);
-                        dc->SetTransform(D2D1::Matrix3x2F::Identity());
+                        dc->SetTransform(Base());
                         dc->SetTarget(oldTarget.Get());
                         vc.path = e.path;
                         vc.src = b->bmp.Get();
@@ -2629,9 +2687,9 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
             dc->DrawBitmap(vc.bmp.Get(), D2D1::RectF(vc.x0 / sc, vc.y0 / sc, (vc.x0 + vc.w) / sc, (vc.y0 + vc.h) / sc), 1.0f,
                            D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
         } else {
-            dc->SetTransform(D2D1::Matrix3x2F::Rotation(viewer_.rotation * 90.0f, c));
+            dc->SetTransform(D2D1::Matrix3x2F::Rotation(viewer_.rotation * 90.0f, c) * Base());
             dc->DrawBitmap(b->bmp.Get(), dst, 1.0f, im);
-            dc->SetTransform(D2D1::Matrix3x2F::Identity());
+            dc->SetTransform(Base());
         }
         if (e.ext == L"svg" && viewer_.rotation % 4 == 0) {
             // SVG: Vektorgrafik bleibt in jeder Zoomstufe scharf. Ist das Grundbild groeber als der Bildschirm,

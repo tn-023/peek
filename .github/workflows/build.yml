@@ -189,6 +189,27 @@ jobs:
             LICENSE-APACHE
             build/THIRD-PARTY.txt
 
+      # Nur im Entwicklungszweig: Titelleiste am echten Fenster pruefen (Treffer, Klicks, Bildschirmfotos)
+      - name: Titelleiste pruefen (Vergleich: Titelleiste von Windows)
+        if: github.ref == 'refs/heads/new-features'
+        continue-on-error: true
+        shell: powershell
+        run: ./tools/uitest-titlebar.ps1 -Exe "$pwd\build\peek.exe" -Root "$env:USERPROFILE\Pictures\peek-Sandbox" -Out "$pwd\uitest" -Native
+
+      - name: Titelleiste pruefen (eigener Rahmen)
+        if: github.ref == 'refs/heads/new-features'
+        continue-on-error: true
+        shell: powershell
+        run: ./tools/uitest-titlebar.ps1 -Exe "$pwd\build\peek.exe" -Root "$env:USERPROFILE\Pictures\peek-Sandbox" -Out "$pwd\uitest"
+
+      - name: Ergebnis der Titelleisten-Pruefung hochladen
+        if: always() && github.ref == 'refs/heads/new-features'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: uitest
+          retention-days: 3
+          path: uitest/
+
       - name: Release anlegen (nur bei Tag v*)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4

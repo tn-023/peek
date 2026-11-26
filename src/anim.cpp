@@ -163,14 +163,16 @@ D2D1_RECT_F App::DipToScreen(const D2D1_RECT_F& r) const {
     POINT o{0, 0};
     ClientToScreen(hwnd_, &o);
     const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
-    return D2D1::RectF(o.x + r.left * s, o.y + r.top * s, o.x + r.right * s, o.y + r.bottom * s);
+    const float cy = ContentY() * s;   // Inhalt beginnt unter der Titelleiste
+    return D2D1::RectF(o.x + r.left * s, o.y + cy + r.top * s, o.x + r.right * s, o.y + cy + r.bottom * s);
 }
 
 D2D1_RECT_F App::ScreenToDip(const D2D1_RECT_F& r) const {
     POINT o{0, 0};
     ClientToScreen(hwnd_, &o);
     const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
-    return D2D1::RectF((r.left - o.x) / s, (r.top - o.y) / s, (r.right - o.x) / s, (r.bottom - o.y) / s);
+    const float cy = ContentY();
+    return D2D1::RectF((r.left - o.x) / s, (r.top - o.y) / s - cy, (r.right - o.x) / s, (r.bottom - o.y) / s - cy);
 }
 
 // Oeffnen aus Kacheln oder Liste: erst die Ansicht im naechsten Bild festhalten, dann oeffnen (WM_APP_ZOOMOPEN)
@@ -335,7 +337,7 @@ void App::ZoomCloseBegin() {
 void App::PaintZoomOverlay(ID2D1DeviceContext* dc) {
     if (!zoom_.active || !zoom_.closing) return;
     const float k = EaseOut(static_cast<float>((NowMs() - zoom_.t0) / kZoomCloseMs));
-    dc->FillRectangle(D2D1::RectF(0, 0, W_, H_), r_.Brush(D2D1::ColorF(0, 0, 0, 1 - k)));
+    dc->FillRectangle(D2D1::RectF(0, -ContentY(), W_, H_), r_.Brush(D2D1::ColorF(0, 0, 0, 1 - k)));   // auch die Titelleiste
     if (!zoom_.bmp) return;
     D2D1_RECT_F from = ScreenToDip(zoom_.fromScr);
     D2D1_RECT_F thumb{};

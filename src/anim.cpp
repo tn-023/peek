@@ -265,8 +265,11 @@ void App::ZoomOpenNow(int pos) {
 void App::PaintZoomOpen(ID2D1DeviceContext* dc) {
     const float k = EaseOut(static_cast<float>((NowMs() - zoom_.t0) / kZoomOpenMs));
     const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
+    // festgehaltene Ansicht und Schwarz: in Client-Koordinaten (der Inhalt kann tiefer beginnen, ContentY)
+    dc->SetTransform(D2D1::Matrix3x2F::Identity());
+    const D2D1_RECT_F whole = D2D1::RectF(0, 0, r_.widthDip(), r_.heightDip());
     // ausserhalb der festgehaltenen Ansicht (Betrachter im Vollbild: das Fenster ist gerade gewachsen) gleich schwarz
-    dc->FillRectangle(D2D1::RectF(0, 0, W_, H_), r_.Brush(D2D1::ColorF(0, 0, 0, 1)));
+    dc->FillRectangle(whole, r_.Brush(D2D1::ColorF(0, 0, 0, 1)));
     if (zoom_.snap) {
         POINT o{0, 0};
         ClientToScreen(hwnd_, &o);
@@ -279,7 +282,8 @@ void App::PaintZoomOpen(ID2D1DeviceContext* dc) {
             dc->DrawBitmap(zoom_.snap.Get(), D2D1::RectF(x, 0, x + px.width / s, y + 0.5f), 1.0f,
                            D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR, D2D1::RectF(0, 0, px.width / s, 1.0f / s));
     }
-    dc->FillRectangle(D2D1::RectF(0, 0, W_, H_), r_.Brush(D2D1::ColorF(0, 0, 0, k)));
+    dc->FillRectangle(whole, r_.Brush(D2D1::ColorF(0, 0, 0, k)));
+    dc->SetTransform(Base());
     if (viewer_.pos < 0 || viewer_.pos >= static_cast<int>(visible_.size())) return;
     const FileEntry& e = entries_[visible_[viewer_.pos]];
     // Ziel: Lage im Betrachter, wie er nach dem Ausblenden der Titelleiste bzw. im Vollbild aussieht
@@ -291,7 +295,7 @@ void App::PaintZoomOpen(ID2D1DeviceContext* dc) {
         W_ = (zoom_.futureScr.right - zoom_.futureScr.left) / s;
         H_ = (zoom_.futureScr.bottom - zoom_.futureScr.top) / s;
         offX = (zoom_.futureScr.left - o.x) / s;
-        offY = (zoom_.futureScr.top - o.y) / s;
+        offY = (zoom_.futureScr.top - o.y) / s - ContentY();   // in Inhaltskoordinaten
     }
     float iw, ih;
     const float sc = ViewerScale(e, iw, ih);

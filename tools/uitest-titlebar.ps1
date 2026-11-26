@@ -5,9 +5,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Exe,
     [Parameter(Mandatory = $true)][string]$Root,
     [Parameter(Mandatory = $true)][string]$Out,
-    [switch]$Native,
-    [int]$Variant = 0,
-    [switch]$ProbeOnly
+    [switch]$Native
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -39,7 +37,7 @@ public static class W {
 "@
 [W]::SetProcessDPIAware() | Out-Null
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
-$tag = if ($Native) { 'native' } elseif ($Variant) { "eigen$Variant" } else { 'eigen' }
+$tag = if ($Native) { 'native' } else { 'eigen' }
 $script:fail = 0
 function Log([string]$s) { Write-Host $s; Add-Content -Path (Join-Path $Out "$tag.log") -Value $s }
 function Check([string]$what, [bool]$ok) {
@@ -92,11 +90,10 @@ function Probe($h, [string]$label) {
         Log ("  y+{0,2}: links {1}   rechts {2}" -f $dy, $left, $right)
     }
 }
-function Start-Peek([string[]]$arguments) {
+function Start-Peek([string[]]$arguments, [string]$theme = 'dark') {
     Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:LOCALAPPDATA 'peek\einstellungen.dat')
-    $all = $arguments + '--lang=de' + '--theme=dark'
+    $all = $arguments + '--lang=de' + "--theme=$theme"
     if ($Native) { $all += '--native-frame' }
-    if ($Variant) { $all += "--frame-test=$Variant" }
     $p = Start-Process -FilePath $Exe -ArgumentList $all -PassThru
     $deadline = (Get-Date).AddSeconds(25)
     while ($p.MainWindowHandle -eq [IntPtr]::Zero -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300; $p.Refresh() }
@@ -121,30 +118,27 @@ function ShotTop($h, [string]$name) {   # nur die oberen 60 Pixel rechts (600 br
     $bmp.Save((Join-Path $Out "$tag-$name.png"), [System.Drawing.Imaging.ImageFormat]::Png)
     $bmp.Dispose()
 }
-if ($ProbeOnly) {   # nur maximiert: Treffer und Darueberfahren
-    $p = Start-Peek @("`"$Root`"", '--view=grid', '--size=1000x680')
-    $h = $p.MainWindowHandle
-    [W]::ShowWindow($h, 3) | Out-Null; Start-Sleep -Seconds 2
-    Probe $h 'maximiert'
-    $c = Btn $h 1; MouseTo $c[0] $c[1]; Start-Sleep -Milliseconds 900; ShotTop $h 'max'
-    $c = Btn $h 2; MouseTo $c[0] $c[1]; Start-Sleep -Milliseconds 900; ShotTop $h 'schliessen'
-    Stop-Process $p -Force
-    exit 0
+# aktiv und im Hintergrund (inaktiv, Titel blasser), dunkel und hell
+function ShotLeft($h, [string]$name) {
+    $r = Frame $h
+    $bmp = New-Object System.Drawing.Bitmap(400, 40); $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.CopyFromScreen($r.Left, $r.Top, 0, 0, (New-Object System.Drawing.Size(400, 40))); $g.Dispose()
+    $bmp.Save((Join-Path $Out "$tag-$name.png"), [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
 }
-# Fenster im Hintergrund (inaktiv): Titel blasser
-$p = Start-Peek @("`"$Root`"", '--view=grid', '--size=1000x680')
-$h = $p.MainWindowHandle
-$np = Start-Process -FilePath notepad.exe -PassThru
-Start-Sleep -Seconds 3
-$r = Frame $h
-$bmp = New-Object System.Drawing.Bitmap(400, 40); $g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.CopyFromScreen($r.Left, $r.Top, 0, 0, (New-Object System.Drawing.Size(400, 40))); $g.Dispose()
-$bmp.Save((Join-Path $Out "$tag-inaktiv-links.png"), [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
-ShotTop $h 'inaktiv-rechts'
-Stop-Process $np -Force -ErrorAction SilentlyContinue
-Get-Process notepad -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Stop-Process $p -Force
-Start-Sleep -Seconds 1
+foreach ($theme in 'dark', 'light') {
+    $p = Start-Peek @("`"$Root`"", '--view=grid', '--size=1000x680') $theme
+    $h = $p.MainWindowHandle
+    ShotLeft $h "aktiv-$theme-links"; ShotTop $h "aktiv-$theme-rechts"
+    $c = Btn $h 1; MouseTo $c[0] $c[1]; Start-Sleep -Milliseconds 900; ShotTop $h "ueber-max-$theme"
+    $r = Frame $h; MouseTo ($r.Left + 300) ($r.Top + 300)
+    $np = Start-Process -FilePath notepad.exe -PassThru
+    Start-Sleep -Seconds 3
+    ShotLeft $h "inaktiv-$theme-links"
+    Stop-Process $np -Force -ErrorAction SilentlyContinue
+    Get-Process notepad -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Stop-Process $p -Force
+    Start-Sleep -Seconds 1
+}
 
 # ---- 1. Ordneransicht, nicht maximiert
 $p = Start-Peek @("`"$Root`"", '--view=grid', '--size=1000x680')
@@ -197,6 +191,21 @@ Shot $h 'normal-nachher' 12
 Log 'Titelleiste, maximiert:'
 $c = Btn $h 1; Click $c[0] $c[1]
 Check 'maximiert' ([W]::IsZoomed($h))
+# Vollbild (F11) aus dem maximierten Fenster und zurueck: der Inhalt bleibt an derselben Stelle
+$o1 = New-Object W+POINT; [W]::ClientToScreen($h, [ref]$o1) | Out-Null
+Shot $h 'maximiert-vor-vollbild'
+Key 0x7A; Start-Sleep -Seconds 1
+Probe $h 'Vollbild (F11) aus dem maximierten Fenster'
+$o2 = New-Object W+POINT; [W]::ClientToScreen($h, [ref]$o2) | Out-Null
+$bmp = New-Object System.Drawing.Bitmap($screen.Bounds.Width, $screen.Bounds.Height); $g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.CopyFromScreen(0, 0, 0, 0, $bmp.Size); $g.Dispose(); $bmp.Save((Join-Path $Out "$tag-vollbild.png"), [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+Key 0x7A; Start-Sleep -Seconds 1
+Probe $h 'zurueck aus dem Vollbild'
+$o3 = New-Object W+POINT; [W]::ClientToScreen($h, [ref]$o3) | Out-Null
+Shot $h 'maximiert-nach-vollbild'
+Log "  Client-Ursprung: maximiert $($o1.X),$($o1.Y)  Vollbild $($o2.X),$($o2.Y)  danach $($o3.X),$($o3.Y)"
+Check 'nach dem Vollbild wieder maximiert' ([W]::IsZoomed($h))
+if (-not $Native) { Check 'Client-Ursprung im Vollbild wie maximiert (kein Verrutschen)' ($o1.X -eq $o2.X -and $o1.Y -eq $o2.Y -and $o1.X -eq $o3.X -and $o1.Y -eq $o3.Y) }
 $c = Btn $h 0; Click $c[0] $c[1]
 Check 'Klick auf Minimieren (maximiert) minimiert' ([W]::IsIconic($h))
 [W]::ShowWindow($h, 9) | Out-Null; Start-Sleep -Seconds 1; [W]::SetForegroundWindow($h) | Out-Null; Start-Sleep -Seconds 1
@@ -235,6 +244,18 @@ if ($img) {
     Shot $h 'betrachter-geschlossen' 12
     Probe $h 'nach dem Betrachter'
     Check 'Fensterlage beim Schliessen des Betrachters unveraendert' ($before.Left -eq $after.Left -and $before.Top -eq $after.Top -and $before.Right -eq $after.Right -and $before.Bottom -eq $after.Bottom)
+    # dasselbe maximiert: Bild oeffnen (Eingabetaste), Client-Flaeche darf sich nicht aendern
+    [W]::ShowWindow($h, 3) | Out-Null; Start-Sleep -Seconds 2
+    $c1 = New-Object W+RECT; [W]::GetClientRect($h, [ref]$c1) | Out-Null; $q1 = New-Object W+POINT; [W]::ClientToScreen($h, [ref]$q1) | Out-Null
+    Shot $h 'maximiert-ordner'
+    Key 0x0D; Start-Sleep -Seconds 2
+    $c2 = New-Object W+RECT; [W]::GetClientRect($h, [ref]$c2) | Out-Null; $q2 = New-Object W+POINT; [W]::ClientToScreen($h, [ref]$q2) | Out-Null
+    Shot $h 'maximiert-betrachter'
+    Probe $h 'Betrachter maximiert'
+    Key 0x1B; Start-Sleep -Seconds 2
+    Shot $h 'maximiert-ordner-danach'
+    Log "  Client maximiert: Ordner ab $($q1.X),$($q1.Y) $($c1.Right)x$($c1.Bottom)  Betrachter ab $($q2.X),$($q2.Y) $($c2.Right)x$($c2.Bottom)"
+    if (-not $Native) { Check 'Client-Flaeche beim Oeffnen des Betrachters (maximiert) unveraendert' ($q1.X -eq $q2.X -and $q1.Y -eq $q2.Y -and $c1.Right -eq $c2.Right -and $c1.Bottom -eq $c2.Bottom) }
     $c = Btn $h 2; Click $c[0] $c[1]; Start-Sleep -Seconds 2; $p.Refresh()
     Check 'Klick auf Schliessen nach dem Betrachter schliesst' ($p.HasExited)
     if (-not $p.HasExited) { Stop-Process $p -Force }

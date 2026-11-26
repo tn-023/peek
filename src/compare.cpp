@@ -264,7 +264,7 @@ bool App::CompareKey(WPARAM vk) {
     case VK_BACK: CloseCompare(); return true;
     case VK_APPS: {   // Kontextmenue-Taste: Menue fuer das linke bzw. das Bild links der Trennlinie
         POINT pt = {static_cast<LONG>(W_ / 4 * r_.scale()), static_cast<LONG>(H_ / 2 * r_.scale())};
-        ClientToScreen(hwnd_, &pt);
+        ContentToScreen(pt);
         ShowCompareMenu(W_ / 4, H_ / 2, pt);
         return true;
     }

@@ -750,7 +750,7 @@ void App::Paint() {
     // ohne eigenen Rahmen waehrend der Betrachter-Animation deckend: Windows zeichnet den durchscheinenden
     // Hintergrund (Mica) beim Ein-/Ausblenden der Titelleiste kurz hell
     dc->Clear(zoom_.active && !customFrame_ ? MakeTheme(dark_, false).bg : t.bg);
-    if (ContentY() > 0) PaintTitleBar(dc, ContentY());
+    if (TitleH() > 0) PaintTitleBar(dc);
     dc->SetTransform(Base());   // Inhalt unterhalb der Titelleiste
 
     if (slideOpening_) {
@@ -868,26 +868,30 @@ void App::Paint() {
 // Kopfzeile mit Navigation, Pfadleiste und Suche
 // ---------------------------------------------------------------------------
 
-float App::ContentY() const {
+float App::TitleH() const {
     if (!customFrame_ || fullscreen_ || viewer_.open || compare_.open || viewerStart_) return 0;
     const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
     return titlePx_ / s;
 }
 
-// Lage des Programmsymbols in der Titelleiste (Fensterkoordinaten, DIP), wie bei Windows 11: 16 DIP vom linken
-// Rand, mittig im sichtbaren Teil (nicht maximiert liegt oben der unsichtbare Rand zum Ziehen)
-D2D1_RECT_F App::TitleIconRect(float height) const {
+float App::ContentY() const {
+    if (!customFrame_) return 0;
     const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
-    float top = 0;
-    if (!IsZoomed(hwnd_)) top = 1.0f / s;   // 1 Pixel Fensterrand
-    const float px = std::round((top + (height - top - 16) / 2) * s) / s;   // auf ganze Pixel
-    return D2D1::RectF(16, px, 32, px + 16);
+    return insetPx_ / s + TitleH();
+}
+
+// Lage des Programmsymbols in der Titelleiste (Client-Koordinaten, DIP), gemessen an der Titelleiste von
+// Windows 11: 16 gross, senkrecht mittig (abgerundet), links 8 (maximiert 2) vom sichtbaren Rand
+D2D1_RECT_F App::TitleIconRect() const {
+    const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
+    const float top = (insetPx_ + std::floor((titlePx_ - 16 * s) / 2)) / s;
+    const float left = IsZoomed(hwnd_) ? 2.0f : 8.0f;
+    return D2D1::RectF(left, top, left + 16, top + 16);
 }
 
 // Titelleiste wie die von Windows 11: Programmsymbol und Fenstertitel links (bei inaktivem Fenster blasser),
 // Hintergrund durchscheinend; die Fensterknoepfe rechts zeichnet Windows selbst (DWM, im erweiterten Rahmen)
-void App::PaintTitleBar(ID2D1DeviceContext* dc, float height) {
-    Theme t = MakeTheme(dark_, backdrop_);
+void App::PaintTitleBar(ID2D1DeviceContext* dc) {
     dc->SetTransform(D2D1::Matrix3x2F::Identity());
     const bool active = GetForegroundWindow() == hwnd_;
     if (!titleIcon_) {   // Programmsymbol (klein, passend zur Bildschirmaufloesung)
@@ -912,16 +916,15 @@ void App::PaintTitleBar(ID2D1DeviceContext* dc, float height) {
             DestroyIcon(ic);
         }
     }
-    const D2D1_RECT_F ir = TitleIconRect(height);
-    float x = ir.left;
-    if (titleIcon_) {
-        dc->DrawBitmap(titleIcon_.Get(), ir, 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
-        x = ir.right + 8;
-    }
+    const D2D1_RECT_F ir = TitleIconRect();
+    if (titleIcon_) dc->DrawBitmap(titleIcon_.Get(), ir, 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
     wchar_t title[260] = {};
     GetWindowTextW(hwnd_, title, 260);
+    // Schrift wie die Titelleiste von Windows: aktiv Weiss bzw. Schwarz, inaktiv grau
+    const D2D1_COLOR_F fg = active ? (dark_ ? D2D1::ColorF(1, 1, 1, 1) : D2D1::ColorF(0, 0, 0, 1))
+                                   : (dark_ ? D2D1::ColorF(0.47f, 0.47f, 0.47f, 1) : D2D1::ColorF(0.6f, 0.6f, 0.6f, 1));
     const float mid = (ir.top + ir.bottom) / 2;
-    DrawText(dc, title, D2D1::RectF(x, mid - 12, r_.widthDip() - 3 * 46 - 16, mid + 12), r_.Text(12), active ? t.text : t.text3);
+    DrawText(dc, title, D2D1::RectF(ir.right + 6, mid - 12, r_.widthDip() - 3 * 48 - 16, mid + 12), r_.Text(12), fg);
 }
 
 void App::PaintTopBar(ID2D1DeviceContext* dc) {

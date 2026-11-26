@@ -104,7 +104,6 @@ bool App::Init(HINSTANCE inst, int show) {
 
     ApplyTheme();
     // Eigener Rahmen (siehe app.h): nur mit durchscheinendem Hintergrund, dort zeichnet DWM die Fensterknoepfe
-    if (const wchar_t* ft = wcsstr(GetCommandLineW(), L"--frame-test=")) frameTest_ = _wtoi(ft + 13);
     if (backdrop_ && wcsstr(GetCommandLineW(), L"--native-frame") == nullptr) {
         customFrame_ = captionless_ = true;
         SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
@@ -277,7 +276,7 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
     // Eigene Titelleiste sichtbar: die drei Fensterknoepfe zeichnet DWM in den erweiterten Rahmen; Treffer,
     // Darueberfahren, Druecken und die Andock-Layouts uebernimmt DwmDefWindowProc (wie von Microsoft fuer eigene
     // Rahmen beschrieben). Alles andere (Verschieben, Systemmenue, Rand) regelt CaptionHitTest.
-    if (customFrame_ && ContentY() > 0) {
+    if (customFrame_ && TitleH() > 0) {
         bool border = false;   // oberer Rand zum Aendern der Hoehe: hat Vorrang (wie bei Windows), auch ueber den Knoepfen
         if (msg == WM_NCHITTEST && !IsZoomed(hwnd_)) {
             POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
@@ -286,30 +285,11 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             border = pt.y < GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
         }
         if (!border) {
-            if (frameTest_ == 2) {
-                if ((msg == WM_NCLBUTTONDOWN || msg == WM_NCLBUTTONDBLCLK) && (wp == HTMINBUTTON || wp == HTMAXBUTTON || wp == HTCLOSE)) {
-                    ncPress_ = static_cast<int>(wp);
-                    return 0;
-                }
-                if (msg == WM_NCLBUTTONUP && (wp == HTMINBUTTON || wp == HTMAXBUTTON || wp == HTCLOSE)) {
-                    const bool same = ncPress_ == static_cast<int>(wp);
-                    ncPress_ = 0;
-                    if (same) PostMessageW(hwnd_, WM_SYSCOMMAND, wp == HTMINBUTTON ? SC_MINIMIZE : wp == HTCLOSE ? SC_CLOSE : IsZoomed(hwnd_) ? SC_RESTORE : SC_MAXIMIZE, 0);
-                    return 0;
-                }
-            }
             LRESULT dr = 0;
-            LPARAM lpD = lp;
-            if (frameTest_ >= 3 && IsZoomed(hwnd_) && (msg == WM_NCHITTEST || (msg >= WM_NCMOUSEMOVE && msg <= WM_NCMBUTTONDBLCLK))) {
-                static const int sh[8][2] = {{0, -1}, {0, 1}, {1, 0}, {-1, 0}, {1, 1}, {-1, -1}, {1, -1}, {-1, 1}};
-                UINT dpi = GetDpiForWindow(hwnd_);
-                const int f = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
-                const int i = std::clamp(frameTest_ - 3, 0, 7);
-                lpD = MAKELPARAM(GET_X_LPARAM(lp) + sh[i][0] * f, GET_Y_LPARAM(lp) + sh[i][1] * f);
-            }
-            if (DwmDefWindowProc(hwnd_, msg, wp, lpD, &dr)) return dr;
-            // maximiert erkennt DWM seine Knoepfe nicht selbst: ueber ihre Lage (laut DWM) bestimmen
-            if (msg == WM_NCHITTEST && frameTest_ < 3)
+            if (DwmDefWindowProc(hwnd_, msg, wp, lp, &dr)) return dr;
+            // Sicherheitsnetz: erkennt DWM seine Knoepfe nicht selbst, ueber ihre Lage (laut DWM) bestimmen;
+            // das Druecken uebernimmt dann DefWindowProc
+            if (msg == WM_NCHITTEST)
                 if (int c = CaptionButtonAt(lp)) return c;
         }
     }
@@ -339,6 +319,7 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_ERASEBKGND:
         return 1;
     case WM_DPICHANGED: {
+        titleIcon_.Reset();   // Symbol der Titelleiste in der neuen Groesse laden
         r_.SetDpi(static_cast<float>(HIWORD(wp)));
         auto rc = reinterpret_cast<RECT*>(lp);
         SetWindowPos(hwnd_, nullptr, rc->left, rc->top, rc->right - rc->left, rc->bottom - rc->top,
@@ -359,8 +340,15 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 UINT dpi = GetDpiForWindow(hwnd_);
                 inset = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
             }
-            if (frameTest_ != 1) p->rgrc[0].top += inset;
-            titlePx_ = static_cast<float>(std::max<LONG>(0, defTop - p->rgrc[0].top));
+            if (customFrame_) {
+                // der Streifen bleibt Client-Flaeche (sonst erkennt DWM seine Fensterknoepfe nicht); der Inhalt
+                // beginnt um ihn tiefer
+                if (fullscreen_) inset = fsOverhangPx_;
+                insetPx_ = static_cast<float>(inset);
+                titlePx_ = static_cast<float>(std::max<LONG>(0, defTop - top - inset));
+            } else {
+                p->rgrc[0].top += inset;
+            }
             return r;
         }
         break;
@@ -2441,12 +2429,11 @@ LRESULT App::CaptionHitTest(LPARAM lp, LRESULT def) {
         return HTTOP;
     }
     const float s = r_.scale() > 0 ? r_.scale() : 1.0f;
-    const float cy = ContentY();
-    float x = pt.x / s, y = pt.y / s - cy;   // Inhaltskoordinaten
-    if (cy > 0) {   // eigene Titelleiste: Symbol = Systemmenue, sonst verschieben (Doppelklick: maximieren)
+    float x = pt.x / s, y = pt.y / s - ContentY();   // Inhaltskoordinaten
+    if (TitleH() > 0) {   // eigene Titelleiste: Symbol = Systemmenue, sonst verschieben (Doppelklick: maximieren)
         if (y >= 0) return def;
-        const D2D1_RECT_F ir = TitleIconRect(cy);
-        if (x >= ir.left - 4 && x < ir.right + 4) return HTSYSMENU;
+        const D2D1_RECT_F ir = TitleIconRect();
+        if (x < ir.right + 4) return HTSYSMENU;
         return HTCAPTION;
     }
     D2D1_RECT_F bar{};
@@ -2474,12 +2461,25 @@ void App::ToggleFullscreenImpl(bool workArea) {
             settings_.window = prevPlacement_.rcNormalPosition;
             settings_.hasWindow = true;
             GetWindowRect(hwnd_, &prevRect_);
-            SetWindowLongW(hwnd_, GWL_STYLE, static_cast<LONG>(style & ~WS_OVERLAPPEDWINDOW));
             const RECT& r = workArea ? mi.rcWork : mi.rcMonitor;
-            SetWindowPos(hwnd_, HWND_TOP, r.left, r.top, r.right - r.left, r.bottom - r.top, SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
-            fullscreen_ = true;
+            // Aus dem maximierten Fenster (eigener Rahmen): das Fenster beginnt wie dort um den Rahmen ueber dem
+            // Bildschirm, damit der Inhalt beim Wechsel an derselben Stelle bleibt (kein Verrutschen). Nur wenn
+            // darueber kein weiterer Bildschirm liegt.
+            fsOverhangPx_ = 0;
+            if (customFrame_ && !workArea && IsZoomed(hwnd_)) {
+                UINT dpi = GetDpiForWindow(hwnd_);
+                const int frame = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+                POINT above = {(r.left + r.right) / 2, r.top - frame};
+                if (!MonitorFromPoint(above, MONITOR_DEFAULTTONULL)) fsOverhangPx_ = frame;
+            }
+            fullscreen_ = true;   // vor dem Wechsel: WM_NCCALCSIZE rechnet schon fuer das Vollbild
+            SetWindowLongW(hwnd_, GWL_STYLE, static_cast<LONG>(style & ~WS_OVERLAPPEDWINDOW));
+            SetWindowPos(hwnd_, HWND_TOP, r.left, r.top - fsOverhangPx_, r.right - r.left, r.bottom - r.top + fsOverhangPx_,
+                         SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
         }
     } else {
+        fullscreen_ = false;   // vor dem Wechsel: WM_NCCALCSIZE rechnet schon fuer das Fenster
+        fsOverhangPx_ = 0;
         SetWindowLongW(hwnd_, GWL_STYLE, static_cast<LONG>(style | WS_OVERLAPPEDWINDOW));
         if (prevPlacement_.showCmd == SW_SHOWMAXIMIZED) {
             SetWindowPlacement(hwnd_, &prevPlacement_);
@@ -2490,7 +2490,6 @@ void App::ToggleFullscreenImpl(bool workArea) {
             SetWindowPos(hwnd_, nullptr, prevRect_.left, prevRect_.top, prevRect_.right - prevRect_.left,
                          prevRect_.bottom - prevRect_.top, SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
         }
-        fullscreen_ = false;
     }
     InvalidateRect(hwnd_, nullptr, FALSE);
 }

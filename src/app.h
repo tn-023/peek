@@ -1017,16 +1017,19 @@ private:
     // Eigener Rahmen (Windows 11 mit durchscheinendem Hintergrund): der Rahmen hat nie eine Titelleiste von Windows,
     // die Client-Flaeche aendert sich beim Oeffnen des Bildbetrachters also nicht (kein Verrutschen). In den
     // Ansichten zeichnet peek oben eine Titelleiste wie die von Windows (Symbol, Titel); die drei Fensterknoepfe
-    // zeichnet und bedient Windows selbst (DWM). Der Inhalt beginnt darunter (ContentY); im Bildbetrachter, im
-    // Vergleich und im Vollbild reicht er bis oben. Ohne durchscheinenden Hintergrund (Windows 10) bleibt die
-    // Titelleiste von Windows.
+    // zeichnet und bedient Windows selbst (DWM, DwmDefWindowProc). Der Inhalt beginnt darunter (ContentY); im
+    // Bildbetrachter, im Vergleich und im Vollbild reicht er bis oben. Maximiert ragt das Fenster wie ueblich um
+    // den Rahmen ueber den Bildschirm: der Streifen oben gehoert hier zur Client-Flaeche (nur dann erkennt DWM
+    // seine Knoepfe), der Inhalt beginnt entsprechend tiefer (insetPx_).
+    // Ohne durchscheinenden Hintergrund (Windows 10) bleibt die Titelleiste von Windows.
     bool customFrame_ = false;
-    int frameTest_ = 0;                 // nur zum Pruefen (--frame-test=N)
-    int ncPress_ = 0;
-    int CaptionButtonAt(LPARAM lp) const;   // HTMINBUTTON, HTMAXBUTTON, HTCLOSE oder 0
     float titlePx_ = 0;                 // Hoehe der Titelleiste von Windows (Pixel), aus WM_NCCALCSIZE
+    float insetPx_ = 0;                 // nicht sichtbarer Streifen oben in der Client-Flaeche (maximiert)
+    int fsOverhangPx_ = 0;              // Vollbild aus dem maximierten Fenster: Fenster beginnt so weit ueber dem Bildschirm
     ComPtr<ID2D1Bitmap1> titleIcon_;
-    float ContentY() const;             // DIP: Beginn des Inhalts (0 = bis oben)
+    float TitleH() const;               // DIP: Hoehe der eigenen Titelleiste (0 = keine)
+    float ContentY() const;             // DIP: Beginn des Inhalts in der Client-Flaeche
+    int CaptionButtonAt(LPARAM lp) const;   // HTMINBUTTON, HTMAXBUTTON, HTCLOSE oder 0
     D2D1::Matrix3x2F Base() const { return D2D1::Matrix3x2F::Translation(0, ContentY()); }
     void ScreenToContent(POINT& pt) const {
         ScreenToClient(hwnd_, &pt);
@@ -1036,8 +1039,8 @@ private:
         pt.y += static_cast<LONG>(std::lround(ContentY() * r_.scale()));
         ClientToScreen(hwnd_, &pt);
     }
-    void PaintTitleBar(ID2D1DeviceContext* dc, float height);
-    D2D1_RECT_F TitleIconRect(float height) const;   // Fensterkoordinaten (DIP)
+    void PaintTitleBar(ID2D1DeviceContext* dc);
+    D2D1_RECT_F TitleIconRect() const;   // Client-Koordinaten (DIP)
     D2D1_RECT_F viewerBarRc_{};         // obere Leiste des Betrachters (zum Ziehen des Fensters), leer wenn verborgen
     WINDOWPLACEMENT prevPlacement_{sizeof(WINDOWPLACEMENT)};
     RECT prevRect_{};   // tatsaechliche Fensterlage (auch bei angedocktem Fenster)

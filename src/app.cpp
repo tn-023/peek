@@ -284,6 +284,27 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             UINT dpi = GetDpiForWindow(hwnd_);
             border = pt.y < GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
         }
+        // Fenstermenue wie bei Windows: Rechtsklick auf die Titelleiste, Klick auf das Symbol (Doppelklick schliesst)
+        if (msg == WM_NCRBUTTONUP && (wp == HTCAPTION || wp == HTSYSMENU)) {
+            ShowSystemMenu(POINT{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)});
+            return 0;
+        }
+        if (msg == WM_NCLBUTTONDBLCLK && wp == HTSYSMENU) {
+            PostMessageW(hwnd_, WM_SYSCOMMAND, SC_CLOSE, 0);
+            return 0;
+        }
+        if (msg == WM_NCLBUTTONDOWN && wp == HTSYSMENU) {
+            const DWORD t0 = GetTickCount();
+            POINT pt = {0, static_cast<LONG>(std::lround(ContentY() * s))};   // links unter der Titelleiste
+            ClientToScreen(hwnd_, &pt);
+            ShowSystemMenu(pt);
+            // zweiter Klick auf das Symbol kurz danach (er hat das Menue geschlossen): Doppelklick = schliessen
+            POINT cur;
+            if (GetTickCount() - t0 <= GetDoubleClickTime() && GetCursorPos(&cur) && (GetAsyncKeyState(VK_LBUTTON) & 0x8000) &&
+                SendMessageW(hwnd_, WM_NCHITTEST, 0, MAKELPARAM(cur.x, cur.y)) == HTSYSMENU)
+                PostMessageW(hwnd_, WM_SYSCOMMAND, SC_CLOSE, 0);
+            return 0;
+        }
         if (!border) {
             LRESULT dr = 0;
             if (DwmDefWindowProc(hwnd_, msg, wp, lp, &dr)) return dr;
@@ -2401,6 +2422,23 @@ void App::SetCaptionless(bool on) {
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
+void App::ShowSystemMenu(POINT screen) {
+    HMENU m = GetSystemMenu(hwnd_, FALSE);
+    if (!m) return;
+    const bool z = IsZoomed(hwnd_) != FALSE;
+    auto en = [&](UINT id, bool on) { EnableMenuItem(m, id, MF_BYCOMMAND | (on ? MF_ENABLED : MF_GRAYED)); };
+    en(SC_RESTORE, z);
+    en(SC_MOVE, !z);
+    en(SC_SIZE, !z);
+    en(SC_MINIMIZE, true);
+    en(SC_MAXIMIZE, !z);
+    en(SC_CLOSE, true);
+    SetMenuDefaultItem(m, SC_CLOSE, FALSE);
+    const UINT align = GetSystemMetrics(SM_MENUDROPALIGNMENT) ? TPM_RIGHTALIGN : TPM_LEFTALIGN;
+    const UINT cmd = static_cast<UINT>(TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTBUTTON | align, screen.x, screen.y, 0, hwnd_, nullptr));
+    if (cmd) PostMessageW(hwnd_, WM_SYSCOMMAND, cmd, 0);
+}
+
 // Fensterknopf unter dem Punkt (Bildschirmkoordinaten in lp): DWM nennt die Flaeche seiner drei Knoepfe
 int App::CaptionButtonAt(LPARAM lp) const {
     RECT b{}, wr{};
@@ -2432,8 +2470,7 @@ LRESULT App::CaptionHitTest(LPARAM lp, LRESULT def) {
     float x = pt.x / s, y = pt.y / s - ContentY();   // Inhaltskoordinaten
     if (TitleH() > 0) {   // eigene Titelleiste: Symbol = Systemmenue, sonst verschieben (Doppelklick: maximieren)
         if (y >= 0) return def;
-        const D2D1_RECT_F ir = TitleIconRect();
-        if (x < ir.right + 4) return HTSYSMENU;
+        if (x < 22) return HTSYSMENU;   // Programmsymbol (Breite wie bei Windows gemessen)
         return HTCAPTION;
     }
     D2D1_RECT_F bar{};

@@ -59,7 +59,10 @@ function Shot($h, [string]$name, [int]$extra = 0) {
     $bmp.Save((Join-Path $Out "$tag-$name.png"), [System.Drawing.Imaging.ImageFormat]::Png)
     $bmp.Dispose()
 }
-function MouseTo([int]$x, [int]$y) { [W]::SetCursorPos($x, $y) | Out-Null; [W]::mouse_event(1, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 250 }
+function MouseTo([int]$x, [int]$y) {   # wie eine echte Maus: in kleinen Schritten ans Ziel
+    foreach ($d in 24, 16, 9, 4, 1, 0) { [W]::SetCursorPos($x - $d, $y + [int]($d / 4)) | Out-Null; [W]::mouse_event(1, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 35 }
+    Start-Sleep -Milliseconds 200
+}
 function Click([int]$x, [int]$y, [switch]$Right, [switch]$Double) {
     MouseTo $x $y
     $down = if ($Right) { 8 } else { 2 }; $up = if ($Right) { 16 } else { 4 }
@@ -181,7 +184,18 @@ $r2 = Frame $h
 Check "Ziehen an der Titelleiste verschiebt das Fenster (um $($r2.Left - $r.Left),$($r2.Top - $r.Top))" (($r2.Left - $r.Left) -ge 60 -and ($r2.Top - $r.Top) -ge 30)
 # Systemmenue: Klick auf das Symbol, Rechtsklick auf die Titelleiste
 $r = Frame $h
-Click ($r.Left + 24) ($r.Top + 15); Shot $h 'systemmenue-symbol' 12; Key 0x1B
+Click ($r.Left + 14) ($r.Top + 15); Shot $h 'systemmenue-symbol' 12; Key 0x1B
+# Alt+Leertaste
+[W]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 60; [W]::keybd_event(0x20, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 60
+[W]::keybd_event(0x20, 0, 2, [UIntPtr]::Zero); [W]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero); Start-Sleep -Milliseconds 900
+Shot $h 'systemmenue-alt-leer' 12; Key 0x1B
+# Doppelklick auf das Symbol schliesst (danach neu starten)
+Click ($r.Left + 14) ($r.Top + 15) -Double; Start-Sleep -Seconds 2; $p.Refresh()
+Check 'Doppelklick auf das Symbol schliesst das Fenster' ($p.HasExited)
+if (-not $p.HasExited) { Key 0x1B; Stop-Process $p -Force }
+$p = Start-Peek @("`"$Root`"", '--view=grid', '--size=1000x680')
+$h = $p.MainWindowHandle
+$r = Frame $h
 Click ($r.Left + 500) ($r.Top + 15) -Right; Shot $h 'systemmenue-rechtsklick' 12; Key 0x1B
 # Klick in den Inhalt direkt unter der Titelleiste darf das Fenster nicht verschieben oder schliessen
 Click ($r.Left + 600) ($r.Top + 200)

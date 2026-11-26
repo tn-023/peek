@@ -1040,6 +1040,7 @@ private:
         ClientToScreen(hwnd_, &pt);
     }
     void PaintTitleBar(ID2D1DeviceContext* dc);
+    void ShowSystemMenu(POINT screen);   // Fenstermenue (Wiederherstellen, Verschieben … Schliessen)
     D2D1_RECT_F TitleIconRect() const;   // Client-Koordinaten (DIP)
     D2D1_RECT_F viewerBarRc_{};         // obere Leiste des Betrachters (zum Ziehen des Fensters), leer wenn verborgen
     WINDOWPLACEMENT prevPlacement_{sizeof(WINDOWPLACEMENT)};

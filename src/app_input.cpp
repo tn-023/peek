@@ -467,6 +467,7 @@ void App::OnLButtonDown(float x, float y, WPARAM keys) {
         case HitType::SettingsSingleClick: ShowSingleClickMenu(h->rc); break;
         case HitType::SettingsCheckBoxes: ShowCheckBoxMenu(h->rc); break;
         case HitType::SettingsAnimations: ShowAnimationsMenu(h->rc); break;
+        case HitType::SettingsAccent: ShowAccentPanel(h->rc); break;
         case HitType::SettingsGeoClick: ShowGeoClickMenu(h->rc); break;
         case HitType::SettingsViewerSmall: ShowViewerSmallMenu(h->rc); break;
         case HitType::SettingsShortcuts:

@@ -30,6 +30,8 @@ struct Settings {
     bool group = false;          // Ansicht nach dem Sortierkriterium gruppieren
     bool timelineAsc = false;       // Zeitleiste: aelteste zuerst (sonst neueste zuerst)
     int geoClick = 0;               // Klick auf den Aufnahmeort im Info-Bereich: 0 Koordinaten kopieren, 1 OpenStreetMap
+    int accent = -1;                // Akzentfarbe 0xRRGGBB, -1 = die von Windows
+    std::vector<uint32_t> recentAccents;   // zuletzt verwendete eigene Farben (neueste zuerst, hoechstens 5)
     bool animations = false;        // Elemente gleiten herein, Hover-Effekte blenden aus (Kacheln und Liste)
     bool checkBoxes = false;        // Auswahlkaestchen an Kacheln und in der Detailliste (wie die Explorer-Option)
     bool singleClick = false;       // Ordner und Dateien mit einem Klick oeffnen (wie die Explorer-Option)

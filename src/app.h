@@ -39,7 +39,7 @@ enum class HitType {
     ViewerClose, ViewerBack, ViewerMin, ViewerMax, ViewerPrev, ViewerNext, ViewerInfo, ViewerCrop, CropSave, CropCancel,
     ClearBookmarks, SearchHistItem, SearchHistDel, SearchHistClear, SearchParam,
     ViewCloud,
-    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen, SettingsSingleClick, SettingsCheckBoxes, SettingsAnimations, SelectAll, SlideshowStart, ViewerSlideshow, InfoGeo, SettingsGeoClick, TimelineGroup, TimelineScrub, ViewTimeline,
+    SettingsBack, SettingsOpenData, SettingsRescan, SettingsDeleteIndex, SettingsTheme, SettingsShortcuts, SettingsViewerSmall, SettingsLanguage, SettingsViewerFullscreen, SettingsSingleClick, SettingsCheckBoxes, SettingsAnimations, SettingsAccent, SelectAll, SlideshowStart, ViewerSlideshow, InfoGeo, SettingsGeoClick, TimelineGroup, TimelineScrub, ViewTimeline,
     SheetCancel, SheetCreate, SheetOrient, SheetColsMinus, SheetColsPlus, SheetRowsMinus, SheetRowsPlus, SheetNames,
     SheetExts, SheetQuality, SheetPrev, SheetNext, SheetHeadline, SheetCheck, SheetCell, SheetStripCheck, SheetStrip,
     BookmarkSheet,
@@ -138,6 +138,8 @@ struct ViewerState {
     double slideIntroEnd = 0;
     std::wstring slideCaption;   // Datum ueber dem ersten Bild eines Tages (nur bei Sortierung nach Aufnahmedatum)    // ms: bis dahin blendet die bisherige Ansicht nach Schwarz ab
 };
+
+extern D2D1_COLOR_F g_onAccent;
 
 class App {
 public:
@@ -987,6 +989,14 @@ private:
     void ShowSingleClickMenu(const D2D1_RECT_F& rc);
     void ShowCheckBoxMenu(const D2D1_RECT_F& rc);
     void ShowAnimationsMenu(const D2D1_RECT_F& rc);
+    // Akzentfarbe (accent.cpp): Auswahl aus den Farben von Windows, zuletzt verwendete, eigene Farbe
+    friend class AccentPanel;
+    friend class ColorPickerPanel;
+    D2D1_COLOR_F accentBase_{};            // gewaehlte Farbe ohne Anpassung (Farbfeld in den Einstellungen)
+    void ApplyAccent();                    // accent_ aus Einstellung bzw. Windows
+    void SetAccent(int rgb, bool save);    // -1 = Windows
+    void ShowAccentPanel(const D2D1_RECT_F& rc);
+    void ShowColorPicker(POINT screen);
     void ShowGeoClickMenu(const D2D1_RECT_F& rc);
     std::wstring GeoText(const FileEntry& e);
     void GeoClick(uint32_t idx);
@@ -1104,6 +1114,7 @@ constexpr UINT WM_APP_SHEET = WM_APP + 21;   // Fortschritt/Ende der PDF-Erstell
 constexpr UINT WM_APP_ATLAS = WM_APP + 22;   // Fortschritt/Ende der Kacheltextur
 constexpr UINT WM_APP_RENAME = WM_APP + 23;  // Umbenennen beendet (wParam 1 = uebernehmen)
 constexpr UINT WM_APP_DUP = WM_APP + 24;     // Duplikatsuche: Fortschritt (0) bzw. Ergebnis (1)
+constexpr UINT WM_APP_TESTACCENT = WM_APP + 26; // Pruefung: Auswahl der Akzentfarbe (0) bzw. eigene Farbe (1) oeffnen
 constexpr UINT WM_APP_ZOOMOPEN = WM_APP + 25; // Betrachter oeffnen, nachdem die Ansicht festgehalten wurde (wParam = Position)
 
 } // namespace peek

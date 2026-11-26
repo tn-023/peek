@@ -12,6 +12,8 @@
 
 namespace peek {
 
+D2D1_COLOR_F g_onAccent = D2D1::ColorF(1, 1, 1, 1);   // Text auf der Akzentfarbe (ApplyAccent)
+
 namespace {
 
 struct Theme {
@@ -47,7 +49,7 @@ Theme MakeTheme(bool dark, bool backdrop) {
         t.chipHover = D2D1::ColorF(0.95f, 0.95f, 0.95f, 0.95f);
         t.danger = D2D1::ColorF(0.77f, 0.17f, 0.11f, 1);
     }
-    t.onAccent = D2D1::ColorF(1, 1, 1, 1);   // Text auf ausgewaehlten Pillen: immer weiss
+    t.onAccent = g_onAccent;   // Text auf der Akzentfarbe: weiss oder schwarz (je nach Helligkeit)
     t.overlay = D2D1::ColorF(0.03f, 0.03f, 0.03f, 1.0f);
     return t;
 }
@@ -2980,7 +2982,7 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
     DrawText(dc, T(L"Darstellung"), D2D1::RectF(x0, y, x1, y + 28), fh, t.text);
     y += 34;
     {
-        D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 8 + 8 * 56);
+        D2D1_RECT_F rc = D2D1::RectF(x0, y, x1, y + 8 + 9 * 56);
         FillRound(dc, rc, 8, t.chip);
         auto dropRow = [&](float ry, const wchar_t* label, HitType type, const std::wstring& cur) {
             DrawText(dc, label, D2D1::RectF(x0 + 20, ry, x1 - 260, ry + 56), r_.Text(13), t.text);
@@ -3014,6 +3016,26 @@ void App::PaintSettings(ID2D1DeviceContext* dc) {
                 T(kGeoClickNames[std::clamp(settings_.geoClick, 0, 1)]));
         dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 396), D2D1::Point2F(x1 - 16, rc.top + 396), r_.Brush(t.stroke), 1.0f);
         dropRow(rc.top + 396, T(L"Animationen"), HitType::SettingsAnimations, T(kCheckBoxNames[settings_.animations ? 1 : 0]));
+        dc->DrawLine(D2D1::Point2F(x0 + 16, rc.top + 452), D2D1::Point2F(x1 - 16, rc.top + 452), r_.Brush(t.stroke), 1.0f);
+        {   // Akzentfarbe: Farbfeld und Name
+            const float ry = rc.top + 452;
+            DrawText(dc, T(L"Akzentfarbe"), D2D1::RectF(x0 + 20, ry, x1 - 260, ry + 56), r_.Text(13), t.text);
+            IDWriteTextFormat* bf = r_.Text(13);
+            wchar_t hex[16];
+            swprintf_s(hex, L"#%06X", static_cast<unsigned>(std::max(0, settings_.accent)));
+            const std::wstring cur = settings_.accent < 0 ? T(L"Windows (Standard)") : std::wstring(hex);
+            float w = std::max(200.0f, r_.MeasureText(cur, bf) + 80);
+            D2D1_RECT_F dd = D2D1::RectF(x1 - 20 - w, ry + 12, x1 - 20, ry + 44);
+            int idx = static_cast<int>(hits_.size());
+            hits_.push_back({dd, HitType::SettingsAccent, 0});
+            FillRound(dc, dd, 5, MixColor(t.layer, t.chipHover, Hov(idx)));
+            D2D1_RECT_F sw = D2D1::RectF(dd.left + 12, dd.top + 7, dd.left + 30, dd.bottom - 7);
+            FillRound(dc, sw, 3, accentBase_);
+            dc->DrawRoundedRectangle(D2D1::RoundedRect(sw, 3, 3), r_.Brush(t.stroke), 1.0f);
+            DrawText(dc, cur, D2D1::RectF(dd.left + 40, dd.top, dd.right - 30, dd.bottom), bf, t.text);
+            wchar_t g[2] = {0xE70D, 0};
+            DrawText(dc, g, D2D1::RectF(dd.right - 30, dd.top, dd.right - 8, dd.bottom), r_.Icon(11), t.text2);
+        }
         y = rc.bottom + 28;
     }
 
@@ -3274,7 +3296,7 @@ void App::PaintSheet(ID2D1DeviceContext* dc) {
         D2D1_COLOR_F bg = primary ? accent_ : (MixColor(t.chip, t.chipHover, Hov(idx)));
         bg = MixColor(bg, Brighter(bg), (primary) ? Hov(idx) : 0.0f);
         FillRound(dc, rc, 5, bg);
-        DrawText(dc, label, rc, bf, primary ? D2D1::ColorF(1, 1, 1, 1) : t.text);
+        DrawText(dc, label, rc, bf, primary ? t.onAccent : t.text);
         return rc.left;
     };
     float rx = W_ - 16;
@@ -3569,7 +3591,7 @@ void App::PaintAtlas(ID2D1DeviceContext* dc) {
         bg = MixColor(bg, Brighter(bg), (primary && enabled) ? Hov(idx) : 0.0f);
         if (primary && !enabled) bg = t.chip;
         FillRound(dc, rc, 5, bg);
-        DrawText(dc, label, rc, bf, !enabled ? t.text3 : (primary ? D2D1::ColorF(1, 1, 1, 1) : t.text));
+        DrawText(dc, label, rc, bf, !enabled ? t.text3 : (primary ? t.onAccent : t.text));
         return rc.left;
     };
     float rx = W_ - 16;

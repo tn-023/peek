@@ -35,6 +35,9 @@ public:
     virtual void Paint(Renderer& r, float width, float height) = 0;   // Hintergrund ist bereits gezeichnet
     virtual void OnMouse(UINT msg, float x, float y) = 0;             // WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP
     virtual void OnKey(WPARAM) {}
+    // Texteingabe (z. B. Farbwerte): Tab und Zeichen gehen an das Panel statt es zu schliessen
+    virtual bool WantsText() const { return false; }
+    virtual void OnChar(wchar_t) {}
     bool close = false;   // Popup schliessen
     bool dirty = true;    // neu messen und zeichnen
 };

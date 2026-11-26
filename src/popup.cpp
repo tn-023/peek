@@ -568,11 +568,16 @@ void PanelHost::Run(HWND owner, PopupPanel& panel, POINT pt, const D2D1_COLOR_F&
             PostQuitMessage(static_cast<int>(msg.wParam));
             break;
         }
-        if (msg.message == WM_KEYDOWN || msg.message == WM_SYSKEYDOWN) {
-            if (msg.wParam == VK_ESCAPE || msg.wParam == VK_MENU || msg.wParam == VK_F10 || msg.wParam == VK_TAB)
+        const bool text = panel.WantsText();
+        if (text && msg.message == WM_CHAR) {
+            panel.OnChar(static_cast<wchar_t>(msg.wParam));
+        } else if (msg.message == WM_KEYDOWN || msg.message == WM_SYSKEYDOWN) {
+            if (msg.wParam == VK_ESCAPE || msg.wParam == VK_MENU || msg.wParam == VK_F10 || (msg.wParam == VK_TAB && !text)) {
                 panel.close = true;
-            else
+            } else {
+                if (text && msg.message == WM_KEYDOWN) TranslateMessage(&msg);   // erzeugt WM_CHAR
                 panel.OnKey(msg.wParam);
+            }
         } else if (msg.message != WM_CHAR && msg.message != WM_SYSCHAR && msg.message != WM_KEYUP &&
                    msg.message != WM_SYSKEYUP) {
             TranslateMessage(&msg);

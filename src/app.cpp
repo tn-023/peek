@@ -152,6 +152,11 @@ bool App::Init(HINSTANCE inst, int show) {
             };
             if (a == L"--info") { settings_.infoPanel = settings_.viewerInfo = true; infoAnim_ = 1.0f; continue; }
             if (a == L"--settings") { openSettings = true; continue; }
+            if (a == L"--test-accent" || a == L"--test-accent=picker") {   // nur zum Pruefen (Bildschirmfotos)
+                openSettings = true;
+                PostMessageW(hwnd_, WM_APP_TESTACCENT, a.size() > 13 ? 1 : 0, 0);
+                continue;
+            }
             if (a == L"--theme=dark" || a == L"--theme=light") { settings_.theme = a == L"--theme=dark" ? 2 : 1; ApplyTheme(); continue; }
             if (a == L"--group") { settings_.group = true; sortFromCli_ = true; continue; }
             if (a == L"--sheet") { openSheet = true; continue; }
@@ -686,6 +691,22 @@ LRESULT App::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_APP_DUP:
         OnDupMessage(wp);
         return 0;
+    case WM_APP_TESTACCENT: {
+        UpdateWindow(hwnd_);
+        for (auto& h : hits_)
+            if (h.type == HitType::SettingsAccent) {
+                if (wp == 1) {
+                    const float sc = r_.scale();
+                    POINT pt = {static_cast<LONG>(h.rc.left * sc), static_cast<LONG>((h.rc.bottom + 4) * sc)};
+                    ContentToScreen(pt);
+                    ShowColorPicker(pt);
+                } else {
+                    ShowAccentPanel(h.rc);
+                }
+                break;
+            }
+        return 0;
+    }
     case WM_APP_ZOOMOPEN:
         if (lp == 1) {   // 70 % der Animation: jetzt die Titelleiste ausblenden bzw. auf Vollbild vergroessern
             const int d = zoom_.defer;
@@ -776,19 +797,7 @@ void App::ApplyTheme() {
         MARGINS m = {-1, -1, -1, -1};
         DwmExtendFrameIntoClientArea(hwnd_, &m);
     }
-    DWORD accent = 0;
-    sz = sizeof(accent);
-    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\DWM", L"AccentColor", RRF_RT_REG_DWORD, nullptr,
-                     &accent, &sz) == ERROR_SUCCESS) {
-        // 0xAABBGGRR
-        accent_ = D2D1::ColorF((accent & 0xFF) / 255.0f, ((accent >> 8) & 0xFF) / 255.0f,
-                               ((accent >> 16) & 0xFF) / 255.0f, 1.0f);
-        if (dark_) {  // im dunklen Modus etwas aufhellen, wie Windows
-            accent_.r = accent_.r + (1 - accent_.r) * 0.25f;
-            accent_.g = accent_.g + (1 - accent_.g) * 0.25f;
-            accent_.b = accent_.b + (1 - accent_.b) * 0.25f;
-        }
-    }
+    ApplyAccent();
 }
 
 void App::SetStatus(const std::wstring& msg) {

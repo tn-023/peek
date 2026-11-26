@@ -173,6 +173,14 @@ void Settings::Load() {
     viewerBar = ReadInt(L"Viewer", L"Bar", 1) != 0;
     viewerInfo = ReadInt(L"Viewer", L"Info", 0) != 0;
     lastFolder = ReadStr(L"View", L"LastFolder");
+    {   // Akzentfarbe: "RRGGBB" oder leer (Windows); zuletzt verwendete eigene Farben durch Komma getrennt
+        std::wstring a = ReadStr(L"View", L"Accent");
+        accent = a.size() == 6 ? static_cast<int>(wcstoul(a.c_str(), nullptr, 16) & 0xFFFFFF) : -1;
+        recentAccents.clear();
+        std::wstring r = ReadStr(L"View", L"RecentAccents");
+        for (size_t p = 0; p + 6 <= r.size() && recentAccents.size() < 5; p += 7)
+            recentAccents.push_back(static_cast<uint32_t>(wcstoul(r.substr(p, 6).c_str(), nullptr, 16) & 0xFFFFFF));
+    }
     lastVersion = ReadStr(L"View", L"LastVersion");
 
     collections.clear();
@@ -269,6 +277,18 @@ void Settings::Save() const {
     WriteInt(L"Viewer", L"Bar", viewerBar ? 1 : 0);
     WriteInt(L"Viewer", L"Info", viewerInfo ? 1 : 0);
     WriteStr(L"View", L"LastFolder", lastFolder);
+    {
+        wchar_t buf[8];
+        if (accent >= 0) swprintf_s(buf, L"%06X", static_cast<unsigned>(accent) & 0xFFFFFF);
+        WriteStr(L"View", L"Accent", accent >= 0 ? std::wstring(buf) : std::wstring());
+        std::wstring r;
+        for (uint32_t c : recentAccents) {
+            swprintf_s(buf, L"%06X", c & 0xFFFFFF);
+            if (!r.empty()) r += L',';
+            r += buf;
+        }
+        WriteStr(L"View", L"RecentAccents", r);
+    }
     WriteStr(L"View", L"LastVersion", lastVersion);
 
     WriteInt(L"Collections", L"Count", static_cast<int>(collections.size()));

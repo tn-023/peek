@@ -282,5 +282,33 @@ if ($img) {
     Check 'Klick auf Schliessen nach dem Betrachter schliesst' ($p.HasExited)
     if (-not $p.HasExited) { Stop-Process $p -Force }
 }
+# Akzentfarbe: Auswahl und eigene Farbe (Bildschirmfotos, nur einmal)
+if (-not $Native) {
+    foreach ($m in @(@('--test-accent', 'akzent-auswahl'), @('--test-accent=picker', 'akzent-eigene'))) {
+        $p = Start-Peek @("`"$Root`"", $m[0], '--size=1100x800')
+        $h = $p.MainWindowHandle
+        Start-Sleep -Seconds 2
+        $r = Frame $h
+        $bmp = New-Object System.Drawing.Bitmap(($r.Right - $r.Left + 300), ($r.Bottom - $r.Top + 200)); $g = [System.Drawing.Graphics]::FromImage($bmp)
+        $g.CopyFromScreen($r.Left, $r.Top, 0, 0, $bmp.Size); $g.Dispose()
+        $bmp.Save((Join-Path $Out "$tag-$($m[1]).png"), [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+        if ($m[1] -eq 'akzent-eigene') {   # Hex-Wert eingeben: Feld anklicken, tippen, Fertig
+            Add-Type -AssemblyName System.Windows.Forms
+            [System.Windows.Forms.SendKeys]::SendWait('{TAB}')
+            Start-Sleep -Milliseconds 300
+            [System.Windows.Forms.SendKeys]::SendWait('E81123')
+            Start-Sleep -Milliseconds 800
+            $bmp = New-Object System.Drawing.Bitmap(($r.Right - $r.Left + 300), ($r.Bottom - $r.Top + 200)); $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($r.Left, $r.Top, 0, 0, $bmp.Size); $g.Dispose()
+            $bmp.Save((Join-Path $Out "$tag-akzent-eingabe.png"), [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+            [System.Windows.Forms.SendKeys]::SendWait('{ENTER}'); Start-Sleep -Milliseconds 300
+            [System.Windows.Forms.SendKeys]::SendWait('{ENTER}'); Start-Sleep -Seconds 1
+            Shot $h 'akzent-danach' 0
+        } else {
+            Key 0x1B
+        }
+        Stop-Process $p -Force
+    }
+}
 Log "== $tag == Fehler: $script:fail"
 if ($script:fail -gt 0) { exit 1 }

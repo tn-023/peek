@@ -75,6 +75,7 @@ add_executable(peek WIN32
   src/savedsearch.cpp
   src/stripmeta.cpp
   src/anim.cpp
+  src/accent.cpp
   src/rendercheck.cpp
   src/renderer.cpp
   src/fs.cpp

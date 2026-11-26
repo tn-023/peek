@@ -190,7 +190,7 @@ jobs:
             build/THIRD-PARTY.txt
 
       # Nur im Entwicklungszweig: Titelleiste am echten Fenster pruefen (Treffer, Klicks, Bildschirmfotos)
-      - name: Titelleiste pruefen (Vergleich: Titelleiste von Windows)
+      - name: Titelleiste pruefen (zum Vergleich mit der Titelleiste von Windows)
         if: github.ref == 'refs/heads/new-features'
         continue-on-error: true
         shell: powershell

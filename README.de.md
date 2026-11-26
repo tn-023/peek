@@ -164,6 +164,7 @@ Daten liegen in `%LOCALAPPDATA%\peek`. Mit einer leeren Datei `peek.portable` ne
 - **Filter und Suche:** Begriffe, Quelle, Muster, Kalender, Suchparameter, Suchverlauf. Suchen mit Ort, Filtern und Sortierung speichern; sie stehen in der Seitenleiste.
 - **Duplikate:** findet visuell identische Bilder in der aktuellen Ansicht, auch verkleinerte, neu gespeicherte oder umgewandelte Kopien. Eine Liste, in der die beste Fassung bleibt; die übrigen kommen in einem Schritt in den Papierkorb. Ein Klick auf ein Vorschaubild vergleicht es mit der besten Fassung.
 - **Aufnahmeort:** GPS-Koordinaten der Fotos im Info-Bereich; ein Klick kopiert sie oder öffnet OpenStreetMap im Browser.
+- **Akzentfarbe:** die von Windows, eine der Windows-Farben oder eine eigene Farbe.
 - **Animationen (wahlweise):** Kacheln und Listenzeilen gleiten herein, Hover-Effekte blenden aus, und ein geöffnetes Bild wächst aus seinem Vorschaubild in den Betrachter und zurück.
 - **Metadaten entfernen:** im Info-Bereich, für JPEG, PNG und WebP. Verlustfrei: Die Bilddaten bleiben unverändert.
 - **Merkliste und Sammlungen:** vormerken mit Stern, Ordner indexieren, solange peek läuft.

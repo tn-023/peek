@@ -240,6 +240,14 @@ $c = Btn $h 2; Click $c[0] $c[1]; Start-Sleep -Seconds 2; $p.Refresh()
 Check 'Klick auf Schliessen schliesst' ($p.HasExited)
 if (-not $p.HasExited) { Stop-Process $p -Force }
 
+# ---- weitere Ansichten (nur Bilder): Wolke, Zeitleiste, maximierte Liste
+foreach ($v in 'cloud', 'timeline') {
+    $p = Start-Peek @("`"$Root`"", "--view=$v", '--size=1000x680')
+    Start-Sleep -Seconds 3
+    Shot $p.MainWindowHandle "ansicht-$v" 12
+    Stop-Process $p -Force
+}
+
 # ---- 3. Einstellungen und Bildbetrachter: Titelleiste bzw. Bild bis oben, danach wieder Titelleiste
 $p = Start-Peek @("`"$Root`"", '--settings', '--size=1000x680')
 Shot $p.MainWindowHandle 'einstellungen' 12

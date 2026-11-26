@@ -2410,10 +2410,14 @@ void App::PaintSlides(ID2D1DeviceContext* dc, float VW) {
                 if (c->bmp) {
                     ComPtr<ID2D1Image> oldTarget;
                     dc->GetTarget(&oldTarget);
+                    D2D1_MATRIX_3X2_F oldT;
+                    dc->GetTransform(&oldT);
                     dc->SetTarget(c->bmp.Get());
+                    dc->SetTransform(D2D1::Matrix3x2F::Identity());   // ohne den Versatz des Inhalts (ContentY)
                     dc->Clear(D2D1::ColorF(0, 0, 0, 0));
                     dc->DrawBitmap(b->bmp.Get(), D2D1::RectF(0, 0, bw, bh), 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
                     dc->SetTarget(oldTarget.Get());
+                    dc->SetTransform(oldT);
                     c->path = e.path;
                     c->src = b->bmp.Get();
                     c->w = bw;
@@ -2663,7 +2667,8 @@ void App::PaintViewer(ID2D1DeviceContext* dc) {
                         dc->GetTarget(&oldTarget);
                         dc->SetTarget(vc.bmp.Get());
                         dc->Clear(D2D1::ColorF(0, 0, 0, 0));
-                        dc->SetTransform(D2D1::Matrix3x2F::Rotation(viewer_.rotation * 90.0f, c) * Base());
+                        // in das festgehaltene Bild ohne den Versatz des Inhalts (ContentY): es wird spaeter mit ihm gezeichnet
+                        dc->SetTransform(D2D1::Matrix3x2F::Rotation(viewer_.rotation * 90.0f, c));
                         dc->DrawBitmap(b->bmp.Get(), dst, 1.0f, im);
                         dc->SetTransform(Base());
                         dc->SetTarget(oldTarget.Get());

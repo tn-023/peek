@@ -1130,7 +1130,7 @@ void App::PaintChips(ID2D1DeviceContext* dc) {
         wchar_t gs[2] = {0xE8CB, 0};
         DrawText(dc, gs, D2D1::RectF(tx, rc.top, tx + 18, rc.bottom), r_.Icon(13), accent_);
         tx += 24;
-        DrawText(dc, label, D2D1::RectF(tx, rc.top, tx + lw + 2, rc.bottom), f, dark_ ? t.onAccent : t.text);
+        DrawText(dc, label, D2D1::RectF(tx, rc.top, tx + lw + 2, rc.bottom), f, t.text);   // ohne farbigen Hintergrund: nur nach Farbmodus
         tx += lw + 6;
         bool desc = settings_.viewMode == 3 ? !settings_.timelineAsc : settings_.sortDesc;
         wchar_t ga[2] = {static_cast<wchar_t>(desc ? 0xE74B : 0xE74A), 0};

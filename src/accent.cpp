@@ -124,9 +124,8 @@ void App::ApplyAccent() {
         }
     }
     accent_ = c;
-    // Text auf der Akzentfarbe: der staerkere Kontrast von Weiss und Schwarz
-    const float l = Luminance(c);
-    g_onAccent = (1.05f / (l + 0.05f)) >= ((l + 0.05f) / 0.05f) ? D2D1::ColorF(1, 1, 1, 1) : D2D1::ColorF(0, 0, 0, 0.9f);
+    // Text auf der Akzentfarbe: weiss wie bei Windows; schwarz erst bei hellen Farben (Gelb, Hellgruen, Hellblau …)
+    g_onAccent = Luminance(c) > 0.4f ? D2D1::ColorF(0, 0, 0, 0.9f) : D2D1::ColorF(1, 1, 1, 1);
 }
 
 void App::SetAccent(int rgb, bool save) {

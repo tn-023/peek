@@ -1,0 +1,126 @@
+== native == Bildschirm 1920x1080, Arbeitsbereich 1920x1032
+normal : sichtbar 7,0-993,673  Fenster 0,0-1000,680  Client ab 8,31 Groesse 984x641  maximiert=False
+  Knopfbereich laut DWM (hr=0, fensterbezogen): 847,0-993,30
+  y+ 0: links <<^^^^^^   rechts ^^^^^^^^^^^^^^^^^^^^^^^^^^^>
+  y+ 2: links <<^^^^^^   rechts ^^^^^^^^^^^^^^^^^^^^^^^^^^^>
+  y+ 5: links <<^^^^^^   rechts ^^^^^^^^^^^^^^^^^^^^^^^^^^^>
+  y+ 9: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXQQQQQQ
+  y+14: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXQQQQQQ
+  y+19: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXQQQQQQ
+  y+24: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXQQQQQQ
+  y+28: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXQQQQQQ
+  y+31: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+35: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+44: links cccccccc   rechts cccccccccccccccccccccccccccc
+Titelleiste, nicht maximiert:
+  OK    Klick auf Maximieren maximiert
+maximiert : sichtbar 0,0-1920,1032  Fenster -8,-8-1928,1040  Client ab 0,23 Groesse 1920x1009  maximiert=True
+  Knopfbereich laut DWM (hr=0, fensterbezogen): 1781,0-1927,30
+  y+ 0: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXXQQQQQ
+  y+ 2: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXXQQQQQ
+  y+ 5: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXXQQQQQ
+  y+ 9: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXXQQQQQ
+  y+14: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXXQQQQQ
+  y+19: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXXQQQQQ
+  y+24: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+28: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+31: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+35: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+44: links cccccccc   rechts cccccccccccccccccccccccccccc
+  OK    Klick auf Wiederherstellen (maximiert) stellt wieder her
+  OK    Doppelklick auf die Titelleiste maximiert
+  OK    Doppelklick auf die Titelleiste (maximiert) stellt wieder her
+  OK    Klick auf Minimieren minimiert
+  OK    Ziehen an der Titelleiste verschiebt das Fenster (um 80,50)
+  OK    Doppelklick auf das Symbol schliesst das Fenster
+  OK    Fenster nach Klick in den Inhalt noch da
+Titelleiste, maximiert:
+  OK    maximiert
+Vollbild (F11) aus dem maximierten Fenster : sichtbar 0,0-1920,1080  Fenster 0,0-1920,1080  Client ab 0,0 Groesse 1920x1080  maximiert=True
+  Knopfbereich laut DWM (hr=0, fensterbezogen): 0,0-0,0
+  y+ 0: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+ 2: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+ 5: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+ 9: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+14: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+19: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+24: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+28: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+31: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+35: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+44: links cccccccc   rechts cccccccccccccccccccccccccccc
+zurueck aus dem Vollbild : sichtbar 0,0-1920,1032  Fenster -8,-8-1928,1040  Client ab 0,23 Groesse 1920x1009  maximiert=True
+  Knopfbereich laut DWM (hr=0, fensterbezogen): 1781,0-1927,30
+  y+ 0: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXXQQQQQ
+  y+ 2: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXXQQQQQ
+  y+ 5: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXXQQQQQ
+  y+ 9: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXXQQQQQ
+  y+14: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXXQQQQQ
+  y+19: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXXQQQQQ
+  y+24: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+28: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+31: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+35: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+44: links cccccccc   rechts cccccccccccccccccccccccccccc
+  Client-Ursprung: maximiert 0,23  Vollbild 0,0  danach 0,23
+  OK    nach dem Vollbild wieder maximiert
+  OK    Klick auf Minimieren (maximiert) minimiert
+  OK    nach dem Wiederherstellen wieder maximiert
+  OK    Klick in die Bildschirmecke oben rechts (maximiert) schliesst
+  OK    Klick auf Schliessen schliesst
+einstellungen : sichtbar 7,0-993,673  Fenster 0,0-1000,680  Client ab 8,31 Groesse 984x641  maximiert=False
+  Knopfbereich laut DWM (hr=0, fensterbezogen): 847,0-993,30
+  y+ 0: links <<^^^^^^   rechts ^^^^^^^^^^^^^^^^^^^^^^^^^^^>
+  y+ 2: links <<^^^^^^   rechts ^^^^^^^^^^^^^^^^^^^^^^^^^^^>
+  y+ 5: links <<^^^^^^   rechts ^^^^^^^^^^^^^^^^^^^^^^^^^^^>
+  y+ 9: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXQQQQQQ
+  y+14: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXQQQQQQ
+  y+19: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXQQQQQQ
+  y+24: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXQQQQQQ
+  y+28: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXQQQQQQ
+  y+31: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+35: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+44: links cccccccc   rechts cccccccccccccccccccccccccccc
+betrachter : sichtbar 7,0-993,673  Fenster 0,0-1000,680  Client ab 8,0 Groesse 984x672  maximiert=False
+  Knopfbereich laut DWM (hr=0, fensterbezogen): 847,0-993,30
+  y+ 0: links <<^^^^^^   rechts ^^^^^^^^^^^^^^^^^^^^^^^^^^>>
+  y+ 2: links <<^^^^^^   rechts ^^^^^^^^^^^^^^^^^^^^^^^^^^>>
+  y+ 5: links <<^^^^^^   rechts ^^^^^^^^^^^^^^^^^^^^^^^^^^>>
+  y+ 9: links ccccccTT   rechts cccccccccccccccccccccccccccc
+  y+14: links ccccccTT   rechts cccccccccccccccccccccccccccc
+  y+19: links ccccccTT   rechts cccccccccccccccccccccccccccc
+  y+24: links ccccccTT   rechts cccccccccccccccccccccccccccc
+  y+28: links ccccccTT   rechts cccccccccccccccccccccccccccc
+  y+31: links ccccccTT   rechts cccccccccccccccccccccccccccc
+  y+35: links ccccccTT   rechts cccccccccccccccccccccccccccc
+  y+44: links ccccccTT   rechts cccccccccccccccccccccccccccc
+nach dem Betrachter : sichtbar 7,0-993,673  Fenster 0,0-1000,680  Client ab 8,31 Groesse 984x641  maximiert=False
+  Knopfbereich laut DWM (hr=0, fensterbezogen): 847,0-993,30
+  y+ 0: links <<^^^^^^   rechts ^^^^^^^^^^^^^^^^^^^^^^^^^^^>
+  y+ 2: links <<^^^^^^   rechts ^^^^^^^^^^^^^^^^^^^^^^^^^^^>
+  y+ 5: links <<^^^^^^   rechts ^^^^^^^^^^^^^^^^^^^^^^^^^^^>
+  y+ 9: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXQQQQQQ
+  y+14: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXQQQQQQ
+  y+19: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXQQQQQQ
+  y+24: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXQQQQQQ
+  y+28: links SSSTTTTT   rechts TTTTTTTTTTTmmmmmmXXXXXQQQQQQ
+  y+31: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+35: links cccccccc   rechts cccccccccccccccccccccccccccc
+  y+44: links cccccccc   rechts cccccccccccccccccccccccccccc
+  OK    Fensterlage beim Schliessen des Betrachters unveraendert
+Betrachter maximiert : sichtbar 0,0-1920,1032  Fenster -8,-8-1928,1040  Client ab 0,0 Groesse 1920x1032  maximiert=True
+  Knopfbereich laut DWM (hr=0, fensterbezogen): 1781,0-1927,30
+  y+ 0: links ccccccTT   rechts cccccccccccccccccccccccccccc
+  y+ 2: links ccccccTT   rechts cccccccccccccccccccccccccccc
+  y+ 5: links ccccccTT   rechts cccccccccccccccccccccccccccc
+  y+ 9: links ccccccTT   rechts cccccccccccccccccccccccccccc
+  y+14: links ccccccTT   rechts cccccccccccccccccccccccccccc
+  y+19: links ccccccTT   rechts cccccccccccccccccccccccccccc
+  y+24: links ccccccTT   rechts cccccccccccccccccccccccccccc
+  y+28: links ccccccTT   rechts cccccccccccccccccccccccccccc
+  y+31: links ccccccTT   rechts cccccccccccccccccccccccccccc
+  y+35: links ccccccTT   rechts cccccccccccccccccccccccccccc
+  y+44: links ccccccTT   rechts cccccccccccccccccccccccccccc
+  Client maximiert: Ordner ab 0,23 1920x1009  Betrachter ab 0,0 1920x1032
+  OK    Klick auf Schliessen nach dem Betrachter schliesst
+== native == Fehler: 0
